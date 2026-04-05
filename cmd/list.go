@@ -21,7 +21,8 @@ var listCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		entries, err := store.ListEntries(unread, "newest")
+		// In CLI, we default to 50 latest entries
+		entries, err := store.ListEntries(unread, "newest", 50, 0, "")
 		if err != nil {
 			log.Fatal(fmt.Errorf("failed to list entries: %w", err))
 		}
