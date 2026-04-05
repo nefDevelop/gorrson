@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"crypto/sha256"
+	"embed"
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,6 +28,9 @@ import (
 )
 
 var (
+	//go:embed all:web/dist
+	frontendFS embed.FS
+
 	loginAttempts = make(map[string][]time.Time)
 	loginMu       sync.Mutex
 )
@@ -126,6 +131,28 @@ func (s *Server) routes() {
 		r.Get("/filters", s.handleListFilters)
 		r.Post("/filters", s.handleAddFilter)
 		r.Delete("/filters/{id}", s.handleDeleteFilter)
+	})
+
+	// Serve Svelte Frontend
+	staticFS, _ := fs.Sub(frontendFS, "web/dist")
+	fileServer := http.FileServer(http.FS(staticFS))
+
+	s.router.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+		// Serve index.html for all non-API routes (SPA support)
+		path := r.URL.Path
+		if path == "/" || !strings.Contains(path, ".") {
+			content, err := fs.ReadFile(staticFS, "index.html")
+			if err != nil {
+				http.Error(w, "Not Found", http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "text/html")
+			w.Write(content)
+			return
+		}
+
+		// Serve static assets (js, css, etc)
+		fileServer.ServeHTTP(w, r)
 	})
 }
 

@@ -30,6 +30,13 @@ func NewStore(dataDir, username string) (*Store, error) {
 	}
 
 	s := &Store{db: db, username: username}
+	
+	// Optimization: SQLite performs best with a single connection in Go to avoid lock contention.
+	// WAL mode handles the concurrency at the database level.
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	db.SetConnMaxLifetime(time.Hour)
+
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
@@ -47,6 +54,10 @@ func (s *Store) GetUsername() string {
 
 func (s *Store) migrate() error {
 	queries := []string{
+		`PRAGMA journal_mode=WAL;`,
+		`PRAGMA synchronous=NORMAL;`,
+		`PRAGMA busy_timeout=5000;`,
+		`PRAGMA foreign_keys=ON;`,
 		`CREATE TABLE IF NOT EXISTS feeds (
 			id TEXT PRIMARY KEY,
 			title TEXT NOT NULL,

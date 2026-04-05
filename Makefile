@@ -1,10 +1,14 @@
-.PHONY: build test clean serve register add
+.PHONY: build test clean serve register add bench load-test build-ui help
 
 # gorrson - Expert RSS Engine
 
-# Build the binary
-build:
+# Build the binary with embedded UI
+build: build-ui
 	go build -o rss-cli main.go
+
+# Build Svelte Frontend
+build-ui:
+	cd internal/api/web && npm run build
 
 # Run all internal tests
 test:
@@ -27,11 +31,24 @@ add: build
 serve: build
 	./rss-cli serve --port 7077
 
+# Run Go benchmarks for internal components
+bench:
+	go test -bench=. ./internal/db -benchmem
+
+# Run a high-concurrency load test using Apache Benchmark (ab)
+# Usage: make load-test TOKEN=your_jwt_token
+load-test:
+	@echo "Starting load test with 100 concurrent requests..."
+	ab -n 1000 -c 100 -H "Authorization: Bearer $(TOKEN)" "http://localhost:7077/news"
+
 # Show help
 help:
 	@echo "Available commands:"
-	@echo "  make build      - Build binary"
+	@echo "  make build      - Build binary with embedded UI"
+	@echo "  make build-ui   - Build only the Svelte frontend"
 	@echo "  make test       - Run internal tests"
+	@echo "  make bench      - Run performance benchmarks (Search, DB)"
+	@echo "  make load-test  - Run API stress test (requires TOKEN=xxx)"
 	@echo "  make clean      - Remove binaries and databases"
 	@echo "  make serve      - Run the API server"
 	@echo "  make register   - Register USER_NAME/USER_PASS"

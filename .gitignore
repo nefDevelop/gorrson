@@ -23,3 +23,9 @@ go.sum
 .vscode/
 *.swp
 *.log
+
+# Node.js & Svelte related
+node_modules/
+dist/
+.env
+.svelte-kit/
