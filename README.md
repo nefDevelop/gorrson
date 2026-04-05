@@ -1,88 +1,64 @@
 # 🚀 gorrson: High-Performance RSS CLI & API Engine
 
-**gorrson** is a professional-grade RSS feed manager written in Go. It is designed for developers and power users who need a robust, portable, and multi-user RSS solution.
+**gorrson** is a professional-grade RSS engine written in Go. Designed for developers and power users who need a robust, private, and multi-user RSS solution that runs anywhere—from a cloud server to a mobile device (Termux).
 
-## 🏗️ Architecture Features
+## ✨ Key Features (Point-by-Point)
 
-- **Multi-Tenant SQLite**: Each user gets a dedicated `.db` file in the `/data` directory (CGO-free via `modernc.org/sqlite`).
-- **Sync Engine**: Concurrent background workers using Goroutines and Context for periodic feed updates.
-- **Full-Text Search (FTS5)**: Ultra-fast article searching directly via SQLite Virtual Tables.
-- **REST API**: Built with `go-chi`, featuring JWT authentication and monitoring.
-- **Structured Logging**: Modern logging via `log/slog` with support for Text and JSON formats.
-- **Graceful Shutdown**: Safe termination handling (SIGINT/SIGTERM) to prevent database corruption.
-- **Security**: Content sanitization using `bluemonday` to prevent tracking and XSS.
+1.  **🔍 Feed Discovery**: Automatically finds RSS/Atom feeds from any website URL. No need to hunt for the XML link.
+2.  **🛡️ Advanced Filtering**: Rule-based engine with Regex support to `BLOCK` or `REPLACE` content (spam, ads, or reformatting).
+3.  **📖 Full Content Scraping**: Intelligent reader mode extracts the main article text when the RSS only provides a summary. Includes automatic charset detection (UTF-8/Latin1).
+4.  **🕵️ Image Proxy & Cache**: Protects your privacy by proxying images through the server. Features a local disk cache to save data and battery.
+5.  **⚡ SQLite FTS5**: Ultra-fast full-text search across all your saved articles using SQLite's native virtual tables.
+6.  **🔐 Security First**: JWT-based authentication, Argon2id password hashing, and `bluemonday` HTML sanitization.
+7.  **📦 Multi-Tenant**: Each user has a dedicated physical `.db` file for maximum privacy and portability.
 
-## 🛠️ CLI Commands
+## 🛠️ Installation & Setup
 
-The binary `rss-cli` provides the following specialized commands:
+### ⚡ Quick Install (Linux/Termux)
+Run the automated installer to build the binary and setup directories:
+```bash
+chmod +x install.sh && ./install.sh
+```
+
+### 🐳 Docker (Recommended for Servers)
+Deploy instantly with Docker Compose:
+```bash
+docker-compose up -d
+```
+
+### 🔨 Manual Build
+```bash
+make build
+./rss-cli --help
+```
+
+## 🏗️ Architecture & CLI
 
 | Command | Description |
 | :--- | :--- |
 | `register` | Creates a new user and its dedicated database file. |
-| `add` | Manually adds and syncs a single RSS feed. |
-| `import` | Mass import from an OPML file. |
+| `add` | Automatically discovers and adds a feed from any URL. |
+| `filter` | Manage Regex rules (`BLOCK`, `REPLACE`) for your feeds. |
 | `serve` | Starts the REST API and the background Sync Workers. |
-| `list` | Quick CLI view of the user's news repository. |
+| `list` | Quick CLI view of the latest news repository. |
 
-### 🚩 Global Flags
-- `-d, --data-dir`: Directory to store databases (default: `./data`).
+### 🌐 REST API Highlights
+- **GET `/news`**: List articles with `unread`, `sort`, `limit`, and `search` filters.
+- **GET `/proxy?url=...`**: Securely fetch and cache images.
+- **POST `/feeds/import`**: Bulk import feeds from OPML files.
+- **GET `/docs`**: Interactive API documentation (Rapidoc).
 
-### 🚩 `serve` Specific Flags
-- `-p, --port`: Port to listen on (default: `7077`).
-- `-f, --log-format`: Choose between `text` or `json` (ideal for daemons).
+## 👷 CI/CD & Releases
+Gorrson is built for professional workflows:
+- **GitHub Actions**: Automated testing and multi-platform releases (Linux, macOS, Windows).
+- **Gitea Actions**: Fully compatible with self-hosted Gitea runners.
+- **Automated Releases**: Binaries for `amd64` and `arm64` (Raspberry Pi/Mobile) are generated on every tag.
 
-## 🌐 REST API Endpoints
-
-Once the server is running (`serve`), you can interact with it via HTTP:
-
-### 🏥 Monitoring
-- **GET `/health`**: Returns `200 OK` if the server is alive.
-
-### 🔑 Authentication
-- **POST `/login`**: Send `{"username": "...", "password": "..."}` to receive a JWT.
-
-### 📰 News Management (Requires JWT Bearer Token)
-- **GET `/news`**: List articles.
-    - `?unread=true`: Only unread entries.
-    - `?sort=oldest|newest`: Control publication order.
-    - `?search=keyword`: Full-text search across all titles and content.
-- **PUT `/news/{id}/read`**: Marks a specific article as read.
-- **PUT `/news/{id}/favorite`**: Toggle favorite status.
-
-### 📡 Feed Management (Requires JWT Bearer Token)
-- **GET `/feeds`**: List all subscribed feeds.
-- **POST `/feeds`**: Add a new feed. Body: `{"url": "https://..."}`.
-- **PATCH `/feeds/{id}`**: Update title or category.
-- **DELETE `/feeds/{id}`**: Remove a feed and all its articles.
-
-## 🚀 Running as a Daemon
-
-A helper script is provided to run **gorrson** in the background:
-
-1. **Start the daemon**:
-   ```bash
-   ./start_daemon.sh
-   ```
-   This will build the project, kill any previous instances, and start a new one using `nohup` with JSON logging.
-
-2. **Monitor logs**:
-   ```bash
-   tail -f data/gorrson.log
-   ```
-
-## 🧪 Development & Testing
-
-- `go test ./...`: Runs all unit and integration tests (API & CLI).
-- `make build`: Compiles the tool for production.
-
-## ⚖️ Gorrson vs. Miniflux
-
-While inspired by minimalist readers like Miniflux, **gorrson** offers:
-- **Zero-Dependency**: No PostgreSQL required; uses embedded SQLite.
-- **Isolated Data**: Each user has their own physical `.db` file (Better privacy/portability).
-- **CLI-First**: Designed to be driven from the terminal as much as from the API.
-- **Structured JSON Logs**: Native support for modern observability stacks.
+## ⚖️ Why Gorrson?
+Inspired by minimalist readers like Miniflux, but optimized for portability:
+- **Zero-Dependency**: No PostgreSQL required; uses embedded SQLite (CGO-free).
+- **Privacy**: Each user owns their physical database file.
+- **Resource Efficient**: Low CPU/RAM footprint, ideal for background daemons.
 
 ---
-
-**Developed with Go excellence by Antigravity.**
+**Developed with Go excellence.**
