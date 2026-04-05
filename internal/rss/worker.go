@@ -55,4 +55,9 @@ func (w *Worker) SyncAll(ctx context.Context) {
 			log.Printf("[Worker] Error syncing %s: %v", f.FeedURL, err)
 		}
 	}
+
+	// Retention policy: Cleanup old entries after sync
+	if count, err := w.store.CleanupOldEntries(); err == nil && count > 0 {
+		log.Printf("[Worker] Cleaned up %d old entries (1-year retention policy)", count)
+	}
 }

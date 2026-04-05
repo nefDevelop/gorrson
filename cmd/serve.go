@@ -19,7 +19,17 @@ var serveCmd = &cobra.Command{
 	Short: "Start the REST API and background workers for all user databases",
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetString("port")
-		dataDir := "./data"
+		if port == "" {
+			port = os.Getenv("GORRSON_PORT")
+			if port == "" {
+				port = "7077"
+			}
+		}
+
+		dataDir := os.Getenv("GORRSON_DATA_DIR")
+		if dataDir == "" {
+			dataDir = "./data"
+		}
 
 		// Ensure data directory exists
 		if _, err := os.Stat(dataDir); os.IsNotExist(err) {

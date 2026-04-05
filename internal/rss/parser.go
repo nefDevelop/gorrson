@@ -3,11 +3,13 @@ package rss
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mmcdole/gofeed"
 	"github.com/nef734/gorrson/internal/db"
+	"github.com/nef734/gorrson/internal/models"
 	"github.com/nef734/gorrson/internal/sanitizer"
 )
 
@@ -35,7 +37,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		feedID = existing.ID
 	}
 
-	f := &db.Feed{
+	f := &models.Feed{
 		ID:          feedID,
 		Title:       feed.Title,
 		SiteURL:     feed.Link,
@@ -58,14 +60,38 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			pubDate = *item.PublishedParsed
 		}
 
-		entry := &db.Entry{
+		cleanContent := sanitizer.Clean(content)
+
+		// Generate summary (plain text, first 200 chars)
+		summary := item.Description
+		if len(summary) > 200 {
+			summary = summary[:197] + "..."
+		}
+
+		// Try to find an image
+		imageURL := ""
+		if item.Image != nil {
+			imageURL = item.Image.URL
+		} else if len(item.Enclosures) > 0 {
+			for _, e := range item.Enclosures {
+				if strings.Contains(e.Type, "image") {
+					imageURL = e.URL
+					break
+				}
+			}
+		}
+
+		entry := &models.Entry{
 			ID:          uuid.New().String(),
 			FeedID:      feedID,
 			Title:       item.Title,
-			Content:     sanitizer.Clean(content),
+			Summary:     summary,
+			Content:     cleanContent,
 			URL:         item.Link,
+			ImageURL:    imageURL,
 			PublishedAt: pubDate,
 			IsRead:      false,
+			IsFavorite:  false,
 		}
 
 		if err := store.AddEntry(entry); err != nil {
@@ -75,4 +101,6 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 	}
 
 	return nil
+}
+
 }

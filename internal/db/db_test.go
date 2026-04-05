@@ -4,11 +4,14 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/nef734/gorrson/internal/models"
 )
 
-func TestStore(t *testing.T) {
+func TestStoreFull(t *testing.T) {
 	dataDir := "./test_data"
-	username := "testuser"
+	username := "test_db_user"
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
@@ -18,55 +21,58 @@ func TestStore(t *testing.T) {
 	}
 	defer s.Close()
 
-	// Test AddFeed
-	feed := &Feed{
-		ID:          "f1",
-		Title:       "Hacker News",
-		FeedURL:     "https://news.ycombinator.com/rss",
-		LastUpdated: time.Now(),
+	// 1. Test Sessions
+	token := "refresh-token-123"
+	sess := &Session{
+		ID:           uuid.New().String(),
+		Username:     username,
+		RefreshToken: token,
+		ExpiresAt:    time.Now().Add(time.Hour),
 	}
-	if err := s.AddFeed(feed); err != nil {
-		t.Errorf("AddFeed failed: %v", err)
-	}
-
-	// Test GetFeedByURL
-	f, err := s.GetFeedByURL(feed.FeedURL)
-	if err != nil {
-		t.Errorf("GetFeedByURL failed: %v", err)
-	} else if f.Title != feed.Title {
-		t.Errorf("Expected title %s, got %s", feed.Title, f.Title)
+	if err := s.CreateSession(sess); err != nil {
+		t.Fatalf("CreateSession failed: %v", err)
 	}
 
-	// Test AddEntry
-	entry := &Entry{
+	found, err := s.GetSession(token)
+	if err != nil || found.Username != username {
+		t.Errorf("GetSession failed or username mismatch: %v", err)
+	}
+
+	if err := s.DeleteSession(token); err != nil {
+		t.Fatalf("DeleteSession failed: %v", err)
+	}
+	_, err = s.GetSession(token)
+	if err == nil {
+		t.Error("Expected error for deleted session")
+	}
+
+	// 2. Test Extended Entries (Images, Summary, Favorites)
+	entry := &models.Entry{
 		ID:          "e1",
 		FeedID:      "f1",
-		Title:       "The end of coding?",
-		URL:         "https://example.com/end-of-coding",
+		Title:       "News",
+		Summary:     "A brief summary",
+		Content:     "<p>Full content</p>",
+		URL:         "https://example.com/news",
+		ImageURL:    "https://example.com/image.jpg",
 		PublishedAt: time.Now(),
+		IsFavorite:  true,
 	}
+
 	if err := s.AddEntry(entry); err != nil {
-		t.Errorf("AddEntry failed: %v", err)
+		t.Fatalf("AddEntry failed: %v", err)
 	}
 
-	// Test ListEntries
-	entries, err := s.ListEntries(false, "newest")
-	if err != nil {
-		t.Errorf("ListEntries failed: %v", err)
-	} else if len(entries) != 1 {
-		t.Errorf("Expected 1 entry, got %d", len(entries))
+	list, _ := s.ListEntries(false, "favorite")
+	if len(list) != 1 || list[0].ImageURL != entry.ImageURL {
+		t.Errorf("Expected 1 favorite entry with correct image, got %v", list)
 	}
 
-	// Test MarkAsRead
-	if err := s.MarkAsRead("e1"); err != nil {
-		t.Errorf("MarkAsRead failed: %v", err)
+	if err := s.ToggleFavorite("e1", false); err != nil {
+		t.Fatalf("ToggleFavorite failed: %v", err)
 	}
-
-	// Test Search (FTS5)
-	results, err := s.SearchEntries("coding")
-	if err != nil {
-		t.Errorf("SearchEntries failed: %v", err)
-	} else if len(results) != 1 {
-		t.Errorf("Search should return 1 result, got %d", len(results))
+	list, _ = s.ListEntries(false, "favorite")
+	if len(list) != 0 {
+		t.Error("Expected 0 favorite entries after toggle")
 	}
 }
