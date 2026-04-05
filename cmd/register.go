@@ -24,7 +24,7 @@ var registerCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		store, err := db.NewStore("./data", user)
+		store, err := db.NewStore(dataDir, user)
 		if err != nil {
 			log.Fatal(err)
 		}

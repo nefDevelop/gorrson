@@ -93,8 +93,127 @@ func TestAPIServer(t *testing.T) {
 
 	var feeds []models.Feed
 	json.Unmarshal(rr.Body.Bytes(), &feeds)
-	
-	// 5. Test Logout
+
+	// 5. Test Update Feed
+	if len(feeds) > 0 {
+		feedID := feeds[0].ID
+		updateBody, _ := json.Marshal(map[string]string{
+			"title":    "Updated Title",
+			"category": "Tech",
+		})
+		req = httptest.NewRequest("PATCH", "/feeds/"+feedID, bytes.NewBuffer(updateBody))
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		rr = httptest.NewRecorder()
+		srv.router.ServeHTTP(rr, req)
+
+		if rr.Code != http.StatusOK {
+			t.Errorf("UpdateFeed failed: status %d", rr.Code)
+		}
+	}
+
+	// 6. Test List News
+	req = httptest.NewRequest("GET", "/news?limit=10", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	rr = httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Errorf("ListNews failed: status %d", rr.Code)
+	}
+
+	var entries []models.Entry
+	json.Unmarshal(rr.Body.Bytes(), &entries)
+
+	// 7. Test Mark Read & Favorite
+	if len(entries) > 0 {
+		entryID := entries[0].ID
+		// Mark Read
+		req = httptest.NewRequest("PUT", "/news/"+entryID+"/read", nil)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		rr = httptest.NewRecorder()
+		srv.router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("MarkRead failed: status %d", rr.Code)
+		}
+
+		// Mark Favorite
+		req = httptest.NewRequest("PUT", "/news/"+entryID+"/favorite?favorite=true", nil)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		rr = httptest.NewRecorder()
+		srv.router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("MarkFavorite failed: status %d", rr.Code)
+		}
+	}
+
+	// 8. Test Import OPML (Minimal)
+	opmlData := `<?xml version="1.0" encoding="UTF-8"?><opml version="1.0"><body><outline text="HN" xmlUrl="https://news.ycombinator.com/rss" /></body></opml>`
+	req = httptest.NewRequest("POST", "/feeds/import", bytes.NewBufferString(opmlData))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("Content-Type", "application/xml")
+	rr = httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("ImportOPML failed: status %d", rr.Code)
+	}
+
+	// 9. Test Delete Feed
+	if len(feeds) > 0 {
+		feedID := feeds[0].ID
+		req = httptest.NewRequest("DELETE", "/feeds/"+feedID, nil)
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		rr = httptest.NewRecorder()
+		srv.router.ServeHTTP(rr, req)
+		if rr.Code != http.StatusNoContent {
+			t.Errorf("DeleteFeed failed: status %d", rr.Code)
+		}
+	}
+
+	// 10. Test Docs
+	req = httptest.NewRequest("GET", "/docs", nil)
+	rr = httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("Docs failed: status %d", rr.Code)
+	}
+
+	// 11. Test Filters API
+	// Add Filter
+	filterBody, _ := json.Marshal(map[string]string{
+		"pattern": "TestPattern",
+		"action":  "BLOCK",
+		"target":  "title",
+	})
+	req = httptest.NewRequest("POST", "/filters", bytes.NewBuffer(filterBody))
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	rr = httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusCreated {
+		t.Errorf("AddFilter API failed: status %d", rr.Code)
+	}
+
+	var addedFilter models.Filter
+	json.Unmarshal(rr.Body.Bytes(), &addedFilter)
+
+	// List Filters
+	req = httptest.NewRequest("GET", "/filters", nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	rr = httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Errorf("ListFilters API failed: status %d", rr.Code)
+	}
+
+	// Delete Filter
+	req = httptest.NewRequest("DELETE", "/filters/"+addedFilter.ID, nil)
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	rr = httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusNoContent {
+		t.Errorf("DeleteFilter API failed: status %d", rr.Code)
+	}
+
+	// 12. Test Logout
 	req = httptest.NewRequest("POST", "/logout", bytes.NewBuffer(refreshBody))
 	rr = httptest.NewRecorder()
 	srv.router.ServeHTTP(rr, req)

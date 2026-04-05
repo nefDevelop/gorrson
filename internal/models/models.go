@@ -20,6 +20,17 @@ type Entry struct {
 	URL         string    `json:"url"`
 	ImageURL    string    `json:"image_url"`
 	PublishedAt time.Time `json:"published_at"`
-	IsRead      bool      `json:"is_read"`
-	IsFavorite  bool      `json:"is_favorite"`
+	IsRead          bool      `json:"is_read"`
+	IsFavorite      bool      `json:"is_favorite"`
+	IsFullContent   bool      `json:"is_full_content"`
+	}
+
+
+type Filter struct {
+	ID          string `json:"id"`
+	FeedID      string `json:"feed_id,omitempty"` // If empty, it's a global filter
+	Pattern     string `json:"pattern"`          // Regex or keyword
+	Action      string `json:"action"`           // BLOCK, ALLOW, REPLACE
+	Target      string `json:"target"`           // title, content, both
+	Replacement string `json:"replacement,omitempty"`
 }

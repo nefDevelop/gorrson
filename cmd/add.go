@@ -20,7 +20,7 @@ var addCmd = &cobra.Command{
 			log.Fatal("Flag --url is required")
 		}
 
-		store, err := db.NewStore("./data", user)
+		store, err := db.NewStore(dataDir, user)
 		if err != nil {
 			log.Fatal(err)
 		}

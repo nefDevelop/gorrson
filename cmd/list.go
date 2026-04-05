@@ -15,7 +15,7 @@ var listCmd = &cobra.Command{
 		user, _ := cmd.Flags().GetString("user")
 		unread, _ := cmd.Flags().GetBool("unread")
 
-		store, err := db.NewStore("./data", user)
+		store, err := db.NewStore(dataDir, user)
 		if err != nil {
 			log.Fatal(fmt.Errorf("could not open store for user %s: %w", user, err))
 		}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -12,7 +13,8 @@ import (
 )
 
 type Store struct {
-	db *sql.DB
+	db       *sql.DB
+	username string
 }
 
 func NewStore(dataDir, username string) (*Store, error) {
@@ -27,7 +29,7 @@ func NewStore(dataDir, username string) (*Store, error) {
 		return nil, fmt.Errorf("could not open database: %w", err)
 	}
 
-	s := &Store{db: db}
+	s := &Store{db: db, username: username}
 	if err := s.migrate(); err != nil {
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
@@ -37,6 +39,10 @@ func NewStore(dataDir, username string) (*Store, error) {
 
 func (s *Store) Close() error {
 	return s.db.Close()
+}
+
+func (s *Store) GetUsername() string {
+	return s.username
 }
 
 func (s *Store) migrate() error {
@@ -64,6 +70,17 @@ func (s *Store) migrate() error {
 			published_at DATETIME,
 			is_read BOOLEAN DEFAULT 0,
 			is_favorite BOOLEAN DEFAULT 0,
+			was_ever_favorite BOOLEAN DEFAULT 0,
+			is_full_content BOOLEAN DEFAULT 0,
+			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
+		);`,
+		`CREATE TABLE IF NOT EXISTS filters (
+			id TEXT PRIMARY KEY,
+			feed_id TEXT,
+			pattern TEXT NOT NULL,
+			action TEXT NOT NULL,
+			target TEXT NOT NULL,
+			replacement TEXT,
 			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 		);`,
 		`CREATE INDEX IF NOT EXISTS idx_entries_published ON entries(published_at DESC);`,
@@ -103,8 +120,8 @@ func (s *Store) AddFeed(f *models.Feed) error {
 }
 
 func (s *Store) AddEntry(e *models.Entry) error {
-	_, err := s.db.Exec(`INSERT INTO entries (id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite)
+	_, err := s.db.Exec(`INSERT INTO entries (id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+		e.ID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent)
 	return err
 }
 
@@ -126,28 +143,34 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 	return feeds, nil
 }
 
-func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int) ([]models.Entry, error) {
-	query := "SELECT id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite FROM entries"
+func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int, category string) ([]models.Entry, error) {
+	query := `SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content 
+              FROM entries e 
+              JOIN feeds f ON e.feed_id = f.id`
 	var args []interface{}
 	
-	whereApplied := false
+	conditions := []string{}
 	if unreadOnly {
-		query += " WHERE is_read = 0"
-		whereApplied = true
+		conditions = append(conditions, "e.is_read = 0")
 	}
 
 	if sortMode == "favorite" {
-		if whereApplied {
-			query += " AND is_favorite = 1"
-		} else {
-			query += " WHERE is_favorite = 1"
-		}
+		conditions = append(conditions, "e.is_favorite = 1")
+	}
+
+	if category != "" {
+		conditions = append(conditions, "f.category = ?")
+		args = append(args, category)
+	}
+
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
 	if sortMode == "oldest" {
-		query += " ORDER BY published_at ASC"
+		query += " ORDER BY e.published_at ASC"
 	} else {
-		query += " ORDER BY published_at DESC"
+		query += " ORDER BY e.published_at DESC"
 	}
 
 	if limit > 0 {
@@ -164,12 +187,27 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int)
 	var entries []models.Entry
 	for rows.Next() {
 		var e models.Entry
-		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite); err != nil {
+		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
 	}
 	return entries, nil
+}
+
+func (s *Store) GetEntryByID(id string) (*models.Entry, error) {
+	var e models.Entry
+	err := s.db.QueryRow(`SELECT id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content FROM entries WHERE id = ?`, id).
+		Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent)
+	if err != nil {
+		return nil, err
+	}
+	return &e, nil
+}
+
+func (s *Store) UpdateEntryContent(id, content string) error {
+	_, err := s.db.Exec("UPDATE entries SET content = ?, is_full_content = 1 WHERE id = ?", content, id)
+	return err
 }
 
 func (s *Store) MarkAsRead(entryID string) error {
@@ -178,10 +216,7 @@ func (s *Store) MarkAsRead(entryID string) error {
 }
 
 func (s *Store) ToggleFavorite(entryID string, isFavorite bool) error {
-	val := 0
 	if isFavorite {
-		val = 1
-		// If marking as favorite, also mark as was_ever_favorite
 		_, err := s.db.Exec("UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE id = ?", entryID)
 		return err
 	}
@@ -190,7 +225,6 @@ func (s *Store) ToggleFavorite(entryID string, isFavorite bool) error {
 }
 
 func (s *Store) CleanupOldEntries() (int64, error) {
-	// Delete entries older than 1 year, unless they are or were favorites
 	res, err := s.db.Exec(`
 		DELETE FROM entries 
 		WHERE published_at < date('now', '-1 year') 
@@ -203,7 +237,7 @@ func (s *Store) CleanupOldEntries() (int64, error) {
 }
 
 func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
-	query := `SELECT id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite 
+	query := `SELECT id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content 
               FROM entries 
               JOIN entries_fts ON entries.rowid = entries_fts.rowid 
               WHERE entries_fts MATCH ? 
@@ -217,7 +251,7 @@ func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
 	var entries []models.Entry
 	for rows.Next() {
 		var e models.Entry
-		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite); err != nil {
+		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent); err != nil {
 			return nil, err
 		}
 		entries = append(entries, e)
@@ -264,6 +298,39 @@ func (s *Store) GetFeedByID(id string) (*models.Feed, error) {
 		return nil, err
 	}
 	return &f, nil
+}
+
+func (s *Store) AddFilter(f *models.Filter) error {
+	_, err := s.db.Exec(`INSERT INTO filters (id, feed_id, pattern, action, target, replacement) VALUES (?, ?, ?, ?, ?, ?)`,
+		f.ID, f.FeedID, f.Pattern, f.Action, f.Target, f.Replacement)
+	return err
+}
+
+func (s *Store) ListFilters() ([]models.Filter, error) {
+	rows, err := s.db.Query("SELECT id, feed_id, pattern, action, target, replacement FROM filters")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var filters []models.Filter
+	for rows.Next() {
+		var f models.Filter
+		var feedID sql.NullString
+		if err := rows.Scan(&f.ID, &feedID, &f.Pattern, &f.Action, &f.Target, &f.Replacement); err != nil {
+			return nil, err
+		}
+		if feedID.Valid {
+			f.FeedID = feedID.String
+		}
+		filters = append(filters, f)
+	}
+	return filters, nil
+}
+
+func (s *Store) DeleteFilter(id string) error {
+	_, err := s.db.Exec("DELETE FROM filters WHERE id = ?", id)
+	return err
 }
 
 type Session struct {

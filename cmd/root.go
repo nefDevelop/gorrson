@@ -6,6 +6,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var (
+	dataDir string
+)
+
 var rootCmd = &cobra.Command{
 	Use:   "rss-cli",
 	Short: "gorrson - A powerful RSS CLI utility",
@@ -22,5 +26,5 @@ func Execute() {
 }
 
 func init() {
-	// Flags can be defined here
+	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "d", "./data", "Directory to store databases")
 }

@@ -33,7 +33,7 @@ var importCmd = &cobra.Command{
 			log.Fatalf("Error parsing OPML: %v", err)
 		}
 
-		store, err := db.NewStore("./data", user)
+		store, err := db.NewStore(dataDir, user)
 		if err != nil {
 			log.Fatal(err)
 		}

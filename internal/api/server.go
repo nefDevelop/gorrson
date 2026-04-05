@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -92,6 +93,10 @@ func (s *Server) routes() {
 
 	s.router.Get("/openapi.yaml", s.handleOpenAPI)
 	s.router.Get("/docs", s.handleDocs)
+	s.router.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("OK"))
+	})
 
 	s.router.With(s.loginRateLimit).Post("/login", s.handleLogin)
 	s.router.Post("/refresh", s.handleRefresh)
@@ -101,6 +106,7 @@ func (s *Server) routes() {
 		r.Use(s.authMiddleware)
 
 		r.Get("/news", s.handleListNews)
+		r.Get("/news/{id}/content", s.handleGetFullContent)
 		r.Put("/news/{id}/read", s.handleMarkRead)
 		r.Put("/news/{id}/favorite", s.handleMarkFavorite)
 
@@ -110,11 +116,19 @@ func (s *Server) routes() {
 		r.Get("/feeds/export", s.handleExportOPML)
 		r.Patch("/feeds/{id}", s.handleUpdateFeed)
 		r.Delete("/feeds/{id}", s.handleDeleteFeed)
+
+		r.Get("/filters", s.handleListFilters)
+		r.Post("/filters", s.handleAddFilter)
+		r.Delete("/filters/{id}", s.handleDeleteFilter)
 	})
 }
 
 func (s *Server) Start(addr string) error {
 	return http.ListenAndServe(addr, s.router)
+}
+
+func (s *Server) GetRouter() http.Handler {
+	return s.router
 }
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
@@ -236,6 +250,7 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	unread := r.URL.Query().Get("unread") == "true"
 	sort := r.URL.Query().Get("sort")
 	search := r.URL.Query().Get("search")
+	category := r.URL.Query().Get("category")
 	
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
@@ -247,7 +262,7 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	if search != "" {
 		entries, err = store.SearchEntries(search)
 	} else {
-		entries, err = store.ListEntries(unread, sort, limit, offset)
+		entries, err = store.ListEntries(unread, sort, limit, offset, category)
 	}
 
 	if err != nil {
@@ -257,6 +272,40 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(entries)
+}
+
+func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	username := r.Context().Value("username").(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	entry, err := store.GetEntryByID(id)
+	if err != nil {
+		http.Error(w, "Entry not found", http.StatusNotFound)
+		return
+	}
+
+	if entry.IsFullContent {
+		w.Header().Set("Content-Type", "text/html")
+		w.Write([]byte(entry.Content))
+		return
+	}
+
+	fullContent, err := rss.ScrapeFullContent(r.Context(), entry.URL)
+	if err != nil {
+		http.Error(w, "Scraping failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	store.UpdateEntryContent(id, fullContent)
+
+	w.Header().Set("Content-Type", "text/html")
+	w.Write([]byte(fullContent))
 }
 
 func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
@@ -381,6 +430,53 @@ func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		defer store.Close()
 		store.DeleteFeed(id)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleListFilters(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	filters, err := store.ListFilters()
+	if err != nil {
+		http.Error(w, "Query failure", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(filters)
+}
+
+func (s *Server) handleAddFilter(w http.ResponseWriter, r *http.Request) {
+	var f models.Filter
+	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+		http.Error(w, "Bad Request", http.StatusBadRequest)
+		return
+	}
+	f.ID = uuid.New().String()
+	username := r.Context().Value("username").(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err == nil {
+		defer store.Close()
+		store.AddFilter(&f)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(f)
+}
+
+func (s *Server) handleDeleteFilter(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	username := r.Context().Value("username").(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err == nil {
+		defer store.Close()
+		store.DeleteFilter(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

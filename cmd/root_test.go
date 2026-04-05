@@ -1,0 +1,54 @@
+package cmd
+
+import (
+	"bytes"
+	"os"
+	"strings"
+	"testing"
+
+	"github.com/nef734/gorrson/internal/db"
+)
+
+func executeCommand(args ...string) (string, error) {
+	buf := new(bytes.Buffer)
+	rootCmd.SetOut(buf)
+	rootCmd.SetErr(buf)
+	rootCmd.SetArgs(args)
+
+	// Reset flags to avoid pollution between tests if necessary
+	// In Cobra, we might need to be careful with global state
+	err := rootCmd.Execute()
+	return buf.String(), err
+}
+
+func TestCLI_Flow(t *testing.T) {
+	// Setup a temporary data directory
+	tmpData := "./test_cli_data"
+	os.RemoveAll(tmpData)
+	defer os.RemoveAll(tmpData)
+	os.MkdirAll(tmpData, 0755)
+
+	// 1. Test Register
+	out, err := executeCommand("register", "--user", "tester", "--pass", "password", "--data-dir", tmpData)
+	if err != nil {
+		t.Fatalf("Register failed: %v", err)
+	}
+	if !strings.Contains(out, "registered") {
+		t.Errorf("Expected registration message, got: %s", out)
+	}
+
+	// 2. Test List (Empty)
+	out, err = executeCommand("list", "--user", "tester", "--data-dir", tmpData)
+	if err != nil {
+		t.Errorf("List failed: %v", err)
+	}
+	if !strings.Contains(out, "Found: 0") {
+		t.Errorf("Expected 0 records, got: %s", out)
+	}
+	
+	// 3. Test Add
+	out, err = executeCommand("add", "--url", "https://news.ycombinator.com/rss", "--user", "tester", "--data-dir", tmpData)
+	if err != nil {
+		t.Logf("Add might fail due to network: %v", err)
+	}
+}

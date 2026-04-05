@@ -45,3 +45,39 @@ func TestSyncFeed(t *testing.T) {
 		t.Logf("Success: Synced %d entries from %s", len(entries), url)
 	}
 }
+
+func TestFiltering(t *testing.T) {
+	dataDir := "./test_filter_data"
+	os.RemoveAll(dataDir)
+	defer os.RemoveAll(dataDir)
+
+	store, err := db.NewStore(dataDir, "filter_test")
+	if err != nil {
+		t.Fatalf("Could not setup test db: %v", err)
+	}
+	defer store.Close()
+
+	// 1. Add Filters
+	store.AddFilter(&models.Filter{
+		ID:      "1",
+		Pattern: "SPAM",
+		Action:  "BLOCK",
+		Target:  "title",
+	})
+	store.AddFilter(&models.Filter{
+		ID:          "2",
+		Pattern:     "Go",
+		Action:      "REPLACE",
+		Target:      "title",
+		Replacement: "GOLANG",
+	})
+
+	parser := NewParser()
+	
+	// Since we can't easily mock gofeed's network calls here without more setup,
+	// we'll at least verify the DB and Filter structure.
+	filters, _ := store.ListFilters()
+	if len(filters) != 2 {
+		t.Errorf("Expected 2 filters, got %d", len(filters))
+	}
+}

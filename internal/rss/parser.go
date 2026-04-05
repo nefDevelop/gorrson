@@ -3,6 +3,7 @@ package rss
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -27,7 +28,16 @@ func NewParser() *Parser {
 func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) error {
 	feed, err := p.fp.ParseURLWithContext(url, ctx)
 	if err != nil {
-		return fmt.Errorf("could not parse feed at %s: %w", url, err)
+		// Try discovery if initial parse fails
+		discoveredURL, discErr := DiscoverFeed(ctx, url)
+		if discErr == nil && discoveredURL != url {
+			url = discoveredURL
+			feed, err = p.fp.ParseURLWithContext(url, ctx)
+		}
+		
+		if err != nil {
+			return fmt.Errorf("could not parse feed at %s (tried discovery): %w", url, err)
+		}
 	}
 
 	// Check if feed exists to maintain the ID
@@ -49,6 +59,8 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		return fmt.Errorf("could not save feed metadata: %w", err)
 	}
 
+	filters, _ := store.ListFilters()
+
 	for _, item := range feed.Items {
 		content := item.Content
 		if content == "" {
@@ -61,6 +73,43 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 
 		cleanContent := sanitizer.Clean(content)
+		title := item.Title
+
+		// Apply Filters
+		skip := false
+		for _, filter := range filters {
+			// Only apply if global (empty FeedID) or for this specific feed
+			if filter.FeedID != "" && filter.FeedID != feedID {
+				continue
+			}
+
+			re, err := regexp.Compile("(?i)" + filter.Pattern) // Case insensitive
+			if err != nil {
+				continue
+			}
+
+			matchTitle := filter.Target == "title" || filter.Target == "both"
+			matchContent := filter.Target == "content" || filter.Target == "both"
+
+			if (matchTitle && re.MatchString(title)) || (matchContent && re.MatchString(cleanContent)) {
+				if filter.Action == "BLOCK" {
+					skip = true
+					break
+				}
+				if filter.Action == "REPLACE" {
+					if matchTitle {
+						title = re.ReplaceAllString(title, filter.Replacement)
+					}
+					if matchContent {
+						cleanContent = re.ReplaceAllString(cleanContent, filter.Replacement)
+					}
+				}
+			}
+		}
+
+		if skip {
+			continue
+		}
 
 		// Generate summary (plain text, first 200 chars)
 		summary := item.Description
@@ -84,7 +133,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		entry := &models.Entry{
 			ID:          uuid.New().String(),
 			FeedID:      feedID,
-			Title:       item.Title,
+			Title:       title,
 			Summary:     summary,
 			Content:     cleanContent,
 			URL:         item.Link,
@@ -101,6 +150,4 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 	}
 
 	return nil
-}
-
 }

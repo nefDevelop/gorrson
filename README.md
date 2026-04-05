@@ -7,9 +7,10 @@
 - **Multi-Tenant SQLite**: Each user gets a dedicated `.db` file in the `/data` directory (CGO-free via `modernc.org/sqlite`).
 - **Sync Engine**: Concurrent background workers using Goroutines and Context for periodic feed updates.
 - **Full-Text Search (FTS5)**: Ultra-fast article searching directly via SQLite Virtual Tables.
-- **REST API**: Built with `go-chi`, featuring JWT authentication.
+- **REST API**: Built with `go-chi`, featuring JWT authentication and monitoring.
+- **Structured Logging**: Modern logging via `log/slog` with support for Text and JSON formats.
+- **Graceful Shutdown**: Safe termination handling (SIGINT/SIGTERM) to prevent database corruption.
 - **Security**: Content sanitization using `bluemonday` to prevent tracking and XSS.
-- **OPML Support**: Standardized import/export of feed lists.
 
 ## 🛠️ CLI Commands
 
@@ -17,15 +18,25 @@ The binary `rss-cli` provides the following specialized commands:
 
 | Command | Description |
 | :--- | :--- |
-| `register --user [n] --pass [p]` | Creates a new user and its dedicated database file. |
-| `add --url [URL] --user [n]` | Manually adds and syncs a single RSS feed. |
-| `import --file feeds.opml --user [n]` | Mass import from an OPML file. |
-| `serve --port 7077` | Starts the REST API and the background Sync Workers. |
-| `list --user [n] [--unread]` | Quick CLI view of the user's news repository. |
+| `register` | Creates a new user and its dedicated database file. |
+| `add` | Manually adds and syncs a single RSS feed. |
+| `import` | Mass import from an OPML file. |
+| `serve` | Starts the REST API and the background Sync Workers. |
+| `list` | Quick CLI view of the user's news repository. |
+
+### 🚩 Global Flags
+- `-d, --data-dir`: Directory to store databases (default: `./data`).
+
+### 🚩 `serve` Specific Flags
+- `-p, --port`: Port to listen on (default: `7077`).
+- `-f, --log-format`: Choose between `text` or `json` (ideal for daemons).
 
 ## 🌐 REST API Endpoints
 
 Once the server is running (`serve`), you can interact with it via HTTP:
+
+### 🏥 Monitoring
+- **GET `/health`**: Returns `200 OK` if the server is alive.
 
 ### 🔑 Authentication
 - **POST `/login`**: Send `{"username": "...", "password": "..."}` to receive a JWT.
@@ -36,42 +47,41 @@ Once the server is running (`serve`), you can interact with it via HTTP:
     - `?sort=oldest|newest`: Control publication order.
     - `?search=keyword`: Full-text search across all titles and content.
 - **PUT `/news/{id}/read`**: Marks a specific article as read.
+- **PUT `/news/{id}/favorite`**: Toggle favorite status.
 
 ### 📡 Feed Management (Requires JWT Bearer Token)
 - **GET `/feeds`**: List all subscribed feeds.
 - **POST `/feeds`**: Add a new feed. Body: `{"url": "https://..."}`.
-- **PATCH `/feeds/{id}`**: Update title or category. Body: `{"title": "...", "category": "..."}`.
+- **PATCH `/feeds/{id}`**: Update title or category.
 - **DELETE `/feeds/{id}`**: Remove a feed and all its articles.
 
-## 🚀 Getting Started
+## 🚀 Running as a Daemon
 
-### 📦 Build
-```bash
-make build
-```
+A helper script is provided to run **gorrson** in the background:
 
-### 👤 Register a user
-```bash
-./rss-cli register --user mynode --pass strongpassword
-```
+1. **Start the daemon**:
+   ```bash
+   ./start_daemon.sh
+   ```
+   This will build the project, kill any previous instances, and start a new one using `nohup` with JSON logging.
 
-### 📡 Import feeds
-```bash
-./rss-cli import --file my_feeds.opml --user mynode
-```
-
-### 🚦 Start the engine
-```bash
-./rss-cli serve --port 7077
-```
+2. **Monitor logs**:
+   ```bash
+   tail -f data/gorrson.log
+   ```
 
 ## 🧪 Development & Testing
 
-Use the provided **Makefile** for streamlined workflows:
-
-- `make test`: Runs all database and parser integration tests.
-- `make clean`: Resets the environment (removes databases and binaries).
+- `go test ./...`: Runs all unit and integration tests (API & CLI).
 - `make build`: Compiles the tool for production.
+
+## ⚖️ Gorrson vs. Miniflux
+
+While inspired by minimalist readers like Miniflux, **gorrson** offers:
+- **Zero-Dependency**: No PostgreSQL required; uses embedded SQLite.
+- **Isolated Data**: Each user has their own physical `.db` file (Better privacy/portability).
+- **CLI-First**: Designed to be driven from the terminal as much as from the API.
+- **Structured JSON Logs**: Native support for modern observability stacks.
 
 ---
 
