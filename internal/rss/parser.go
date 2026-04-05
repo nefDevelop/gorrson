@@ -59,7 +59,19 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		return fmt.Errorf("could not save feed metadata: %w", err)
 	}
 
-	filters, _ := store.ListFilters()
+	filters, _ := store.GetFiltersForFeed(feedID)
+
+	type compiledFilter struct {
+		f  models.Filter
+		re *regexp.Regexp
+	}
+	var readyFilters []compiledFilter
+	for _, filter := range filters {
+		re, err := regexp.Compile("(?i)" + filter.Pattern)
+		if err == nil {
+			readyFilters = append(readyFilters, compiledFilter{f: filter, re: re})
+		}
+	}
 
 	for _, item := range feed.Items {
 		content := item.Content
@@ -77,16 +89,9 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 		// Apply Filters
 		skip := false
-		for _, filter := range filters {
-			// Only apply if global (empty FeedID) or for this specific feed
-			if filter.FeedID != "" && filter.FeedID != feedID {
-				continue
-			}
-
-			re, err := regexp.Compile("(?i)" + filter.Pattern) // Case insensitive
-			if err != nil {
-				continue
-			}
+		for _, rf := range readyFilters {
+			filter := rf.f
+			re := rf.re
 
 			matchTitle := filter.Target == "title" || filter.Target == "both"
 			matchContent := filter.Target == "content" || filter.Target == "both"

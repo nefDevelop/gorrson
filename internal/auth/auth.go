@@ -25,6 +25,10 @@ const (
 // Secret is a hardcoded placeholder for the JWT signing key. In production, this should be an environment variable.
 var Secret = []byte("gorrson-vibrant-rss-secret")
 
+func GetSecret() []byte {
+	return Secret
+}
+
 // HashPassword generates an argon2id hash in PHC format.
 func HashPassword(password string) (string, error) {
 	salt := make([]byte, SaltLength)

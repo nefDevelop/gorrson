@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nef734/gorrson/internal/db"
+	"github.com/nef734/gorrson/internal/models"
 )
 
 func TestSyncFeed(t *testing.T) {
@@ -38,7 +39,7 @@ func TestSyncFeed(t *testing.T) {
 		t.Errorf("Expected at least one feed in DB, got: %d", len(feeds))
 	}
 
-	entries, err := store.ListEntries(false, "newest")
+	entries, err := store.ListEntries(false, "newest", 10, 0, "")
 	if err != nil || len(entries) == 0 {
 		t.Errorf("Expected at least one entry in DB, got: %d", len(entries))
 	} else {
@@ -72,8 +73,6 @@ func TestFiltering(t *testing.T) {
 		Replacement: "GOLANG",
 	})
 
-	parser := NewParser()
-	
 	// Since we can't easily mock gofeed's network calls here without more setup,
 	// we'll at least verify the DB and Filter structure.
 	filters, _ := store.ListFilters()

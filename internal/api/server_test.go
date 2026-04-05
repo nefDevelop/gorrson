@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/nef734/gorrson/internal/auth"
@@ -229,5 +230,40 @@ func TestAPIServer(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("Refresh should have failed after logout, got status %d", rr.Code)
+	}
+}
+
+func TestImageProxy(t *testing.T) {
+	dataDir := "./test_proxy_data"
+	os.RemoveAll(dataDir)
+	defer os.RemoveAll(dataDir)
+
+	srv := NewServer(dataDir)
+
+	// Mock image server
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "image/png")
+		w.Write([]byte("fake-image-binary-data"))
+	}))
+	defer ts.Close()
+
+	// Request through our proxy
+	req := httptest.NewRequest("GET", "/proxy?url="+ts.URL, nil)
+	rr := httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("Proxy failed: status %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	if rr.Body.String() != "fake-image-binary-data" {
+		t.Errorf("Proxy data mismatch: got %s", rr.Body.String())
+	}
+
+	// Verify it was cached by checking the directory
+	cacheDir := filepath.Join(dataDir, "cache", "images")
+	files, _ := os.ReadDir(cacheDir)
+	if len(files) != 1 {
+		t.Errorf("Expected 1 file in cache, got %d", len(files))
 	}
 }

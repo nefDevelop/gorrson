@@ -3,6 +3,7 @@ module github.com/nef734/gorrson
 go 1.25.8
 
 require (
+	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
@@ -14,7 +15,6 @@ require (
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.8.0 // indirect
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect

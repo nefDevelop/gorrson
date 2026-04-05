@@ -47,6 +47,12 @@ func TestStoreFull(t *testing.T) {
 	}
 
 	// 2. Test Extended Entries (Images, Summary, Favorites)
+	s.AddFeed(&models.Feed{
+		ID:      "f1",
+		Title:   "Test Feed",
+		FeedURL: "https://example.com/feed",
+	})
+
 	entry := &models.Entry{
 		ID:          "e1",
 		FeedID:      "f1",
@@ -63,7 +69,7 @@ func TestStoreFull(t *testing.T) {
 		t.Fatalf("AddEntry failed: %v", err)
 	}
 
-	list, _ := s.ListEntries(false, "favorite")
+	list, _ := s.ListEntries(false, "favorite", 10, 0, "")
 	if len(list) != 1 || list[0].ImageURL != entry.ImageURL {
 		t.Errorf("Expected 1 favorite entry with correct image, got %v", list)
 	}
@@ -71,7 +77,7 @@ func TestStoreFull(t *testing.T) {
 	if err := s.ToggleFavorite("e1", false); err != nil {
 		t.Fatalf("ToggleFavorite failed: %v", err)
 	}
-	list, _ = s.ListEntries(false, "favorite")
+	list, _ = s.ListEntries(false, "favorite", 10, 0, "")
 	if len(list) != 0 {
 		t.Error("Expected 0 favorite entries after toggle")
 	}

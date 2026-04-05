@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"log"
+	"regexp"
 
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
@@ -28,6 +29,10 @@ var filterAddCmd = &cobra.Command{
 
 		if pattern == "" || action == "" {
 			log.Fatal("Flags --pattern and --action are required")
+		}
+
+		if _, err := regexp.Compile(pattern); err != nil {
+			log.Fatalf("Invalid regex pattern: %v", err)
 		}
 
 		store, err := db.NewStore(dataDir, user)

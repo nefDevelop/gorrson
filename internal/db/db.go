@@ -90,7 +90,7 @@ func (s *Store) migrate() error {
 			refresh_token TEXT UNIQUE NOT NULL,
 			expires_at DATETIME NOT NULL
 		);`,
-		`CREATE TABLE IF NOT EXISTS entries_fts USING fts5(
+		`CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
 			title, content, content='entries', content_rowid='rowid'
 		);`,
 		`CREATE TRIGGER IF NOT EXISTS entries_ai AFTER INSERT ON entries BEGIN
@@ -322,6 +322,28 @@ func (s *Store) ListFilters() ([]models.Filter, error) {
 		}
 		if feedID.Valid {
 			f.FeedID = feedID.String
+		}
+		filters = append(filters, f)
+	}
+	return filters, nil
+}
+
+func (s *Store) GetFiltersForFeed(feedID string) ([]models.Filter, error) {
+	rows, err := s.db.Query("SELECT id, feed_id, pattern, action, target, replacement FROM filters WHERE feed_id IS NULL OR feed_id = '' OR feed_id = ?", feedID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var filters []models.Filter
+	for rows.Next() {
+		var f models.Filter
+		var fID sql.NullString
+		if err := rows.Scan(&f.ID, &fID, &f.Pattern, &f.Action, &f.Target, &f.Replacement); err != nil {
+			return nil, err
+		}
+		if fID.Valid {
+			f.FeedID = fID.String
 		}
 		filters = append(filters, f)
 	}

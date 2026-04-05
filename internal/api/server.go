@@ -2,9 +2,14 @@ package api
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -101,6 +106,7 @@ func (s *Server) routes() {
 	s.router.With(s.loginRateLimit).Post("/login", s.handleLogin)
 	s.router.Post("/refresh", s.handleRefresh)
 	s.router.Post("/logout", s.handleLogout)
+	s.router.Get("/proxy", s.handleImageProxy)
 
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
@@ -458,6 +464,12 @@ func (s *Server) handleAddFilter(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
+
+	if _, err := regexp.Compile(f.Pattern); err != nil {
+		http.Error(w, "Invalid regex pattern: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
 	f.ID = uuid.New().String()
 	username := r.Context().Value("username").(string)
 	store, err := db.NewStore(s.dataDir, username)
@@ -479,6 +491,76 @@ func (s *Server) handleDeleteFilter(w http.ResponseWriter, r *http.Request) {
 		store.DeleteFilter(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleImageProxy(w http.ResponseWriter, r *http.Request) {
+	imageURL := r.URL.Query().Get("url")
+	if imageURL == "" {
+		http.Error(w, "Missing url parameter", http.StatusBadRequest)
+		return
+	}
+
+	// 1. Setup cache path
+	hash := sha256.Sum256([]byte(imageURL))
+	hexHash := hex.EncodeToString(hash[:])
+	cacheDir := filepath.Join(s.dataDir, "cache", "images")
+	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+		http.Error(w, "Could not create cache directory", http.StatusInternalServerError)
+		return
+	}
+	cachePath := filepath.Join(cacheDir, hexHash)
+
+	// 2. Check if cached
+	if _, err := os.Stat(cachePath); err == nil {
+		// Serve from cache
+		// We'll peek at the file to get the content-type, or just use a generic one
+		// Since browser is smart, serving as octet-stream might work, 
+		// but let's try to be accurate.
+		f, _ := os.Open(cachePath)
+		defer f.Close()
+		
+		// Set some cache headers for the client browser
+		w.Header().Set("Cache-Control", "public, max-age=31536000") // 1 year
+		http.ServeContent(w, r, "image", time.Time{}, f)
+		return
+	}
+
+	// 3. Not cached, download it using SecureClient
+	sc := rss.NewSecureClient()
+	body, err := sc.Fetch(r.Context(), imageURL)
+	if err != nil {
+		http.Error(w, "Failed to fetch image: "+err.Error(), http.StatusBadGateway)
+		return
+	}
+	defer body.Close()
+
+	// 4. Save to temp file and then move to cache to avoid partial writes
+	tmpPath := cachePath + ".tmp"
+	tmpFile, err := os.Create(tmpPath)
+	if err != nil {
+		http.Error(w, "Could not create temporary file", http.StatusInternalServerError)
+		return
+	}
+
+	// Copy content
+	if _, err := io.Copy(tmpFile, body); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		http.Error(w, "Failed to save image", http.StatusInternalServerError)
+		return
+	}
+	tmpFile.Close()
+
+	if err := os.Rename(tmpPath, cachePath); err != nil {
+		http.Error(w, "Could not commit cache file", http.StatusInternalServerError)
+		return
+	}
+
+	// 5. Serve it
+	f, _ := os.Open(cachePath)
+	defer f.Close()
+	w.Header().Set("Cache-Control", "public, max-age=31536000")
+	http.ServeContent(w, r, "image", time.Time{}, f)
 }
 
 func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
