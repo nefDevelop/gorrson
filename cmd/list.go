@@ -1,0 +1,45 @@
+package cmd
+
+import (
+	"fmt"
+	"log"
+
+	"github.com/spf13/cobra"
+	"github.com/nef734/gorrson/internal/db"
+)
+
+var listCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List all news entries recorded in a user's database",
+	Run: func(cmd *cobra.Command, args []string) {
+		user, _ := cmd.Flags().GetString("user")
+		unread, _ := cmd.Flags().GetBool("unread")
+
+		store, err := db.NewStore("./data", user)
+		if err != nil {
+			log.Fatal(fmt.Errorf("could not open store for user %s: %w", user, err))
+		}
+		defer store.Close()
+
+		entries, err := store.ListEntries(unread, "newest")
+		if err != nil {
+			log.Fatal(fmt.Errorf("failed to list entries: %w", err))
+		}
+
+		fmt.Printf("Displaying records for user: %s (Found: %d)\n", user, len(entries))
+		fmt.Println("-------------------------------------------")
+		for _, e := range entries {
+			status := "[ ]"
+			if e.IsRead {
+				status = "[X]"
+			}
+			fmt.Printf("%s %s\n    URL: %s\n    Published: %s\n", status, e.Title, e.URL, e.PublishedAt.Format("2006-01-02 15:04"))
+		}
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(listCmd)
+	listCmd.Flags().StringP("user", "n", "default", "User database identifier")
+	listCmd.Flags().BoolP("unread", "u", false, "Show only unread articles")
+}

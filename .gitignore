@@ -1,0 +1,25 @@
+# Binary files
+rss-cli
+rss-cli.exe
+
+# Database files (user data belongs to the user, not the repo)
+data/*.db
+data/*.db-journal
+data/*.db-shm
+data/*.db-wal
+
+# Test data and temporary files
+test_data/
+test_rss_data/
+coverage.out
+
+# Go related
+vendor/
+go.sum
+
+# OS and IDE files
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.log
