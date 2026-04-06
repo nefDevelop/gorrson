@@ -9,6 +9,7 @@ type Feed struct {
 	FeedURL     string    `json:"feed_url"`
 	Category    string    `json:"category"`
 	LastUpdated time.Time `json:"last_updated"`
+	UnreadCount int       `json:"unread_count"`
 }
 
 type Entry struct {

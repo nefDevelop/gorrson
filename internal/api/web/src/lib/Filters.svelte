@@ -156,7 +156,17 @@
 
 <style>
   .view-container { display: flex; flex-direction: column; height: 100%; background: var(--md-background); flex: 1; width: 100%; }
-  .header-bar { height: var(--header-height); padding: 0 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--md-outline); background: var(--md-surface); }
+  .header-bar { 
+    height: var(--header-height); 
+    padding: 0 24px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between; 
+    border-bottom: 1px solid var(--md-outline); 
+    border-left: 1px solid var(--md-outline);
+    background: var(--md-surface); 
+    box-sizing: border-box;
+  }
   .header-left { display: flex; align-items: center; gap: 12px; }
   .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-on-surface); }
 

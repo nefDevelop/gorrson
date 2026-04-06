@@ -60,6 +60,6 @@ func BenchmarkListNews(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = store.ListEntries(true, "newest", 50, 0, "")
+		_, _ = store.ListEntries(true, "newest", 50, 0, "", "")
 	}
 }

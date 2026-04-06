@@ -19,11 +19,14 @@
     progress = total > 0 ? (scrollTop / total) * 100 : 0;
   }
 
+  let lastHandledId = null;
+
   // Reset and auto-load full content when article changes
-  $: if (article) {
+  $: if (article && article.id !== lastHandledId) {
+    lastHandledId = article.id;
     progress = 0;
     if (container) container.scrollTop = 0;
-    if (!article.is_full_content && !loadingFull) {
+    if (!article.is_full_content) {
       loadFullContent();
     }
   }
@@ -107,20 +110,10 @@
         
         <h1 class="title">{article.title}</h1>
         
-        {#if !article.is_full_content}
-          {#if loadingFull}
-            <div class="loader-centered">
-              <div class="mini-spinner"></div>
-            </div>
-          {:else}
-            <div class="scrape-actions">
-              <button class="scrape-btn" on:click={loadFullContent}>
-                <ExternalLink size={14} />
-                {$t('load_full_content') || 'Cargar artículo completo'}
-              </button>
-              <p class="scrape-hint">{$t('scrape_hint') || 'Extraeremos el texto principal de la web original'}</p>
-            </div>
-          {/if}
+        {#if loadingFull}
+          <div class="loader-centered">
+            <div class="mini-spinner"></div>
+          </div>
         {/if}
 
         <div class="body-text prose">
@@ -147,26 +140,7 @@
     overflow-x: hidden;
   }
 
-  .scrape-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 32px;
-    min-height: 48px;
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    border: none;
-    border-radius: var(--radius-full);
-    font: var(--m3-label-large);
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: var(--shadow-s, 0 2px 4px rgba(0,0,0,0.1));
-  }
-  .scrape-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-m, 0 4px 8px rgba(0,0,0,0.15)); }
-  .scrape-btn:active { transform: translateY(0); }
-  .scrape-hint { font: var(--m3-body-small); opacity: 0.7; text-align: center; margin: 0; }
+
   
   .loader-centered {
     display: flex;
@@ -208,8 +182,9 @@
   .article-header {
     position: sticky;
     top: 0;
-    background: var(--md-surface);
-    box-shadow: 0 1px 0 0 var(--md-outline);
+    background: var(--md-background);
+    /* Removed border-bottom, path went UP between headers */
+    box-sizing: border-box;
     justify-content: space-between;
     height: var(--header-height);
     min-height: var(--header-height);
@@ -266,17 +241,7 @@
   .action-btn:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
   .action-btn.active { color: var(--md-primary); }
 
-  .scrape-actions {
-    background: var(--md-secondary-container);
-    color: var(--md-on-secondary-container);
-    padding: 16px;
-    border-radius: var(--radius-l);
-    margin-bottom: 32px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    border: 1px dashed var(--md-outline);
-  }
+
 
   
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

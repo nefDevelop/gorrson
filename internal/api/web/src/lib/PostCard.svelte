@@ -1,6 +1,6 @@
 <script>
   import { stripHtml } from './utils.js';
-  /** @type {{id: number, title: string, source: string, time: string, category: string, content?: string, selected?: boolean}} */
+  /** @type {{id: number, title: string, source: string, time: string, category: string, content?: string, summary?: string, selected?: boolean}} */
   export let article;
   
   /** @type {(id: number) => void} */
@@ -27,7 +27,7 @@
   .post-card {
     background: var(--md-surface-variant);
     border: 1px solid var(--md-outline);
-    border-radius: var(--radius-m);
+    border-radius: 24px;
     padding: 16px 20px;
     margin-bottom: 8px;
     cursor: pointer;
@@ -47,7 +47,19 @@
   .post-card.selected {
     background: var(--md-primary-container);
     border-color: var(--md-primary);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: none; /* Adwaita 4 prefers flat surfaces */
+  }
+
+  .post-card.selected .title,
+  .post-card.selected .summary,
+  .post-card.selected .time {
+    color: var(--md-on-primary-container);
+    opacity: 1;
+  }
+
+  .post-card.selected .source {
+    color: var(--md-on-primary-container);
+    opacity: 0.9;
   }
 
   .header {
@@ -57,11 +69,10 @@
   }
 
   .source {
-    font: var(--m3-label-small);
-    font-weight: 700;
+    font: var(--m3-label-large); /* Expressive label */
     color: var(--md-primary);
     text-transform: uppercase;
-    letter-spacing: 1px;
+    letter-spacing: 0.5px;
   }
 
   .time {

@@ -47,7 +47,8 @@ func TestScrapeFullContent(t *testing.T) {
 	}
 
 	// Verify semantic extraction (article tag)
-	if !strings.Contains(content, "<h1>Real Title</h1>") {
+	// go-readability often converts h1 to h2
+	if !strings.Contains(content, "<h2>Real Title</h2>") && !strings.Contains(content, "<h1>Real Title</h1>") {
 		t.Errorf("Content missing article title: %s", content)
 	}
 }
@@ -112,8 +113,8 @@ func TestDuplicateRemoval(t *testing.T) {
 		t.Fatalf("ScrapeFullContent failed: %v", err)
 	}
 
-	// Title should be removed
-	if strings.Contains(content, "<h1>Exclusive title match</h1>") {
+	// Title should be removed (cleaner UI)
+	if strings.Contains(content, "Exclusive title match") {
 		t.Errorf("Duplicate title was NOT removed: %s", content)
 	}
 

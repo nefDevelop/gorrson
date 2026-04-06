@@ -69,7 +69,7 @@ func TestStoreFull(t *testing.T) {
 		t.Fatalf("AddEntry failed: %v", err)
 	}
 
-	list, _ := s.ListEntries(false, "favorite", 10, 0, "")
+	list, _ := s.ListEntries(false, "favorite", 10, 0, "", "")
 	if len(list) != 1 || list[0].ImageURL != entry.ImageURL {
 		t.Errorf("Expected 1 favorite entry with correct image, got %v", list)
 	}
@@ -77,8 +77,40 @@ func TestStoreFull(t *testing.T) {
 	if err := s.ToggleFavorite("e1", false); err != nil {
 		t.Fatalf("ToggleFavorite failed: %v", err)
 	}
-	list, _ = s.ListEntries(false, "favorite", 10, 0, "")
+	list, _ = s.ListEntries(false, "favorite", 10, 0, "", "")
 	if len(list) != 0 {
 		t.Error("Expected 0 favorite entries after toggle")
+	}
+}
+
+func TestListEntriesFilters(t *testing.T) {
+	dataDir := "./test_data_filters"
+	username := "filter_tester"
+	os.RemoveAll(dataDir)
+	defer os.RemoveAll(dataDir)
+
+	s, err := NewStore(dataDir, username)
+	if err != nil {
+		t.Fatalf("Failed to create store: %v", err)
+	}
+	defer s.Close()
+
+	s.AddFeed(&models.Feed{ID: "f1", Title: "Tech Feed", FeedURL: "http://f1", Category: "Tech"})
+	s.AddFeed(&models.Feed{ID: "f2", Title: "News Feed", FeedURL: "http://f2", Category: "News"})
+
+	s.AddEntry(&models.Entry{ID: "e1", FeedID: "f1", Title: "T1", URL: "u1"})
+	s.AddEntry(&models.Entry{ID: "e2", FeedID: "f1", Title: "T2", URL: "u2"})
+	s.AddEntry(&models.Entry{ID: "e3", FeedID: "f2", Title: "T3", URL: "u3"})
+
+	// Test case-insensitive category filtering
+	list, _ := s.ListEntries(false, "newest", 10, 0, "tech", "")
+	if len(list) != 2 {
+		t.Errorf("Expected 2 tech entries, got %d", len(list))
+	}
+
+	// Test feedID filtering
+	list2, _ := s.ListEntries(false, "newest", 10, 0, "", "f2")
+	if len(list2) != 1 || list2[0].ID != "e3" {
+		t.Errorf("Expected 1 news entry (e3), got %v", list2)
 	}
 }

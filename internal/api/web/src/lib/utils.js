@@ -3,6 +3,10 @@ export function formatTimeAgo(dateString) {
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
+  if (seconds < 5) {
+    return `just now`;
+  }
+  
   if (seconds < 60) {
     return `${seconds}s ago`;
   }

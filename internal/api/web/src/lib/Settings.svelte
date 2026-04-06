@@ -14,24 +14,6 @@
   let currentMode = localStorage.getItem('gorrson-mode') || 'dark';
   let customColor = localStorage.getItem('gorrson-custom-color') || '#6750A4';
 
-  const themes = {
-    lavender: {
-      light: { primary: '#6750A4', secondary: '#625B71', tertiary: '#7D5260', container: '#EADDFF', onPrimary: '#FFFFFF', onContainer: '#21005D', surface: '#FEF7FF', onSurface: '#1D1B20', background: '#FFFFFF', variant: '#E7E0EB', outline: '#79747E' },
-      dark: { primary: '#D0BCFF', secondary: '#CCC2DC', tertiary: '#EFB8C8', container: '#4F378B', onPrimary: '#381E72', onContainer: '#EADDFF', surface: '#1C1B1F', onSurface: '#E6E1E5', background: '#141218', variant: '#49454F', outline: '#938F99' }
-    },
-    midnight: {
-      light: { primary: '#0061A4', secondary: '#535F70', tertiary: '#6B5778', container: '#D1E4FF', onPrimary: '#FFFFFF', onContainer: '#001D36', surface: '#F8F9FF', onSurface: '#191C20', background: '#FFFFFF', variant: '#DFE3EB', outline: '#73777F' },
-      dark: { primary: '#9ECAFF', secondary: '#BBC7DB', tertiary: '#D6BEE4', container: '#00497D', onPrimary: '#003258', onContainer: '#D1E4FF', surface: '#111418', onSurface: '#E2E2E6', background: '#0B1015', variant: '#43474E', outline: '#8D9199' }
-    },
-    forest: {
-      light: { primary: '#386A20', secondary: '#55624C', tertiary: '#386567', container: '#B7F397', onPrimary: '#FFFFFF', onContainer: '#042100', surface: '#F7FBF1', onSurface: '#191C19', background: '#FFFFFF', variant: '#DFE4D6', outline: '#72796F' },
-      dark: { primary: '#9CD67D', secondary: '#BDCBB0', tertiary: '#A0CFD0', container: '#205107', onPrimary: '#0C3900', onContainer: '#B7F397', surface: '#1A1C19', onSurface: '#E2E3DD', background: '#111411', variant: '#424940', outline: '#8C9388' }
-    },
-    ruby: {
-      light: { primary: '#BC1624', secondary: '#775652', tertiary: '#715B29', container: '#FFDAD6', onPrimary: '#FFFFFF', onContainer: '#410002', surface: '#FFF8F7', onSurface: '#221919', background: '#FFFFFF', variant: '#F5DDDA', outline: '#857371' },
-      dark: { primary: '#FFB3AD', secondary: '#E7BDB7', tertiary: '#E0C28C', container: '#93000E', onPrimary: '#680007', onContainer: '#FFDAD6', surface: '#1A1110', onSurface: '#F1DEDC', background: '#211A19', variant: '#534341', outline: '#9F8C8A' }
-    }
-  };
 
   const modes = [
     { id: 'light', icon: Sun },
@@ -74,92 +56,114 @@
     const [h, s, l] = hexToHsl(hex);
     const isDark = mode === 'dark';
 
-    // Seed mappings
-    const primary = isDark ? hslToHex(h, s, 80) : hex;
-    const secondary = hslToHex((h + 10) % 360, Math.min(s, 30), isDark ? 70 : 50);
-    const tertiary = hslToHex((h + 120) % 360, Math.min(s + 10, 70), isDark ? 80 : 50);
-    const neutral = hslToHex(h, 8, isDark ? 10 : 98);
-    const neutralVariant = hslToHex(h, 12, isDark ? 25 : 90);
+    // MD3 Expressive: Vibrant palettes with higher chroma
+    const primary = isDark ? hslToHex(h, Math.max(s, 50), 80) : hex;
+    const secondary = hslToHex((h + 25) % 360, Math.max(s - 15, 30), isDark ? 70 : 40);
+    const secondaryContainer = isDark 
+      ? hslToHex((h + 25) % 360, Math.max(s - 15, 30), 25)
+      : hslToHex((h + 25) % 360, Math.max(s - 15, 30), 90);
+    const onSecondaryContainer = isDark
+      ? hslToHex((h + 25) % 360, Math.max(s - 15, 30), 90)
+      : hslToHex((h + 25) % 360, Math.max(s - 15, 30), 10);
+    const tertiary = hslToHex((h + 80) % 360, Math.max(s, 40), isDark ? 75 : 45);
+
+    
+    // Adwaita 4 Standard Surfaces (Tinted slightly with Seed Hue)
+    const adwaita = {
+      dark: { 
+        bg: hslToHex(h, 5, 12), 
+        surface: hslToHex(h, 6, 16), 
+        card: hslToHex(h, 7, 20), 
+        border: hslToHex(h, 10, 24) 
+      },
+      light: { 
+        bg: '#FFFFFF', 
+        surface: hslToHex(h, 10, 96), 
+        card: '#FFFFFF', 
+        border: hslToHex(h, 15, 88) 
+      }
+    };
+    const currentA = isDark ? adwaita.dark : adwaita.light;
 
     if (!isDark) {
       return {
         primary: hex,
         onPrimary: '#FFFFFF',
-        container: hslToHex(h, Math.max(s - 30, 10), 92),
+        container: hslToHex(h, Math.max(s, 70), 92), // Very saturated for "Expressive"
         onContainer: hslToHex(h, s, 10),
         secondary: secondary,
+        secondaryContainer: secondaryContainer,
+        onSecondaryContainer: onSecondaryContainer,
         tertiary: tertiary,
-        surface: hslToHex(h, 6, 98),
-        onSurface: '#1C1B1F',
-        onSurfaceVariant: '#49454F',
-        background: '#FFFFFF',
-        variant: neutralVariant,
-        outline: hslToHex(h, 12, 50)
+        surface: currentA.surface,
+        onSurface: hslToHex(h, 20, 10),
+        onSurfaceVariant: hslToHex(h, 15, 40),
+        background: currentA.bg,
+        variant: currentA.card,
+        outline: currentA.border
       };
     } else {
       return {
         primary: primary,
-        onPrimary: hslToHex(h, s, 20),
-        container: hslToHex(h, s, 30),
-        onContainer: hslToHex(h, s, 90),
+        onPrimary: hslToHex(h, s, 15),
+        container: hslToHex(h, Math.max(s, 60), 25), // Saturated highlight
+        onContainer: hslToHex(h, Math.max(s, 40), 90),
         secondary: secondary,
+        secondaryContainer: secondaryContainer,
+        onSecondaryContainer: onSecondaryContainer,
         tertiary: tertiary,
-        surface: hslToHex(h, 10, 12),
-        onSurface: '#E6E1E5',
-        onSurfaceVariant: '#CAC4D0',
-        background: neutral,
-        variant: neutralVariant,
-        outline: hslToHex(h, 12, 60)
+        surface: currentA.surface,
+        onSurface: hslToHex(h, 10, 95),
+        onSurfaceVariant: hslToHex(h, 15, 75),
+        background: currentA.bg,
+        variant: currentA.card,
+        outline: currentA.border
       };
     }
   }
 
   function applyAppearance(themeId, modeId, seed) {
+    if (typeof document === 'undefined') return;
+    const root = document.documentElement;
+    
     let mode = modeId;
     if (mode === 'system') {
       mode = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
     }
 
-    let theme;
-    if (themeId === 'custom') {
-      theme = generateTonal(seed, mode);
-    } else {
-      theme = themes[themeId][mode];
-    }
+    // Since we only use Seed Color now
+    const tonals = generateTonal(seed, mode);
     
-    const root = document.documentElement;
-    root.style.setProperty('--md-primary', theme.primary);
-    root.style.setProperty('--md-on-primary', theme.onPrimary);
-    root.style.setProperty('--md-primary-container', theme.container);
-    root.style.setProperty('--md-on-primary-container', theme.onContainer);
+    // MD3 Core Tokens
+    root.style.setProperty('--md-primary', tonals.primary);
+    root.style.setProperty('--md-on-primary', tonals.onPrimary);
+    root.style.setProperty('--md-primary-container', tonals.container);
+    root.style.setProperty('--md-on-primary-container', tonals.onContainer);
     
-    root.style.setProperty('--md-secondary', theme.secondary);
-    root.style.setProperty('--md-tertiary', theme.tertiary);
-    
-    root.style.setProperty('--md-secondary-container', mode === 'light' ? theme.variant : theme.container);
-    root.style.setProperty('--md-on-secondary-container', theme.onSurface);
+    root.style.setProperty('--md-secondary', tonals.secondary);
+    root.style.setProperty('--md-secondary-container', tonals.secondaryContainer);
+    root.style.setProperty('--md-on-secondary-container', tonals.onSecondaryContainer);
+    root.style.setProperty('--md-tertiary', tonals.tertiary);
 
-    root.style.setProperty('--md-surface', theme.surface);
-    root.style.setProperty('--md-on-surface', theme.onSurface);
-    root.style.setProperty('--md-surface-variant', theme.variant);
-    root.style.setProperty('--md-on-surface-variant', theme.onSurfaceVariant || (mode === 'light' ? '#49454F' : '#CAC4D0'));
-    root.style.setProperty('--md-background', theme.background);
-    root.style.setProperty('--md-outline', theme.outline);
+    // Adwaita + Tonal Alignment
+    root.style.setProperty('--md-surface', tonals.surface);
+    root.style.setProperty('--md-on-surface', tonals.onSurface);
+    root.style.setProperty('--md-on-surface-variant', tonals.onSurfaceVariant);
+    
+    root.style.setProperty('--md-background', tonals.background);
+    root.style.setProperty('--md-surface-variant', tonals.variant);
+    root.style.setProperty('--md-outline', tonals.outline);
+    
+    // UI Effects
+    root.style.setProperty('--shadow-color', mode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.3)');
 
     localStorage.setItem('gorrson-theme', themeId);
     localStorage.setItem('gorrson-mode', modeId);
-    localStorage.setItem('gorrson-custom-color', customColor);
+    localStorage.setItem('gorrson-custom-color', seed);
   }
 
   $: if (typeof document !== 'undefined') {
-     applyAppearance(currentTheme, currentMode, customColor);
-  }
-
-  // Auto-switch to custom if user tinkers with the color picker
-  let prevColor = customColor;
-  $: if (customColor !== prevColor) {
-    currentTheme = 'custom';
-    prevColor = customColor;
+     applyAppearance('custom', currentMode, customColor);
   }
 
   const toggleLanguage = () => {
@@ -215,28 +219,14 @@
         </div>
         
         <div class="setting-item-column">
-          <div class="label">Color Palette</div>
-          <div class="palette-grid">
-            {#each Object.entries(themes) as [id, theme]}
-              <button 
-                class="palette-card {currentTheme === id ? 'active' : ''}" 
-                on:click={() => currentTheme = id}
-              >
-                <div class="palette-colors custom-preview">
-                  <div class="color-dot" style="background: {theme.dark.primary}"></div>
-                  <div class="color-dot" style="background: {theme.dark.secondary}"></div>
-                  <div class="color-dot" style="background: {theme.dark.tertiary}"></div>
-                  <div class="color-dot" style="background: {theme.dark.background}"></div>
-                </div>
-                <span>{id.charAt(0).toUpperCase() + id.slice(1)}</span>
-              </button>
-            {/each}
-            
-            <button 
-              class="palette-card custom-card {currentTheme === 'custom' ? 'active' : ''}"
-              on:click={() => currentTheme = 'custom'}
-            >
-              <div class="palette-colors custom-preview">
+          <div class="label">Seed Color</div>
+          <div class="desc" style="color: var(--md-on-surface-variant); font: var(--m3-body-small); margin-bottom: 20px;">
+            Material Design 3 automatically generates harmonious primary, secondary, and tertiary palettes from a single seed color.
+          </div>
+          
+          <div class="seed-color-container">
+            <div class="seed-picker-card">
+              <div class="palette-colors custom-preview large-preview">
                 <div class="color-dot" style="background: {generateTonal(customColor, 'dark').primary}"></div>
                 <div class="color-dot" style="background: {generateTonal(customColor, 'dark').secondary}"></div>
                 <div class="color-dot" style="background: {generateTonal(customColor, 'dark').tertiary}"></div>
@@ -245,8 +235,8 @@
                    <input type="color" bind:value={customColor} />
                 </label>
               </div>
-              <span>Custom Color</span>
-            </button>
+              <span class="seed-label">Selected Seed: {customColor.toUpperCase()}</span>
+            </div>
           </div>
         </div>
 
@@ -353,7 +343,16 @@
 
 <style>
   .view-container { display: flex; flex-direction: column; height: 100vh; background: var(--md-background); flex: 1; width: 100%; }
-  .header-bar { height: var(--header-height); padding: 0 24px; display: flex; align-items: center; border-bottom: 1px solid var(--md-outline); background: var(--md-surface); gap: 40px; }
+  .header-bar { 
+    height: var(--header-height); 
+    padding: 0 24px; 
+    display: flex; 
+    align-items: center; 
+    /* Removed border-bottom and border-left, managed by FeedList-Right */
+    background: var(--md-surface); 
+    gap: 40px; 
+    box-sizing: border-box;
+  }
   .header-left { display: flex; align-items: center; gap: 12px; }
   .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-on-surface); }
 
@@ -444,23 +443,27 @@
   }
   .setting-item-column .label { font: var(--m3-title-medium); color: var(--md-on-surface); margin-bottom: 16px; }
 
-  .palette-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
-  .palette-card { 
+  .seed-color-container { display: flex; justify-content: center; padding: 10px 0; }
+  .seed-picker-card { 
     background: var(--md-surface); 
-    border: 1px solid var(--md-outline); 
+    border: 2px solid var(--md-primary); 
     border-radius: var(--radius-m); 
-    padding: 12px; 
+    padding: 24px; 
     cursor: pointer; 
     display: flex; 
     flex-direction: column; 
     align-items: center; 
-    gap: 8px;
+    gap: 16px;
+    color: var(--md-on-surface);
+    font: var(--m3-label-large);
+    position: relative;
     transition: all 0.2s;
-    color: var(--md-on-surface-variant);
-    font: var(--m3-label-medium);
+    width: 200px;
   }
-  .palette-card:hover { border-color: var(--md-primary); background: var(--md-primary-container); color: var(--md-on-primary-container); }
-  .palette-card.active { border-color: var(--md-primary); background: var(--md-primary-container); color: var(--md-on-primary-container); border-width: 2px; }
+  .seed-picker-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+  .custom-preview.large-preview { grid-template-columns: repeat(2, 32px); gap: 8px; }
+  .custom-preview.large-preview .color-dot { width: 32px; height: 32px; border-radius: 8px; }
+  .seed-label { font-family: var(--font-mono); font-size: 13px; opacity: 0.8; }
 
   .palette-colors { display: flex; gap: 4px; }
   .color-dot { width: 16px; height: 16px; border-radius: var(--radius-full); border: 1px solid rgba(255,255,255,0.1); }
@@ -474,7 +477,6 @@
     cursor: pointer; 
     opacity: 0; 
   }
-  .custom-card { position: relative; cursor: pointer; }
 
   .mode-selector { display: flex; background: var(--md-surface); padding: 4px; border-radius: var(--radius-full); border: 1px solid var(--md-outline); }
   .mode-btn { 
@@ -503,6 +505,8 @@
     align-items: center;
     padding: 12px 16px;
     background: var(--md-surface);
+    /* Removed border-bottom, respect single path */
+    box-sizing: border-box;
     border: 1px solid var(--md-outline);
     border-radius: var(--radius-m);
     transition: transform 0.2s;

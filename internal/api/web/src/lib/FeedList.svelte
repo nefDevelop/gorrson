@@ -14,15 +14,11 @@
   /** @type {(id: number) => void} */
   export let onSelect;
 
-  let titleKey = "latest";
 </script>
 
 <section class="feed-list" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
   <header class="header-bar">
-    <div class="title-container">
-      <h1 class="title">{$t(titleKey)}</h1>
-      <p class="subtitle">{$t('monday')}, {$t('april')} 6</p>
-    </div>
+    <div></div> <!-- Empty spacer to keep actions aligned -->
     <div class="actions">
       <button class="action-btn">
         <Search size={18} />
@@ -33,27 +29,25 @@
     </div>
   </header>
 
-  <div class="filter-chips">
-    <button class="chip active">{$t('all')}</button>
-    <button class="chip">{$t('unread')}</button>
-    <button class="chip">{$t('favorites')}</button>
-    <button class="chip">{$t('reddit')}</button>
-  </div>
+  <!-- The Inverse Corner to flawlessly draw the curve behind the gap -->
+  <div class="inverse-corner"></div>
 
-  <div class="articles-container scroll-area">
-    {#each articles as item}
-      <PostCard 
-        article={{...item, selected: selectedId === item.id}} 
-        onClick={onSelect} 
-      />
-    {/each}
+  <div class="feed-content">
+    <div class="articles-container scroll-area">
+      {#each articles as item}
+        <PostCard 
+          article={{...item, selected: selectedId === item.id}} 
+          onClick={onSelect} 
+        />
+      {/each}
+    </div>
   </div>
 </section>
 
 <style>
   .feed-list {
+    position: relative;
     width: var(--feed-width);
-    border-right: 1px solid var(--md-surface-variant);
     background: var(--md-background);
     display: flex;
     flex-direction: column;
@@ -61,33 +55,61 @@
     transition: all var(--layout-transition);
   }
 
-  .header-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center; /* Keep centered */
-    padding: 8px 24px; /* Add vertical padding */
+  .header-bar { 
+    display: flex; 
+    justify-content: space-between; 
+    align-items: center; 
+    padding: 0 24px; 
+    border-bottom: 1px solid var(--md-outline); 
+    border-right: 1px solid var(--md-outline); 
     background: var(--md-surface);
-    /* border-bottom: 1px solid var(--md-outline); */
-    box-shadow: 0 1px 0 0 var(--md-outline); /* Use box-shadow for consistent border rendering */
-    height: var(--header-height); /* Explicit height */
-    min-height: var(--header-height); /* Ensure minimum height */
-    max-height: var(--header-height); /* Ensure maximum height */
+    box-sizing: border-box; 
+    height: var(--header-height); 
+    min-height: var(--header-height); 
+    max-height: var(--header-height);
+    border-bottom-right-radius: 32px; 
+    position: relative;
+    z-index: 10;
   }
 
-  .header-bar .title {
-    font: var(--m3-headline-small);
-    font-weight: 700;
-    margin: 0;
-    color: var(--md-on-surface);
+  /* Eraser for the straight line crossing the curved gap */
+  .header-bar::before {
+    content: "";
+    position: absolute;
+    left: 0px; 
+    bottom: -1px; 
+    width: 32px; 
+    height: 1px; /* Changed to exactly 1px */
+    background: var(--md-surface);
+    z-index: 15;
   }
 
-  .header-bar .subtitle {
-    color: var(--md-on-surface-variant);
-    font: var(--m3-label-small);
-    margin: 4px 0 0 0;
-    opacity: 0.7;
-    letter-spacing: 0.5px;
+  .inverse-corner {
+    position: absolute;
+    top: var(--header-height);
+    left: 0;
+    width: 32px;
+    height: 32px;
+    background: var(--md-surface);
+    border-bottom-right-radius: 32px;
+    border-right: 1px solid var(--md-outline);
+    border-bottom: 1px solid var(--md-outline);
+    z-index: 5; /* Behind feed-content */
+    box-sizing: border-box;
   }
+
+  .feed-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--md-background);
+    border-top-left-radius: 32px;
+    border-left: 1px solid var(--md-outline);
+    position: relative;
+    z-index: 10;
+  }
+
 
   .actions {
     display: flex;
@@ -105,43 +127,17 @@
   }
   .action-btn:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
 
-  .filter-chips {
-    padding: 12px 24px;
-    display: flex;
-    gap: 8px;
-    background: var(--md-background);
-    border-bottom: 1px solid var(--md-outline);
-  }
-
-  .chip {
-    padding: 6px 16px;
-    border-radius: var(--radius-m);
-    background: transparent;
-    color: var(--md-on-surface-variant);
-    border: 1px solid var(--md-outline);
-    font: var(--m3-label-large);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.2s;
-  }
-  .chip:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
-  .chip.active {
-    background: var(--md-primary-container);
-    color: var(--md-on-primary-container);
-    border-color: var(--md-primary);
-  }
 
   .articles-container {
     flex: 1;
-    padding: 12px 16px;
+    padding: 24px 16px 24px 16px;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding-bottom: 24px;
   }
 
   @media (max-width: 1000px) {
-    .header-bar, .filter-chips {
+    .header-bar {
       padding-left: 12px;
       padding-right: 12px;
     }

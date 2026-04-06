@@ -30,10 +30,13 @@
   let isAuthenticated = false;
   let currentView = "inbox";
   let activeCategory = null;
+  let activeSource = null;
   let showAddFeed = false;
 
-  const navItems = [
-    { id: "inbox", name: "Inbox", badge: 0, icon: Inbox },
+  $: totalUnread = (feeds || []).reduce((acc, f) => acc + (f.unread_count || 0), 0);
+  
+  $: navItems = [
+    { id: "inbox", name: "Inbox", badge: totalUnread, icon: Inbox },
     { id: "favorites", name: "Favorites", icon: Star },
   ];
 
@@ -41,7 +44,7 @@
     try {
       loading = true;
       const [newsData, feedsData] = await Promise.all([
-        fetchNews({ category: activeCategory, search: searchQuery }),
+        fetchNews({ category: activeCategory, feed_id: activeSource, search: searchQuery }),
         fetchFeeds()
       ]);
       
@@ -61,25 +64,6 @@
       loading = false;
     }
   }
-
-  const themes = {
-    lavender: {
-      light: { primary: '#6750A4', secondary: '#625B71', tertiary: '#7D5260', container: '#EADDFF', onPrimary: '#FFFFFF', onContainer: '#21005D', surface: '#FEF7FF', onSurface: '#1D1B20', background: '#FFFFFF', variant: '#E7E0EB', outline: '#79747E' },
-      dark: { primary: '#D0BCFF', secondary: '#CCC2DC', tertiary: '#EFB8C8', container: '#4F378B', onPrimary: '#381E72', onContainer: '#EADDFF', surface: '#1C1B1F', onSurface: '#E6E1E5', background: '#141218', variant: '#49454F', outline: '#938F99' }
-    },
-    midnight: {
-      light: { primary: '#0061A4', secondary: '#535F70', tertiary: '#6B5778', container: '#D1E4FF', onPrimary: '#FFFFFF', onContainer: '#001D36', surface: '#F8F9FF', onSurface: '#191C20', background: '#FFFFFF', variant: '#DFE3EB', outline: '#73777F' },
-      dark: { primary: '#9ECAFF', secondary: '#BBC7DB', tertiary: '#D6BEE4', container: '#00497D', onPrimary: '#003258', onContainer: '#D1E4FF', surface: '#111418', onSurface: '#E2E2E6', background: '#0B1015', variant: '#43474E', outline: '#8D9199' }
-    },
-    forest: {
-      light: { primary: '#386A20', secondary: '#55624C', tertiary: '#386567', container: '#B7F397', onPrimary: '#FFFFFF', onContainer: '#042100', surface: '#F7FBF1', onSurface: '#191C19', background: '#FFFFFF', variant: '#DFE4D6', outline: '#72796F' },
-      dark: { primary: '#9CD67D', secondary: '#BDCBB0', tertiary: '#A0CFD0', container: '#205107', onPrimary: '#0C3900', onContainer: '#B7F397', surface: '#1A1C19', onSurface: '#E2E3DD', background: '#111411', variant: '#424940', outline: '#8C9388' }
-    },
-    ruby: {
-      light: { primary: '#BC1624', secondary: '#775652', tertiary: '#715B29', container: '#FFDAD6', onPrimary: '#FFFFFF', onContainer: '#410002', surface: '#FFF8F7', onSurface: '#221919', background: '#FFFFFF', variant: '#F5DDDA', outline: '#857371' },
-      dark: { primary: '#FFB3AD', secondary: '#E7BDB7', tertiary: '#E0C28C', container: '#93000E', onPrimary: '#680007', onContainer: '#FFDAD6', surface: '#1A1110', onSurface: '#F1DEDC', background: '#211A19', variant: '#534341', outline: '#9F8C8A' }
-    }
-  };
 
   function hexToHsl(hex) {
     let r = parseInt(hex.slice(1, 3), 16) / 255;
@@ -112,40 +96,103 @@
     return `#${f(0)}${f(8)}${f(4)}`;
   }
 
-  function generateTonal(hex, isDark) {
+  function generateTonal(hex, mode) {
     const [h, s, l] = hexToHsl(hex);
-    const primary = isDark ? hslToHex(h, s, 80) : hex;
-    const secondary = hslToHex((h + 10) % 360, Math.min(s, 30), isDark ? 70 : 50);
-    const tertiary = hslToHex((h + 120) % 360, Math.min(s + 10, 70), isDark ? 80 : 50);
-    const neutralVariant = hslToHex(h, 12, isDark ? 25 : 90);
+    const isDark = mode === 'dark';
+
+    // MD3 Expressive: Vibrant palettes with higher chroma
+    const primary = isDark ? hslToHex(h, Math.max(s, 50), 80) : hex;
+    const secondary = hslToHex((h + 25) % 360, Math.max(s - 15, 30), isDark ? 70 : 40);
+    const secondaryContainer = isDark 
+      ? hslToHex((h + 25) % 360, Math.max(s - 15, 30), 25)
+      : hslToHex((h + 25) % 360, Math.max(s - 15, 30), 90);
+    const onSecondaryContainer = isDark
+      ? hslToHex((h + 25) % 360, Math.max(s - 15, 30), 90)
+      : hslToHex((h + 25) % 360, Math.max(s - 15, 30), 10);
+    const tertiary = hslToHex((h + 80) % 360, Math.max(s, 40), isDark ? 75 : 45);
+
+    
+    // Adwaita 4 Standard Surfaces (Tinted slightly with Seed Hue)
+    const adwaita = {
+      dark: { 
+        bg: hslToHex(h, 5, 12), 
+        surface: hslToHex(h, 6, 16), 
+        card: hslToHex(h, 7, 20), 
+        border: hslToHex(h, 10, 24) 
+      },
+      light: { 
+        bg: '#FFFFFF', 
+        surface: hslToHex(h, 10, 96), 
+        card: '#FFFFFF', 
+        border: hslToHex(h, 15, 88) 
+      }
+    };
+    const currentA = isDark ? adwaita.dark : adwaita.light;
+
     if (!isDark) {
-      return { primary: hex, onPrimary: '#FFFFFF', container: hslToHex(h, Math.max(s - 30, 10), 92), onContainer: hslToHex(h, s, 10), secondary, tertiary, surface: hslToHex(h, 6, 98), onSurface: '#1C1B1F', variant: neutralVariant, outline: hslToHex(h, 12, 50), background: '#FFFFFF' };
+      return {
+        primary: hex,
+        onPrimary: '#FFFFFF',
+        container: hslToHex(h, Math.max(s, 70), 92),
+        onContainer: hslToHex(h, s, 10),
+        secondary: secondary,
+        secondaryContainer: secondaryContainer,
+        onSecondaryContainer: onSecondaryContainer,
+        tertiary: tertiary,
+        surface: currentA.surface,
+        onSurface: hslToHex(h, 20, 10),
+        onSurfaceVariant: hslToHex(h, 15, 40),
+        background: currentA.bg,
+        variant: currentA.card,
+        outline: currentA.border
+      };
     } else {
-      return { primary, onPrimary: hslToHex(h, s, 20), container: hslToHex(h, s, 30), onContainer: hslToHex(h, s, 90), secondary, tertiary, surface: hslToHex(h, 10, 12), onSurface: '#E6E1E5', variant: neutralVariant, outline: hslToHex(h, 12, 60), background: hslToHex(h, 8, 10) };
+      return {
+        primary: primary,
+        onPrimary: hslToHex(h, s, 15),
+        container: hslToHex(h, Math.max(s, 60), 25),
+        onContainer: hslToHex(h, Math.max(s, 40), 90),
+        secondary: secondary,
+        secondaryContainer: secondaryContainer,
+        onSecondaryContainer: onSecondaryContainer,
+        tertiary: tertiary,
+        surface: currentA.surface,
+        onSurface: hslToHex(h, 10, 95),
+        onSurfaceVariant: hslToHex(h, 15, 75),
+        background: currentA.bg,
+        variant: currentA.card,
+        outline: currentA.border
+      };
     }
   }
 
   function initTheme() {
-    const themeId = localStorage.getItem('gorrson-theme') || 'lavender';
     const modeId = localStorage.getItem('gorrson-mode') || 'dark';
     const seed = localStorage.getItem('gorrson-custom-color') || '#6750A4';
     
     let mode = modeId === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : modeId;
-    let theme = themeId === 'custom' ? generateTonal(seed, mode === 'dark') : themes[themeId][mode];
+    let theme = generateTonal(seed, mode);
     
     const root = document.documentElement;
     root.style.setProperty('--md-primary', theme.primary);
     root.style.setProperty('--md-on-primary', theme.onPrimary);
     root.style.setProperty('--md-primary-container', theme.container);
     root.style.setProperty('--md-on-primary-container', theme.onContainer);
-    root.style.setProperty('--md-secondary-container', mode === 'light' ? theme.variant : theme.container);
-    root.style.setProperty('--md-on-secondary-container', theme.onSurface);
+    root.style.setProperty('--md-secondary', theme.secondary);
+    root.style.setProperty('--md-secondary-container', theme.secondaryContainer);
+    root.style.setProperty('--md-on-secondary-container', theme.onSecondaryContainer);
+    root.style.setProperty('--md-tertiary', theme.tertiary);
+    
     root.style.setProperty('--md-surface', theme.surface);
     root.style.setProperty('--md-on-surface', theme.onSurface);
     root.style.setProperty('--md-surface-variant', theme.variant);
-    root.style.setProperty('--md-on-surface-variant', mode === 'light' ? '#49454F' : '#CAC4D0');
+    root.style.setProperty('--md-on-surface-variant', theme.onSurfaceVariant);
+    
     root.style.setProperty('--md-background', theme.background);
     root.style.setProperty('--md-outline', theme.outline);
+    
+    // UI Effects
+    root.style.setProperty('--shadow-color', mode === 'light' ? 'rgba(0,0,0,0.06)' : 'rgba(0,0,0,0.3)');
   }
 
   onMount(() => {
@@ -163,9 +210,15 @@
   function handleViewChange(viewId) {
     if (viewId.startsWith('cat:')) {
       activeCategory = viewId.replace('cat:', '');
+      activeSource = null;
+      currentView = 'inbox';
+    } else if (viewId.startsWith('src:')) {
+      activeSource = viewId.replace('src:', '');
+      activeCategory = null;
       currentView = 'inbox';
     } else {
       activeCategory = null;
+      activeSource = null;
       currentView = viewId;
     }
     loadData();
@@ -178,10 +231,10 @@
 
   $: selectedArticle = articles.find(n => n.id === selectedId);
 
-  $: categories = Array.from(new Set((feeds || []).map(f => f.category || 'General'))).map(catId => ({
-    id: catId.toLowerCase(),
-    name: catId,
-    count: articles.filter(a => a.category === catId).length
+  $: categories = Array.from(new Set((feeds || []).map(f => f.category || 'General'))).map(catName => ({
+    id: catName.toLowerCase(),
+    name: catName,
+    count: feeds.filter(f => (f.category || 'General') === catName).reduce((acc, f) => acc + f.unread_count, 0)
   }));
 
   async function handleSelect(id) {
@@ -221,7 +274,8 @@
     <Sidebar 
       {navItems} 
       {categories} 
-      activeView={activeCategory ? 'cat:'+activeCategory : currentView} 
+      {feeds}
+      activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
       onViewChange={handleViewChange} 
       onAddFeed={handleAddFeed}
       onRefresh={loadData}

@@ -58,6 +58,12 @@ bench:
 register: build
 	./$(BINARY_NAME) register --user $(USER_NAME) --pass $(USER_PASS) --data-dir $(DATA_DIR)
 
+# Reset DB and Seed
+reset-db:
+	@echo "Resetting and seeding database for user 'user'..."
+	@mkdir -p $(DATA_DIR)
+	go run scripts/seed.go
+
 # Help
 help:
 	@echo "Gorrson Management:"

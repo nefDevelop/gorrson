@@ -137,7 +137,10 @@ func (s *Store) AddEntry(e *models.Entry) error {
 }
 
 func (s *Store) ListFeeds() ([]models.Feed, error) {
-	rows, err := s.db.Query("SELECT id, title, site_url, feed_url, category, last_updated FROM feeds")
+	rows, err := s.db.Query(`
+		SELECT f.id, f.title, f.site_url, f.feed_url, f.category, f.last_updated,
+		       (SELECT COUNT(*) FROM entries e WHERE e.feed_id = f.id AND e.is_read = 0) as unread_count
+		FROM feeds f`)
 	if err != nil {
 		return nil, err
 	}
@@ -146,7 +149,7 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 	var feeds []models.Feed
 	for rows.Next() {
 		var f models.Feed
-		if err := rows.Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated); err != nil {
+		if err := rows.Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &f.UnreadCount); err != nil {
 			return nil, err
 		}
 		feeds = append(feeds, f)
@@ -154,7 +157,7 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 	return feeds, nil
 }
 
-func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int, category string) ([]models.Entry, error) {
+func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int, category, feedID string) ([]models.Entry, error) {
 	query := `SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content 
               FROM entries e 
               JOIN feeds f ON e.feed_id = f.id`
@@ -170,8 +173,13 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	}
 
 	if category != "" {
-		conditions = append(conditions, "f.category = ?")
+		conditions = append(conditions, "f.category COLLATE NOCASE = ?")
 		args = append(args, category)
+	}
+
+	if feedID != "" {
+		conditions = append(conditions, "e.feed_id = ?")
+		args = append(args, feedID)
 	}
 
 	if len(conditions) > 0 {

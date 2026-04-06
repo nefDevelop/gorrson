@@ -39,7 +39,7 @@ func TestSyncFeed(t *testing.T) {
 		t.Errorf("Expected at least one feed in DB, got: %d", len(feeds))
 	}
 
-	entries, err := store.ListEntries(false, "newest", 10, 0, "")
+	entries, err := store.ListEntries(false, "newest", 10, 0, "", "")
 	if err != nil || len(entries) == 0 {
 		t.Errorf("Expected at least one entry in DB, got: %d", len(entries))
 	} else {

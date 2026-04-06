@@ -287,6 +287,7 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	sort := r.URL.Query().Get("sort")
 	search := r.URL.Query().Get("search")
 	category := r.URL.Query().Get("category")
+	feedID := r.URL.Query().Get("feed_id")
 	
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
@@ -294,16 +295,19 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
-	// Sanitize category: frontend may send the literal string "null"
+	// Sanitize params: frontend may send the literal string "null"
 	if category == "null" || category == "undefined" {
 		category = ""
+	}
+	if feedID == "null" || feedID == "undefined" {
+		feedID = ""
 	}
 
 	var entries []models.Entry
 	if search != "" {
 		entries, err = store.SearchEntries(search)
 	} else {
-		entries, err = store.ListEntries(unread, sort, limit, offset, category)
+		entries, err = store.ListEntries(unread, sort, limit, offset, category, feedID)
 	}
 
 	if err != nil {
