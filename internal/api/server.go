@@ -387,9 +387,15 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&req)
 	username := r.Context().Value("username").(string)
 	store, err := db.NewStore(s.dataDir, username)
-	if err == nil {
-		defer store.Close()
-		s.parser.SyncFeed(r.Context(), req.URL, store)
+	if err != nil {
+		http.Error(w, "Could not open DB", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	if err := s.parser.SyncFeed(r.Context(), req.URL, store); err != nil {
+		http.Error(w, "Failed to sync feed: "+err.Error(), http.StatusBadRequest)
+		return
 	}
 	w.WriteHeader(http.StatusCreated)
 }

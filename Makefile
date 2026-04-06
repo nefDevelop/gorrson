@@ -1,55 +1,70 @@
-.PHONY: build test clean serve register add bench load-test build-ui help
+.PHONY: all build-ui build-go build clean run install test bench help
 
-# gorrson - Expert RSS Engine
+# Config
+BINARY_NAME=rss-cli
+PORT?=7077
+DATA_DIR?=./data
 
-# Build the binary with embedded UI
-build: build-ui
-	go build -o rss-cli main.go
+# Default target: Build everything
+all: install build
 
-# Build Svelte Frontend
+# Install dependencies
+install:
+	@echo "Installing frontend dependencies..."
+	cd internal/api/web && npm install
+	@echo "Installing backend dependencies..."
+	go mod download
+
+# Build only the frontend
 build-ui:
+	@echo "Building Svelte frontend..."
 	cd internal/api/web && npm run build
 
-# Run all internal tests
+# Build only the Go binary
+build-go:
+	@echo "Building Go backend..."
+	go build -o $(BINARY_NAME) main.go
+
+# Build both (Embeds UI in binary)
+build: build-ui build-go
+
+# Build and run the server immediately
+run: build
+	@echo "Starting Gorrson on http://localhost:$(PORT)"
+	./$(BINARY_NAME) serve --port $(PORT) --data-dir $(DATA_DIR)
+
+# Run development mode (Frontend)
+dev-ui:
+	cd internal/api/web && npm run dev
+
+# Run development mode (Backend - needs existing UI build in web/dist)
+dev-go:
+	go run main.go serve --port $(PORT) --data-dir $(DATA_DIR)
+
+# Clean binaries and data
+clean:
+	@echo "Cleaning up..."
+	rm -f $(BINARY_NAME)
+	rm -rf internal/api/web/dist
+	rm -rf $(DATA_DIR)/*
+
+# Tests & Benchmarks
 test:
 	go test -v ./internal/...
 
-# Clean binaries and test data
-clean:
-	rm -f rss-cli
-	rm -rf test_data test_rss_data data/*
-
-# Convenience command to register a new user locally
-register: build
-	./rss-cli register --user $(USER_NAME) --pass $(USER_PASS)
-
-# Convenience command to add a feed
-add: build
-	./rss-cli add --url $(URL) --user $(USER_NAME)
-
-# Start the API and Worker engine
-serve: build
-	./rss-cli serve --port 7077
-
-# Run Go benchmarks for internal components
 bench:
 	go test -bench=. ./internal/db -benchmem
 
-# Run a high-concurrency load test using Apache Benchmark (ab)
-# Usage: make load-test TOKEN=your_jwt_token
-load-test:
-	@echo "Starting load test with 100 concurrent requests..."
-	ab -n 1000 -c 100 -H "Authorization: Bearer $(TOKEN)" "http://localhost:7077/news"
+register: build
+	./$(BINARY_NAME) register --user $(USER_NAME) --pass $(USER_PASS) --data-dir $(DATA_DIR)
 
-# Show help
+# Help
 help:
-	@echo "Available commands:"
-	@echo "  make build      - Build binary with embedded UI"
-	@echo "  make build-ui   - Build only the Svelte frontend"
-	@echo "  make test       - Run internal tests"
-	@echo "  make bench      - Run performance benchmarks (Search, DB)"
-	@echo "  make load-test  - Run API stress test (requires TOKEN=xxx)"
-	@echo "  make clean      - Remove binaries and databases"
-	@echo "  make serve      - Run the API server"
-	@echo "  make register   - Register USER_NAME/USER_PASS"
-	@echo "  make add        - Add feed URL to USER_NAME"
+	@echo "Gorrson Management:"
+	@echo "  make install    - Install all dependencies (npm & go)"
+	@echo "  make build      - Build full app (Frontend + Backend)"
+	@echo "  make run        - Build and start the production server"
+	@echo "  make dev-ui     - Start Svelte/Vite dev server"
+	@echo "  make dev-go     - Start Go backend in dev mode"
+	@echo "  make clean      - Delete binary and data"
+	@echo "  make test       - Run tests"

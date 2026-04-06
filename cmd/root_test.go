@@ -5,8 +5,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/nef734/gorrson/internal/db"
 )
 
 func executeCommand(args ...string) (string, error) {
@@ -45,7 +43,7 @@ func TestCLI_Flow(t *testing.T) {
 	if !strings.Contains(out, "Found: 0") {
 		t.Errorf("Expected 0 records, got: %s", out)
 	}
-	
+
 	// 3. Test Add
 	out, err = executeCommand("add", "--url", "https://news.ycombinator.com/rss", "--user", "tester", "--data-dir", tmpData)
 	if err != nil {

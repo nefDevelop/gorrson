@@ -10,7 +10,7 @@ import (
 
 const (
 	MaxResponseSize = 5 * 1024 * 1024 // 5MB
-	UserAgent       = "gorrson/1.0 (+https://github.com/nef734/gorrson)"
+	UserAgent       = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 	DefaultTimeout  = 30 * time.Second
 )
 
