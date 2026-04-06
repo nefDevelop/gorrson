@@ -3,6 +3,7 @@ package rss
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strings"
 	"time"
@@ -26,9 +27,12 @@ func NewParser() *Parser {
 
 // SyncFeed parses a feed and saves it and its entries to the database.
 func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) error {
+	slog.Info("SyncFeed starting", "url", url, "user", store.GetUsername())
+
 	feed, err := p.fp.ParseURLWithContext(url, ctx)
 	if err != nil {
 		// Try discovery if initial parse fails
+		slog.Info("Direct parse failed, trying discovery", "url", url, "err", err)
 		discoveredURL, discErr := DiscoverFeed(ctx, url)
 		if discErr == nil && discoveredURL != url {
 			url = discoveredURL
@@ -36,9 +40,12 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 		
 		if err != nil {
+			slog.Error("SyncFeed failed", "url", url, "err", err)
 			return fmt.Errorf("could not parse feed at %s (tried discovery): %w", url, err)
 		}
 	}
+
+	slog.Info("Feed parsed", "title", feed.Title, "items", len(feed.Items), "url", url)
 
 	// Check if feed exists to maintain the ID
 	existing, _ := store.GetFeedByURL(url)
@@ -56,8 +63,10 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 	}
 
 	if err := store.AddFeed(f); err != nil {
+		slog.Error("Failed to save feed", "err", err)
 		return fmt.Errorf("could not save feed metadata: %w", err)
 	}
+	slog.Info("Feed saved to DB", "title", feed.Title, "id", feedID)
 
 	filters, _ := store.GetFiltersForFeed(feedID)
 
@@ -73,6 +82,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 	}
 
+	saved := 0
 	for _, item := range feed.Items {
 		content := item.Content
 		if content == "" {
@@ -152,7 +162,9 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			// Skip single entry errors (e.g., duplicated link)
 			continue
 		}
+		saved++
 	}
 
+	slog.Info("SyncFeed complete", "feed", feed.Title, "total_items", len(feed.Items), "saved_entries", saved)
 	return nil
 }

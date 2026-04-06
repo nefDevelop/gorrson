@@ -1,5 +1,9 @@
 export async function fetchNews(params = {}) {
-  const query = new URLSearchParams(params).toString();
+  // Remove null/undefined/empty values to avoid spurious filters like category=null
+  const clean = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v != null && v !== '' && v !== 'null')
+  );
+  const query = new URLSearchParams(clean).toString();
   const res = await fetch(`/news?${query}`, {
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -86,10 +90,10 @@ export async function login(username, password) {
   return data;
 }
 
-export async function addFeed(url) {
+export async function addFeed(url, category = '') {
   const res = await fetch('/feeds', {
     method: 'POST',
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({ url, category }),
     headers: {
       'Authorization': `Bearer ${localStorage.getItem('token')}`,
       'Content-Type': 'application/json'
@@ -99,5 +103,9 @@ export async function addFeed(url) {
     const text = await res.text();
     throw new Error(text || 'Failed to add feed');
   }
-  return true;
+  try {
+    return await res.json();
+  } catch {
+    return {};
+  }
 }

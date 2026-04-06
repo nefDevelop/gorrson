@@ -8,6 +8,8 @@
   import Filters from './lib/Filters.svelte';
   import Settings from './lib/Settings.svelte';
   import AddFeed from './lib/AddFeed.svelte';
+  import Toaster from './lib/Toaster.svelte';
+  import { success as toastSuccess, error as toastError } from './lib/toast.js';
   import { Inbox, Star, Bookmark, Archive, Shield } from 'lucide-svelte';
   import { t } from './lib/i18n.js';
   import { onMount } from 'svelte';
@@ -104,8 +106,9 @@
     showAddFeed = true;
   }
 
-  function handleAddFeedSave() {
+  function handleAddFeedSave(feedTitle) {
     showAddFeed = false;
+    toastSuccess(`Feed "${feedTitle || 'nuevo feed'}" añadido correctamente ✓`);
     loadData();
   }
 
@@ -157,6 +160,7 @@
       <AddFeed onSave={handleAddFeedSave} onCancel={handleAddFeedCancel} />
     {/if}
   </main>
+  <Toaster />
 {/if}
 
 <style>

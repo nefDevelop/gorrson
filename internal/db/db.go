@@ -312,8 +312,12 @@ func (s *Store) GetFeedByID(id string) (*models.Feed, error) {
 }
 
 func (s *Store) AddFilter(f *models.Filter) error {
+	var feedID sql.NullString
+	if f.FeedID != "" {
+		feedID = sql.NullString{String: f.FeedID, Valid: true}
+	}
 	_, err := s.db.Exec(`INSERT INTO filters (id, feed_id, pattern, action, target, replacement) VALUES (?, ?, ?, ?, ?, ?)`,
-		f.ID, f.FeedID, f.Pattern, f.Action, f.Target, f.Replacement)
+		f.ID, feedID, f.Pattern, f.Action, f.Target, f.Replacement)
 	return err
 }
 

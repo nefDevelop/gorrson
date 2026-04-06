@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"io/fs"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -291,6 +292,11 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	}
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 
+	// Sanitize category: frontend may send the literal string "null"
+	if category == "null" || category == "undefined" {
+		category = ""
+	}
+
 	var entries []models.Entry
 	if search != "" {
 		entries, err = store.SearchEntries(search)
@@ -383,9 +389,17 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
-	var req struct{ URL string `json:"url"` }
-	json.NewDecoder(r.Body).Decode(&req)
+	var req struct {
+		URL      string `json:"url"`
+		Category string `json:"category"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+		http.Error(w, "Missing or invalid 'url' field", http.StatusBadRequest)
+		return
+	}
 	username := r.Context().Value("username").(string)
+	slog.Info("handleAddFeed: request", "user", username, "url", req.URL, "category", req.Category)
+
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Could not open DB", http.StatusInternalServerError)
@@ -394,10 +408,24 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 	defer store.Close()
 
 	if err := s.parser.SyncFeed(r.Context(), req.URL, store); err != nil {
+		slog.Error("handleAddFeed: SyncFeed failed", "url", req.URL, "err", err)
 		http.Error(w, "Failed to sync feed: "+err.Error(), http.StatusBadRequest)
 		return
 	}
+
+	feed, _ := store.GetFeedByURL(req.URL)
+	if feed != nil && req.Category != "" {
+		store.UpdateFeed(feed.ID, feed.Title, req.Category)
+		feed.Category = req.Category
+	}
+
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	if feed != nil {
+		json.NewEncoder(w).Encode(feed)
+	} else {
+		json.NewEncoder(w).Encode(map[string]string{"url": req.URL})
+	}
 }
 
 func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {

@@ -3,11 +3,13 @@
   import { addFeed } from './api.js';
   import { Plus, X, Globe, MessageSquare, Link } from 'lucide-svelte';
 
-  export let onSave = () => {};
+  /** @type {(title: string) => void} */
+  export let onSave = (_title) => {};
   export let onCancel = () => {};
 
   let activeTab = 'rss';
   let input = "";
+  let category = "";
   let loading = false;
   let error = "";
 
@@ -33,14 +35,10 @@
     }
 
     try {
-      const ok = await addFeed(url);
-      if (ok) {
-        onSave();
-      } else {
-        error = "Failed to add feed.";
-      }
+      const data = await addFeed(url, category);
+      onSave(data?.title || url);
     } catch (e) {
-      error = e.message;
+      error = e.message.trim();
     } finally {
       loading = false;
     }
@@ -88,6 +86,10 @@
         {#if error}
           <div class="error-msg">{error}</div>
         {/if}
+      </div>
+      <div class="field" style="margin-top: 16px;">
+        <label for="category-input">Category <span style="opacity:0.5">(optional)</span></label>
+        <input id="category-input" type="text" placeholder="e.g. Tech, Sports, News" bind:value={category} disabled={loading} />
       </div>
     </div>
 

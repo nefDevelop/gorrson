@@ -3,6 +3,7 @@ package rss
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 
@@ -11,9 +12,11 @@ import (
 
 // DiscoverFeed attempts to find a feed URL in an HTML page.
 func DiscoverFeed(ctx context.Context, pageURL string) (string, error) {
+	slog.Info("DiscoverFeed: fetching page", "url", pageURL)
 	sc := NewSecureClient()
 	body, err := sc.Fetch(ctx, pageURL)
 	if err != nil {
+		slog.Warn("DiscoverFeed: fetch failed", "url", pageURL, "err", err)
 		return "", err
 	}
 	defer body.Close()
@@ -49,8 +52,10 @@ func DiscoverFeed(ctx context.Context, pageURL string) (string, error) {
 	})
 
 	if feedURL == "" {
+		slog.Warn("DiscoverFeed: no feed link found on page", "url", pageURL)
 		return "", fmt.Errorf("no feed found on page")
 	}
 
+	slog.Info("DiscoverFeed: found feed", "page", pageURL, "feed", feedURL)
 	return feedURL, nil
 }
