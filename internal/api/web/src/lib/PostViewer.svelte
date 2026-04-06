@@ -65,30 +65,8 @@
   on:scroll={handleScroll}
   transition:fly={{ x: 100, duration: 400, easing: cubicOut }}
 >
-  <header class="header-bar article-header">
-    <div class="header-left">
-      <button class="action-btn mobile-only back-btn" on:click={onBack} title="Back to list">
-        <ArrowLeft size={20} />
-      </button>
-      {#if article}
-        <span class="header-source">{article.source}</span>
-      {/if}
-    </div>
-    <div class="header-right">
-      {#if article}
-        <button class="action-btn {article.is_favorite ? 'active' : ''}" on:click={handleFavorite} title="Favorite">
-          <Star size={18} fill={article.is_favorite ? 'currentColor' : 'none'} />
-        </button>
-        <a class="action-btn" href={article.url} target="_blank" rel="noopener" title="Open original">
-          <ExternalLink size={18} />
-        </a>
-      {/if}
-    </div>
-    
-    <div class="progress-bar-container">
-      <div class="progress-bar" style="width: {progress}%"></div>
-    </div>
-  </header>
+  <!-- Header removed per user request -->
+
 
   {#if article}
     {#key article.id}
@@ -104,8 +82,22 @@
         {/if}
         
         <div class="meta">
-          <span class="category">{article.category || 'General'}</span>
-          <span class="info">{article.source} · {article.time}</span>
+          <div class="meta-left">
+            <button class="action-btn mobile-only back-btn" on:click={onBack} title="Back to list">
+              <ArrowLeft size={20} />
+            </button>
+            <span class="category">{article.category || 'General'}</span>
+            <span class="info">{article.source}</span>
+          </div>
+          <div class="meta-right">
+            <span class="info time">{article.time}</span>
+            <button class="action-btn {article.is_favorite ? 'active' : ''}" on:click={handleFavorite} title="Favorite">
+              <Star size={18} fill={article.is_favorite ? 'currentColor' : 'none'} />
+            </button>
+            <a class="action-btn" href={article.url} target="_blank" rel="noopener" title="Open original">
+              <ExternalLink size={18} />
+            </a>
+          </div>
         </div>
         
         <h1 class="title">{article.title}</h1>
@@ -158,56 +150,6 @@
     border-right-color: transparent;
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
-  }
-
-  .progress-bar-container {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: transparent;
-    z-index: 1; /* Below content */
-    overflow: hidden;
-    pointer-events: none;
-  }
-
-  .progress-bar {
-    height: 100%;
-    background: var(--md-primary);
-    opacity: 0.1; /* Subtle background fill */
-    transition: width 0.1s ease-out;
-  }
-
-  .article-header {
-    position: sticky;
-    top: 0;
-    background: var(--md-background);
-    /* Removed border-bottom, path went UP between headers */
-    box-sizing: border-box;
-    justify-content: space-between;
-    height: var(--header-height);
-    min-height: var(--header-height);
-    max-height: var(--header-height);
-    z-index: 9;
-    padding: 8px 24px;
-    display: flex;
-    align-items: center;
-  }
-
-  /* Ensure content is above progress background */
-  .header-left, .header-right {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    position: relative;
-    z-index: 2;
-  }
-
-  .header-source {
-    font: var(--m3-title-medium);
-    color: var(--md-on-surface);
-    font-weight: 700;
   }
 
   .mobile-only {
@@ -267,9 +209,19 @@
 
   .meta {
     display: flex;
-    gap: 12px;
     align-items: center;
+    justify-content: space-between;
     margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+  .meta-left, .meta-right {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .meta-right {
+    justify-content: flex-end;
   }
   .category {
     padding: 4px 14px;

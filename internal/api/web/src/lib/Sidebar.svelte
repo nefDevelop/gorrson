@@ -231,8 +231,8 @@
   }
 
   .add-btn {
-    height: 56px;
-    padding: 0 24px;
+    height: 48px;
+    padding: 0 20px;
     border-radius: var(--radius-l);
     background: var(--md-primary-container);
     color: var(--md-on-primary-container);
@@ -405,7 +405,7 @@
     right: 0;
     background: var(--md-surface, #fdfdfd);
     border: 1px solid var(--md-outline, #ccc);
-    border-radius: var(--radius-l);
+    border-radius: var(--radius-xl);
     box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 8px 40px rgba(0,0,0,0.1);
     padding: 8px;
     z-index: 100;

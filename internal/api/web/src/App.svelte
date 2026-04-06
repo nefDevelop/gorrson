@@ -265,6 +265,11 @@
   function handleAddFeedCancel() {
     showAddFeed = false;
   }
+
+  let isFeedExpanded = false;
+  function toggleFeedExpand() {
+    isFeedExpanded = !isFeedExpanded;
+  }
 </script>
 
 {#if !isAuthenticated}
@@ -297,11 +302,13 @@
           <FeedList 
             {articles} 
             {selectedId} 
+            isExpanded={isFeedExpanded}
+            onToggleExpand={toggleFeedExpand}
             onSelect={handleSelect} 
           />
         {/if}
         
-        {#if !isMobile || (isMobile && selectedId)}
+        {#if (!isMobile && !isFeedExpanded) || (isMobile && selectedId)}
           <PostViewer 
             article={selectedArticle} 
             onBack={() => selectedId = null}

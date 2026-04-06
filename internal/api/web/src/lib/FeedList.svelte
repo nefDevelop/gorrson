@@ -2,7 +2,7 @@
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import PostCard from './PostCard.svelte';
-  import { Search, CheckCheck } from 'lucide-svelte';
+  import { Search, CheckCheck, PanelRightClose, PanelRightOpen } from 'lucide-svelte';
   import { t } from './i18n.js';
   
   /** @type {Array<any>} */
@@ -11,26 +11,39 @@
   /** @type {number} */
   export let selectedId;
   
+  export let isExpanded = false;
+  export let onToggleExpand = () => {};
+
   /** @type {(id: number) => void} */
   export let onSelect;
 
 </script>
 
-<section class="feed-list" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
+<section class="feed-list {isExpanded ? 'expanded' : ''}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
   <header class="header-bar">
     <div></div> <!-- Empty spacer to keep actions aligned -->
     <div class="actions">
-      <button class="action-btn">
+      <button class="action-btn" title="Search feeds">
         <Search size={18} />
       </button>
-      <button class="action-btn">
+      <button class="action-btn" title="Mark visible as read">
         <CheckCheck size={18} />
+      </button>
+      <button class="action-btn" on:click={onToggleExpand} title={isExpanded ? 'Show reader panel' : 'Expand feed list'}>
+        {#if isExpanded}
+          <PanelRightOpen size={18} />
+        {:else}
+          <PanelRightClose size={18} />
+        {/if}
       </button>
     </div>
   </header>
 
-  <!-- The Inverse Corner to flawlessly draw the curve behind the gap -->
-  <div class="inverse-corner"></div>
+  <!-- Solid surface background for the gap -->
+  <div class="corner-bg"></div>
+  
+  <!-- Overlay to draw the perfectly curved sharp line -->
+  <div class="corner-arc"></div>
 
   <div class="feed-content">
     <div class="articles-container scroll-area">
@@ -53,6 +66,10 @@
     flex-direction: column;
     height: 100vh;
     transition: all var(--layout-transition);
+  }
+  .feed-list.expanded {
+    width: auto;
+    flex: 1;
   }
 
   .header-bar { 
@@ -79,23 +96,34 @@
     left: 0px; 
     bottom: -1px; 
     width: 32px; 
-    height: 1px; /* Changed to exactly 1px */
+    height: 2px;
     background: var(--md-surface);
     z-index: 15;
   }
 
-  .inverse-corner {
+  /* Solid background to color the gap outside the feed-content radius */
+  .corner-bg {
     position: absolute;
     top: var(--header-height);
     left: 0;
     width: 32px;
     height: 32px;
     background: var(--md-surface);
-    border-bottom-right-radius: 32px;
-    border-right: 1px solid var(--md-outline);
-    border-bottom: 1px solid var(--md-outline);
-    z-index: 5; /* Behind feed-content */
-    box-sizing: border-box;
+    z-index: 0;
+  }
+
+  /* Overlaid pure arc to draw the crisp 1px unibody curve without clipping */
+  .corner-arc {
+    position: absolute;
+    top: var(--header-height);
+    left: 0;
+    width: 32px;
+    height: 32px;
+    border-top-left-radius: 32px;
+    border-top: 1px solid var(--md-outline);
+    border-left: 1px solid var(--md-outline);
+    z-index: 20; /* Keep stroke sharp and unclipped */
+    pointer-events: none;
   }
 
   .feed-content {
