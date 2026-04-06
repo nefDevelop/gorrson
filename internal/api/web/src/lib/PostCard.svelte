@@ -1,9 +1,12 @@
 <script>
+  import { stripHtml } from './utils.js';
   /** @type {{id: number, title: string, source: string, time: string, category: string, content?: string, selected?: boolean}} */
   export let article;
   
   /** @type {(id: number) => void} */
   export let onClick;
+
+  $: summary = stripHtml(article.content || article.summary || "");
 </script>
 
 <button 
@@ -16,7 +19,7 @@
   </div>
   <h3 class="title" class:active-title={article.selected}>{article.title}</h3>
   <p class="summary">
-    {article.content || "No preview available..."}
+    {summary || "No preview available..."}
   </p>
 </button>
 

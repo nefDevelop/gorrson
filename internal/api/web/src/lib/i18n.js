@@ -40,7 +40,8 @@ const translations = {
     "no_filters": "No filters found",
     "save": "Save",
     "cancel": "Cancel",
-    "logout": "Logout"
+    "logout": "Logout",
+    "language": "Language"
   },
   es: {
     "add_feed": "Añadir Feed",
@@ -79,7 +80,8 @@ const translations = {
     "no_filters": "No se encontraron filtros",
     "save": "Guardar",
     "cancel": "Cancelar",
-    "logout": "Cerrar Sesión"
+    "logout": "Cerrar Sesión",
+    "language": "Idioma"
   }
 };
 

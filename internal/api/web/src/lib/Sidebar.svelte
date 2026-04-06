@@ -7,10 +7,14 @@
     Archive, 
     Settings, 
     Hash,
-    Languages,
     LogOut
   } from 'lucide-svelte';
   import { locale, t } from './i18n.js';
+  import { fly } from 'svelte/transition';
+
+  const toggleLanguage = () => {
+    locale.update(l => l === 'en' ? 'es' : 'en');
+  };
 
   /** @type {Array<{id: string, name: string, badge?: number, active?: boolean, icon: any}>} */
   export let navItems = [];
@@ -32,14 +36,23 @@
   const handleAddClick = () => {
     onAddFeed();
   };
-  
-  const toggleLanguage = () => {
-    locale.update(l => l === 'en' ? 'es' : 'en');
+
+  let showUserMenu = false;
+  const toggleUserMenu = () => {
+    showUserMenu = !showUserMenu;
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    window.location.reload();
   };
 </script>
 
 <aside class="sidebar">
-  <div class="logo">GORRSON</div>
+  <div class="logo">
+    <span class="full-logo">GORRSON</span>
+    <span class="mini-logo">G</span>
+  </div>
   
   <nav class="nav-group">
     {#each navItems as item}
@@ -82,16 +95,28 @@
       <span>{$t('add_feed')}</span>
     </button>
 
-    <div class="user-profile">
-      <div class="avatar">{username[0]?.toUpperCase() || 'U'}</div>
-      <div class="user-info">
-        <div class="username">{username}</div>
-        <div class="status">{$t('membership_gold')}</div>
-      </div>
-      <div class="profile-actions">
-        <button class="lang-btn" on:click={toggleLanguage} title="Change Language">
-          <Languages size={18} />
+    <div class="user-profile-container">
+      {#if showUserMenu}
+        <div class="user-popup" transition:fly={{ y: 20, duration: 200 }}>
+          <button class="popup-item" on:click={handleLogout}>
+            <LogOut size={16} />
+            <span>{$t('logout') || 'Log Out'}</span>
+          </button>
+          <button class="popup-item" on:click={() => { toggleLanguage(); showUserMenu = false; }}>
+            <span>{$t('language') || 'Language'}: { $locale.toUpperCase() }</span>
+          </button>
+        </div>
+      {/if}
+
+      <div class="user-profile {showUserMenu ? 'menu-open' : ''}">
+        <button class="profile-main" on:click={toggleUserMenu}>
+          <div class="avatar">{username[0]?.toUpperCase() || 'U'}</div>
+          <div class="user-info">
+            <div class="username">{username}</div>
+            <div class="status">{$t('membership_gold')}</div>
+          </div>
         </button>
+        
         <button 
           class="settings-btn {activeView === 'settings' ? 'active' : ''}" 
           on:click={() => handleNavClick('settings')}
@@ -114,6 +139,7 @@
     flex-direction: column;
     padding: 16px;
     gap: 8px;
+    transition: all var(--layout-transition);
   }
 
   .logo {
@@ -122,7 +148,11 @@
     font-weight: 800;
     color: var(--md-on-surface);
     letter-spacing: -0.5px;
+    display: flex;
+    justify-content: center;
   }
+
+  .mini-logo { display: none; }
 
   .bottom-actions {
     margin-top: auto;
@@ -231,55 +261,189 @@
     color: var(--md-on-secondary-container);
   }
 
-  .user-profile {
-    padding: 12px;
+  .user-profile-container {
+    position: relative;
+    width: 100%;
+  }
+
+  .user-popup {
+    position: absolute;
+    bottom: calc(100% + 12px);
+    left: 0;
+    right: 0;
+    background: var(--md-surface, #fdfdfd);
+    border: 1px solid var(--md-outline, #ccc);
+    border-radius: var(--radius-l);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 8px 40px rgba(0,0,0,0.1);
+    padding: 8px;
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    overflow: hidden;
+  }
+
+  .popup-item {
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
     background: transparent;
-    border-top: 1px solid var(--md-outline);
+    color: var(--md-on-surface);
+    font: var(--m3-label-large);
+    text-align: left;
     display: flex;
     align-items: center;
     gap: 12px;
-    border-radius: 0;
+    cursor: pointer;
+    border-radius: var(--radius-m);
+    transition: background 0.2s;
+  }
+  .popup-item:hover {
+    background: var(--md-surface-variant);
+  }
+
+  .user-profile {
+    padding: 6px;
+    background: var(--md-surface-variant);
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1px solid var(--md-outline);
+    transition: all 0.2s;
+  }
+
+  .profile-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 4px 10px;
+    border-radius: var(--radius-full);
+    cursor: pointer;
+    min-width: 0;
+    transition: all 0.2s;
+    border: none;
+    background: transparent;
+    text-align: left;
+  }
+  .profile-main:hover {
+    background: var(--md-secondary-container);
   }
 
   .avatar {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     background: var(--md-primary);
     color: var(--md-on-primary);
-    border-radius: var(--radius-m);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font: var(--m3-label-medium);
-    font-weight: 800;
-  }
-
-  .user-info { flex: 1; min-width: 0; }
-  .username { font: var(--m3-label-large); font-weight: 700; color: var(--md-on-surface); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .status { font: var(--m3-label-small); color: var(--md-on-surface-variant); opacity: 0.8; }
-
-  .profile-actions {
-    display: flex;
-    gap: 4px;
-  }
-
-  .settings-btn, .lang-btn {
-    background: transparent;
-    border: none;
-    color: var(--md-on-surface-variant);
-    cursor: pointer;
-    font-size: 16px;
-    padding: 6px;
     border-radius: var(--radius-full);
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: background 0.2s;
+    font: var(--m3-label-large);
+    font-weight: 800;
+    flex-shrink: 0;
   }
 
-  .settings-btn:hover, .lang-btn:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: var(--md-on-surface);
+  .user-info { flex: 1; min-width: 0; }
+  .username { font: var(--m3-label-large); font-weight: 700; color: var(--md-on-surface); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+  .status { font: var(--m3-label-small); color: var(--md-on-surface-variant); opacity: 0.8; }
+
+  .settings-btn {
+    background: transparent;
+    border: none;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-full);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+  .settings-btn:hover {
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+  }
+  .settings-btn.active {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+  }
+
+  /* Compact Mode (Tablet & Mobile) */
+  @media (max-width: 1000px) {
+    .sidebar {
+      padding: 16px 8px;
+      width: 72px !important;
+    }
+    .full-logo, 
+    .nav-item span, 
+    .cat-item span, 
+    .section-title, 
+    .add-btn span, 
+    .user-info, 
+    .badge, 
+    .count {
+      display: none !important;
+    }
+    .divider {
+      margin: 12px 10px;
+    }
+    .mini-logo {
+      display: block !important;
+      font-size: 24px;
+    }
+    .logo {
+      padding: 10px;
+      margin: 0 auto;
+    }
+    .nav-item, .cat-item, .add-btn {
+      justify-content: center;
+      padding: 12px 0;
+    }
+    .item-left {
+      gap: 0;
+      justify-content: center;
+    }
+    .bottom-actions {
+      align-items: center;
+      padding: 12px 0;
+    }
+    .add-btn {
+      width: 44px;
+      height: 44px;
+      padding: 0;
+      margin: 8px 0;
+      border-radius: var(--radius-full);
+    }
+    .user-profile {
+      display: flex;
+      flex-direction: column-reverse; /* Icons stacked vertically */
+      align-items: center;
+      gap: 12px;
+      padding: 16px 0;
+      width: 100%;
+      background: transparent; /* Remove pill bg in mini mode */
+      border: none;
+      margin: 0;
+    }
+    .avatar {
+      width: 36px;
+      height: 36px;
+      font-size: 16px;
+      border-radius: var(--radius-full);
+      box-shadow: 0 0 0 2px var(--md-outline); /* Subtle rim */
+    }
+    .settings-btn {
+      width: 44px;
+      height: 44px;
+      background: var(--md-surface-variant);
+      border-radius: var(--radius-l);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
   }
 </style>
 

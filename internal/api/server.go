@@ -335,8 +335,9 @@ func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullContent, err := rss.ScrapeFullContent(r.Context(), entry.URL)
+	fullContent, err := rss.ScrapeFullContent(r.Context(), entry.URL, entry.Title, entry.ImageURL)
 	if err != nil {
+		slog.Error("Failed to scrape full content", "url", entry.URL, "id", id, "err", err)
 		http.Error(w, "Scraping failed: "+err.Error(), http.StatusInternalServerError)
 		return
 	}

@@ -31,7 +31,7 @@ func TestScrapeFullContent(t *testing.T) {
 	defer ts.Close()
 
 	ctx := context.Background()
-	content, err := ScrapeFullContent(ctx, ts.URL)
+	content, err := ScrapeFullContent(ctx, ts.URL, "", "")
 	if err != nil {
 		t.Fatalf("ScrapeFullContent failed: %v", err)
 	}
@@ -64,7 +64,7 @@ func TestScrapeHeuristics(t *testing.T) {
 					<p>Paragraph 2 of the main story is longer and better for scoring.</p>
 					<p>Paragraph 3 of the main story is also here.</p>
 				</div>
-				<div class="comment">Short comment</div>
+				<div class="div">Short comment</div>
 			</body>
 		</html>`
 		w.Write([]byte(html))
@@ -72,7 +72,7 @@ func TestScrapeHeuristics(t *testing.T) {
 	defer ts.Close()
 
 	ctx := context.Background()
-	content, err := ScrapeFullContent(ctx, ts.URL)
+	content, err := ScrapeFullContent(ctx, ts.URL, "", "")
 	if err != nil {
 		t.Fatalf("ScrapeFullContent failed: %v", err)
 	}
@@ -83,5 +83,50 @@ func TestScrapeHeuristics(t *testing.T) {
 	
 	if strings.Contains(content, "Menu") {
 		t.Error("Heuristics included menu div")
+	}
+}
+
+func TestDuplicateRemoval(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		html := `
+		<html>
+			<body>
+				<article>
+					<h1>Exclusive title match</h1>
+					<img src="https://example.com/hero.jpg" class="main-hero" />
+					<p>Actual news content starts here.</p>
+					<img src="https://example.com/other.jpg" />
+				</article>
+			</body>
+		</html>`
+		w.Write([]byte(html))
+	}))
+	defer ts.Close()
+
+	ctx := context.Background()
+	title := "Exclusive title match"
+	hero := "https://example.com/hero.jpg"
+
+	content, err := ScrapeFullContent(ctx, ts.URL, title, hero)
+	if err != nil {
+		t.Fatalf("ScrapeFullContent failed: %v", err)
+	}
+
+	// Title should be removed
+	if strings.Contains(content, "<h1>Exclusive title match</h1>") {
+		t.Errorf("Duplicate title was NOT removed: %s", content)
+	}
+
+	// Hero image should be removed
+	if strings.Contains(content, "hero.jpg") {
+		t.Errorf("Hero image was NOT removed: %s", content)
+	}
+
+	// Other image and content should remain
+	if !strings.Contains(content, "other.jpg") {
+		t.Errorf("Other image was accidentally removed")
+	}
+	if !strings.Contains(content, "Actual news content") {
+		t.Errorf("Main content was removed")
 	}
 }

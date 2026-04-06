@@ -96,6 +96,9 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 		cleanContent := sanitizer.Clean(content)
 		title := item.Title
+		if cleanContent == "" && title != "" {
+			slog.Debug("Entry content is empty, only title available", "title", title, "link", item.Link)
+		}
 
 		// Apply Filters
 		skip := false

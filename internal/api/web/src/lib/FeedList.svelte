@@ -1,4 +1,6 @@
 <script>
+  import { fly } from 'svelte/transition';
+  import { cubicOut } from 'svelte/easing';
   import PostCard from './PostCard.svelte';
   import { Search, CheckCheck } from 'lucide-svelte';
   import { t } from './i18n.js';
@@ -15,7 +17,7 @@
   let titleKey = "latest";
 </script>
 
-<section class="feed-list scroll-area">
+<section class="feed-list scroll-area" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
   <header class="header-bar">
     <div class="title-container">
       <h1 class="title">{$t(titleKey)}</h1>
@@ -56,16 +58,20 @@
     display: flex;
     flex-direction: column;
     height: 100vh;
+    transition: all var(--layout-transition);
   }
 
   .header-bar {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 0 24px;
+    align-items: center; /* Keep centered */
+    padding: 8px 24px; /* Add vertical padding */
     background: var(--md-surface);
-    border-bottom: 1px solid var(--md-outline);
-    height: var(--header-height);
+    /* border-bottom: 1px solid var(--md-outline); */
+    box-shadow: 0 1px 0 0 var(--md-outline); /* Use box-shadow for consistent border rendering */
+    height: var(--header-height); /* Explicit height */
+    min-height: var(--header-height); /* Ensure minimum height */
+    max-height: var(--header-height); /* Ensure maximum height */
   }
 
   .header-bar .title {
@@ -131,5 +137,19 @@
     flex-direction: column;
     gap: 6px;
     padding-bottom: 120px;
+  }
+
+  @media (max-width: 1000px) {
+    .header-bar, .filter-chips {
+      padding-left: 12px;
+      padding-right: 12px;
+    }
+  }
+
+  @media (max-width: 768px) {
+    .feed-list {
+      width: 100% !important;
+      border-right: none;
+    }
   }
 </style>
