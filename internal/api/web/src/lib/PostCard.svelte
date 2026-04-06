@@ -13,11 +13,11 @@
   class="post-card {article.selected ? 'selected' : ''}" 
   on:click={() => onClick(article.id)}
 >
-  <div class="header">
-    <span class="source">{article.source}</span>
+  <div class="title-row">
+    <h3 class="title" class:active-title={article.selected}>{article.title}</h3>
     <span class="time">{article.time}</span>
   </div>
-  <h3 class="title" class:active-title={article.selected}>{article.title}</h3>
+
   <p class="summary">
     {summary || "No preview available..."}
   </p>
@@ -56,40 +56,43 @@
     color: var(--md-on-primary-container);
     opacity: 1;
   }
-
-  .post-card.selected .source {
-    color: var(--md-on-primary-container);
-    opacity: 0.9;
-  }
-
-  .header {
+  .title-row {
     display: flex;
     justify-content: space-between;
-    margin-bottom: 6px;
-  }
-
-  .source {
-    font: var(--m3-label-large); /* Expressive label */
-    color: var(--md-primary);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .time {
-    font: var(--m3-label-small);
-    color: var(--md-on-surface-variant);
-    opacity: 0.6;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 16px; /* Espacio extra y generoso hacia la descripción */
   }
 
   .title {
-    font: var(--m3-title-medium);
-    margin: 0 0 6px 0;
-    line-height: 1.4;
+    font-family: var(--font-display);
+    font-size: 18px;
+    font-weight: 800;
+    margin: 0;
+    flex: 1;
+    line-height: 1.35;
     color: var(--md-on-surface);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .time {
+    font-family: var(--font-main);
+    font-size: 11px;
+    color: var(--md-on-surface-variant);
+    opacity: 0.6;
+    flex-shrink: 0;
+    white-space: nowrap;
+    margin-top: 4px;
+    font-weight: 500;
   }
 
   .summary {
-    font: var(--m3-body-small);
+    font-family: var(--font-main);
+    font-size: 13px;
     color: var(--md-on-surface-variant);
     margin: 0;
     display: -webkit-box;

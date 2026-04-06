@@ -29,7 +29,7 @@
       <button class="action-btn" title="Mark visible as read">
         <CheckCheck size={18} />
       </button>
-      <button class="action-btn" on:click={onToggleExpand} title={isExpanded ? 'Show reader panel' : 'Expand feed list'}>
+      <button class="action-btn expand-btn" on:click={onToggleExpand} title={isExpanded ? 'Show reader panel' : 'Expand feed list'}>
         {#if isExpanded}
           <PanelRightOpen size={18} />
         {:else}
@@ -68,8 +68,8 @@
     transition: all var(--layout-transition);
   }
   .feed-list.expanded {
-    width: auto;
-    flex: 1;
+    width: calc(100vw - var(--sidebar-width));
+    flex-shrink: 0;
   }
 
   .header-bar { 
@@ -150,7 +150,7 @@
     color: var(--md-on-surface-variant);
     cursor: pointer;
     padding: 8px;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-full); /* Redondeado perfecto */
     transition: all 0.2s;
   }
   .action-btn:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
@@ -175,6 +175,9 @@
     .feed-list {
       width: 100% !important;
       border-right: none;
+    }
+    .expand-btn {
+      display: none !important;
     }
   }
 </style>

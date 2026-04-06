@@ -270,6 +270,11 @@
   function toggleFeedExpand() {
     isFeedExpanded = !isFeedExpanded;
   }
+
+  // Auto-collapse feed list if user shrinks the browser
+  $: if (isMobile && isFeedExpanded) {
+    isFeedExpanded = false;
+  }
 </script>
 
 {#if !isAuthenticated}
@@ -308,7 +313,7 @@
           />
         {/if}
         
-        {#if (!isMobile && !isFeedExpanded) || (isMobile && selectedId)}
+        {#if !isMobile || (isMobile && selectedId)}
           <PostViewer 
             article={selectedArticle} 
             onBack={() => selectedId = null}

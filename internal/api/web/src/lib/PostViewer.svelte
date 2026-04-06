@@ -174,7 +174,7 @@
     color: var(--md-on-surface-variant);
     cursor: pointer;
     padding: 8px;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-full); /* Redondeado perfecto MD3 */
     transition: all 0.2s;
     display: flex;
     align-items: center;

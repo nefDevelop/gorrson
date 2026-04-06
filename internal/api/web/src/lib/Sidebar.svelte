@@ -210,12 +210,13 @@
 
   .logo {
     padding: 0 24px;
-    font: var(--m3-headline-medium);
+    font: var(--m3-headline-large);
+    font-size: 36px;
     height: 100%;
     line-height: 1;
     font-weight: 900;
     color: var(--md-primary);
-    letter-spacing: -0.8px;
+    letter-spacing: -1px;
     display: flex;
     align-items: center;
   }
