@@ -224,6 +224,7 @@
       activeView={activeCategory ? 'cat:'+activeCategory : currentView} 
       onViewChange={handleViewChange} 
       onAddFeed={handleAddFeed}
+      onRefresh={loadData}
     />
     
     {#if loading && articles.length === 0}

@@ -148,6 +148,23 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			}
 		}
 
+		// Special handling for Reddit: extract clean link and image from HTML content
+		isReddit := strings.Contains(url, "reddit.com")
+		if isReddit {
+			reLink := regexp.MustCompile(`<span><a href="([^"]+)">\[link\]</a></span>`)
+			if matches := reLink.FindStringSubmatch(content); len(matches) > 1 {
+				item.Link = matches[1]
+			}
+			
+			// Extract image if missing
+			if imageURL == "" {
+				reImg := regexp.MustCompile(`<img src="([^"]+)"`)
+				if matches := reImg.FindStringSubmatch(content); len(matches) > 1 {
+					imageURL = matches[1]
+				}
+			}
+		}
+
 		entry := &models.Entry{
 			ID:          uuid.New().String(),
 			FeedID:      feedID,

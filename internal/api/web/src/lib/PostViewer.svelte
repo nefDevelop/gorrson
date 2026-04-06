@@ -108,18 +108,19 @@
         <h1 class="title">{article.title}</h1>
         
         {#if !article.is_full_content}
-          <div class="scrape-actions">
-            <button class="scrape-btn {loadingFull ? 'loading' : ''}" on:click={loadFullContent} disabled={loadingFull}>
-              {#if loadingFull}
-                <div class="mini-spinner"></div>
-                {$t('loading')}...
-              {:else}
+          {#if loadingFull}
+            <div class="loader-centered">
+              <div class="mini-spinner"></div>
+            </div>
+          {:else}
+            <div class="scrape-actions">
+              <button class="scrape-btn" on:click={loadFullContent}>
                 <ExternalLink size={14} />
                 {$t('load_full_content') || 'Cargar artículo completo'}
-              {/if}
-            </button>
-            <p class="scrape-hint">{$t('scrape_hint') || 'Extraeremos el texto principal de la web original'}</p>
-          </div>
+              </button>
+              <p class="scrape-hint">{$t('scrape_hint') || 'Extraeremos el texto principal de la web original'}</p>
+            </div>
+          {/if}
         {/if}
 
         <div class="body-text prose">
@@ -144,6 +145,45 @@
     position: relative;
     overflow-y: auto;
     overflow-x: hidden;
+  }
+
+  .scrape-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 10px 32px;
+    min-height: 48px;
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border: none;
+    border-radius: var(--radius-full);
+    font: var(--m3-label-large);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    box-shadow: var(--shadow-s, 0 2px 4px rgba(0,0,0,0.1));
+  }
+  .scrape-btn:hover { transform: translateY(-1px); box-shadow: var(--shadow-m, 0 4px 8px rgba(0,0,0,0.15)); }
+  .scrape-btn:active { transform: translateY(0); }
+  .scrape-hint { font: var(--m3-body-small); opacity: 0.7; text-align: center; margin: 0; }
+  
+  .loader-centered {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 24px;
+    width: 100%;
+    margin-bottom: 32px;
+  }
+
+  .mini-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid var(--md-primary);
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
   }
 
   .progress-bar-container {
@@ -237,36 +277,10 @@
     gap: 8px;
     border: 1px dashed var(--md-outline);
   }
-  .scrape-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    border: none;
-    border-radius: var(--radius-full);
-    font: var(--m3-label-large);
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-  .scrape-btn:hover:not(:disabled) { transform: scale(1.02); box-shadow: var(--shadow-m); }
-  .scrape-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-  .scrape-hint { font: var(--m3-body-small); opacity: 0.7; text-align: center; margin: 0; }
+
   
-  .mini-spinner {
-    width: 14px;
-    height: 14px;
-    border: 2px solid currentColor;
-    border-right-color: transparent;
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-  .post-card:hover { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
 
   .content-wrapper {
     padding: 40px 48px;

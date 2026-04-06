@@ -267,3 +267,54 @@ func TestImageProxy(t *testing.T) {
 		t.Errorf("Expected 1 file in cache, got %d", len(files))
 	}
 }
+func TestRenameCategoryAPI(t *testing.T) {
+	dataDir := "./test_rename_data"
+	os.RemoveAll(dataDir)
+	defer os.RemoveAll(dataDir)
+
+	srv := NewServer(dataDir)
+	username := "rename_tester"
+	password := "rename_secret"
+
+	store, _ := db.NewStore(dataDir, username)
+	hash, _ := auth.HashPassword(password)
+	store.UpsertUser(username, hash)
+	
+	// Pre-seed a feed with category
+	feedID := "feed-1"
+	store.AddFeed(&models.Feed{
+		ID:       feedID,
+		Title:    "Test Feed",
+		FeedURL:  "https://test.com/rss",
+		Category: "OldCat",
+	})
+	store.Close()
+
+	// Login to get token
+	loginBody, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	req := httptest.NewRequest("POST", "/login", bytes.NewBuffer(loginBody))
+	rr := httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+	var loginResp map[string]string
+	json.Unmarshal(rr.Body.Bytes(), &loginResp)
+	token := loginResp["access_token"]
+
+	// Test Rename
+	renameBody, _ := json.Marshal(map[string]string{"name": "NewCat"})
+	req = httptest.NewRequest("PUT", "/categories/OldCat", bytes.NewBuffer(renameBody))
+	req.Header.Set("Authorization", "Bearer "+token)
+	rr = httptest.NewRecorder()
+	srv.router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("Rename API failed: status %d. Body: %s", rr.Code, rr.Body.String())
+	}
+
+	// Verify in DB
+	store, _ = db.NewStore(dataDir, username)
+	defer store.Close()
+	feed, _ := store.GetFeedByID(feedID)
+	if feed.Category != "NewCat" {
+		t.Errorf("Expected category NewCat, got %s", feed.Category)
+	}
+}

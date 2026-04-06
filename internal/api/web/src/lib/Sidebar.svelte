@@ -234,6 +234,13 @@
   }
 
   .categories-group { display: flex; flex-direction: column; gap: 2px; padding: 4px 12px; }
+  .categories-group { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 2px; 
+    padding: 0 12px; 
+  }
+
   .cat-item {
     padding: 6px 16px;
     font: var(--m3-body-small);
@@ -245,8 +252,10 @@
     align-items: center;
     cursor: pointer;
     border-radius: var(--radius-s);
+    transition: all 0.2s;
   }
   .cat-item:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
+  .cat-item.active { background: var(--md-primary-container); color: var(--md-on-primary-container); font-weight: 700; }
   
   .count { 
     background: var(--md-surface-variant);
@@ -256,10 +265,7 @@
     font: var(--m3-label-small);
     font-weight: 600;
   }
-  .cat-item:hover .count {
-    background: var(--md-secondary-container);
-    color: var(--md-on-secondary-container);
-  }
+  .cat-item.active .count { background: var(--md-primary); color: var(--md-on-primary); }
 
   .user-profile-container {
     position: relative;
@@ -419,21 +425,29 @@
     }
     .user-profile {
       display: flex;
-      flex-direction: column-reverse; /* Icons stacked vertically */
+      flex-direction: column-reverse;
       align-items: center;
       gap: 12px;
       padding: 16px 0;
       width: 100%;
-      background: transparent; /* Remove pill bg in mini mode */
+      background: transparent;
       border: none;
       margin: 0;
+      position: relative;
+    }
+    .user-popup {
+      left: 64px;
+      bottom: 20px;
+      width: 180px;
+      right: auto;
+      box-shadow: 4px 4px 20px rgba(0,0,0,0.3);
     }
     .avatar {
       width: 36px;
       height: 36px;
       font-size: 16px;
       border-radius: var(--radius-full);
-      box-shadow: 0 0 0 2px var(--md-outline); /* Subtle rim */
+      box-shadow: 0 0 0 2px var(--md-outline);
     }
     .settings-btn {
       width: 44px;

@@ -301,6 +301,11 @@ func (s *Store) UpdateFeed(id, title, category string) error {
 	return err
 }
 
+func (s *Store) RenameCategory(oldName, newName string) error {
+	_, err := s.db.Exec("UPDATE feeds SET category = ? WHERE category = ?", newName, oldName)
+	return err
+}
+
 func (s *Store) GetFeedByID(id string) (*models.Feed, error) {
 	var f models.Feed
 	err := s.db.QueryRow("SELECT id, title, site_url, feed_url, category, last_updated FROM feeds WHERE id = ?", id).

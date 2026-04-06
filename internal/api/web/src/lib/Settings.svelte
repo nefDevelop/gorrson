@@ -167,6 +167,30 @@
   };
 
   const username = localStorage.getItem('username') || "User";
+
+  $: categoriesList = Array.from(new Set(feeds.map(f => f.category || 'General'))).sort();
+
+  let editingCat = null;
+  let newName = "";
+
+  async function renameCategory(oldName) {
+    if (!newName || newName === oldName) {
+       editingCat = null;
+       return;
+    }
+    const res = await fetch(`/categories/${encodeURIComponent(oldName)}`, {
+      method: 'PUT',
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${localStorage.getItem('token')}`
+      },
+      body: JSON.stringify({ name: newName })
+    });
+    if (res.ok) {
+      window.location.reload(); // Hard reload to refresh everything
+    }
+    editingCat = null;
+  }
 </script>
 
 <div class="view-container">
@@ -177,6 +201,7 @@
     </div>
     <div class="tabs">
       <button class="tab {activeTab === 'general' ? 'active' : ''}" on:click={() => activeTab = 'general'}>General</button>
+      <button class="tab {activeTab === 'categories' ? 'active' : ''}" on:click={() => activeTab = 'categories'}>{$t('categories')}</button>
       <button class="tab {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
     </div>
   </header>
@@ -289,6 +314,33 @@
             <span class="key">Architecture</span>
             <span class="value">Multi-tenant (Isolated databases)</span>
           </div>
+        </div>
+      </div>
+    {:else if activeTab === 'categories'}
+      <div class="settings-section">
+        <div class="section-header">
+          <Globe size={18} />
+          <span>Manage Categories</span>
+        </div>
+        <div class="category-manager">
+          {#each categoriesList as cat}
+            <div class="cat-row">
+              {#if editingCat === cat}
+                <input 
+                  class="edit-input"
+                  bind:value={newName}
+                  on:keydown={e => e.key === 'Enter' && renameCategory(cat)}
+                  on:blur={() => editingCat = null}
+                />
+                <button class="btn-primary-small" on:click={() => renameCategory(cat)}>Save</button>
+              {:else}
+                <span class="cat-name">{cat}</span>
+                <div class="row-actions">
+                  <button class="btn-ghost" on:click={() => { editingCat = cat; newName = cat; }}>Rename</button>
+                </div>
+              {/if}
+            </div>
+          {/each}
         </div>
       </div>
     {:else}
@@ -439,4 +491,49 @@
     transition: all 0.2s;
   }
   .mode-btn.active { background: var(--md-primary); color: var(--md-on-primary); }
+  .category-manager {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .cat-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 16px;
+    background: var(--md-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-m);
+    transition: transform 0.2s;
+  }
+  .cat-row:hover {
+    border-color: var(--md-primary);
+  }
+  .cat-name {
+    font: var(--m3-body-large);
+    font-weight: 700;
+    color: var(--md-on-surface);
+  }
+  .edit-input {
+    flex: 1;
+    margin-right: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--md-primary);
+    border-radius: var(--radius-s);
+    background: var(--md-surface-variant);
+    color: var(--md-on-surface);
+    font: var(--m3-body-medium);
+    outline: none;
+  }
+  .btn-primary-small {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border: none;
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    font: var(--m3-label-medium);
+    font-weight: 700;
+    cursor: pointer;
+  }
 </style>

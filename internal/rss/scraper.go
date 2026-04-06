@@ -34,8 +34,8 @@ func ScrapeFullContent(ctx context.Context, url string, originalTitle string, or
 	doc.Find("script, style, noscript, iframe, nav, footer, header, aside, form").Remove()
 	doc.Find(".ads, .sidebar, .comments, .share, .related, .menu, .nav, .footer").Remove()
 	doc.Find("#sidebar, #footer, #header, #comments, #menu").Remove()
-	doc.Find(".social-share, .share-box, .newsletter, .signup, .promo, .follow-us, .tags-list, .author-bio").Remove()
-	doc.Find(".entry-footer, .post-footer, .article-footer, .related-posts").Remove()
+	doc.Find(".social-share, .share-box, .newsletter, .signup, .promo, .follow-us, .tags-list, .author-bio, .share-buttons, .social-platforms, .share-story").Remove()
+	doc.Find(".entry-footer, .post-footer, .article-footer, .related-posts, .bbc-sport-related, [data-component='topic-list']").Remove()
 
 	// Text-based filtering for common "noise" phrases
 	doc.Find("div, section, p, h3, h4, span").Each(func(i int, s *goquery.Selection) {
@@ -44,10 +44,11 @@ func ScrapeFullContent(ctx context.Context, url string, originalTitle string, or
 			// English
 			"share this story", "subscribe to our", "sign up for", "follow us on",
 			"read more:", "related:", "privacy policy", "terms of use", "account if you don't already have one",
+			"related topics", "more on this story", "follow your club with", "share on",
 			// Spanish
 			"comparte en", "suscríbete a", "síguenos en", "más información",
 			"política de privacidad", "términos de uso", "leer más", "noticias relacionadas",
-			"regístrate para", "iniciar sesión", "crear cuenta",
+			"regístrate para", "iniciar sesión", "crear cuenta", "temas relacionados", "compartir en",
 		}
 		for _, phrase := range noise {
 			if strings.Contains(txt, phrase) && len(txt) < 300 { // Small blocks only to avoid false positives

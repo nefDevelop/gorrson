@@ -17,7 +17,7 @@
   let titleKey = "latest";
 </script>
 
-<section class="feed-list scroll-area" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
+<section class="feed-list" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
   <header class="header-bar">
     <div class="title-container">
       <h1 class="title">{$t(titleKey)}</h1>
@@ -40,7 +40,7 @@
     <button class="chip">{$t('reddit')}</button>
   </div>
 
-  <div class="articles-container">
+  <div class="articles-container scroll-area">
     {#each articles as item}
       <PostCard 
         article={{...item, selected: selectedId === item.id}} 
@@ -132,11 +132,12 @@
   }
 
   .articles-container {
+    flex: 1;
     padding: 12px 16px;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    padding-bottom: 120px;
+    padding-bottom: 24px;
   }
 
   @media (max-width: 1000px) {

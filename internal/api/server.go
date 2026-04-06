@@ -128,6 +128,8 @@ func (s *Server) routes() {
 		r.Get("/feeds/export", s.handleExportOPML)
 		r.Patch("/feeds/{id}", s.handleUpdateFeed)
 		r.Delete("/feeds/{id}", s.handleDeleteFeed)
+		
+		r.Put("/categories/{name}", s.handleRenameCategory)
 
 		r.Get("/filters", s.handleListFilters)
 		r.Post("/filters", s.handleAddFilter)
@@ -623,6 +625,32 @@ func (s *Server) handleImageProxy(w http.ResponseWriter, r *http.Request) {
 	defer f.Close()
 	w.Header().Set("Cache-Control", "public, max-age=31536000")
 	http.ServeContent(w, r, "image", time.Time{}, f)
+}
+
+func (s *Server) handleRenameCategory(w http.ResponseWriter, r *http.Request) {
+	oldName := chi.URLParam(r, "name")
+	var req struct {
+		NewName string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	username := r.Context().Value("username").(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	if err := store.RenameCategory(oldName, req.NewName); err != nil {
+		http.Error(w, "Rename failed", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
