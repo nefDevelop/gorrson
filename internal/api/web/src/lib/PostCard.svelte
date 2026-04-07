@@ -147,12 +147,12 @@
   }
 
   .source-tag {
-    font: var(--m3-label-small);
+    font-size: 10px;
+    font-weight: 500;
     color: var(--md-on-surface-variant);
-    opacity: 0.6;
-    font-weight: 600;
+    opacity: 0.45;
     text-transform: uppercase;
-    letter-spacing: 0.4px;
+    letter-spacing: 0.6px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

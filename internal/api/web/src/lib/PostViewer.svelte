@@ -116,8 +116,28 @@
     if (parent) parent.style.display = 'none';
   }
 
-  $: cleanedContent = (article ? (article.content || article.summary || '') : '')
-    .replace(/<img[^>]+src="[^"]*(placeholder|grey|static\.files\.bbci)[^"]*"[^>]*>/gi, '');
+  $: cleanedContent = (() => {
+    if (!article) return '';
+    let html = (article.content || article.summary || '');
+    
+    // 1. Hide lazy-loading placeholders (BBC, etc.)
+    html = html.replace(/<img[^>]+src="[^"]*(placeholder|grey|static\.files\.bbci)[^"]*"[^>]*>/gi, '');
+    
+    // 2. Hide hero image in body if it's a version of the same image
+    if (article.image_url) {
+      // Extract unique ID from the URL (e.g., from PC Gamer's futurecdn URLs or similar)
+      const parts = article.image_url.split('/');
+      const lastPart = parts[parts.length - 1];
+      const mainId = lastPart.split('-')[0].split('?')[0].split('.')[0];
+      
+      if (mainId && mainId.length > 8) {
+        const fuzzyHeroRegex = new RegExp(`<img[^>]+src=["'][^"']*${mainId}[^"']*["'][^>]*>`, 'gi');
+        html = html.replace(fuzzyHeroRegex, '');
+      }
+    }
+    
+    return html;
+  })();
 </script>
 
 <article 
@@ -361,10 +381,11 @@
     font: var(--m3-label-large);
     color: var(--md-primary);
     background: var(--md-primary-container);
-    padding: 4px 12px;
-    border-radius: var(--radius-m);
+    padding: 4px 14px;
+    border-radius: var(--radius-full);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.8px;
+    font-weight: 600;
   }
   .info {
     font: var(--m3-label-medium);
