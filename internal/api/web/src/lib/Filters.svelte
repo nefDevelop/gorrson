@@ -72,31 +72,47 @@
     {:else if (filters || []).length === 0}
       <div class="state-msg">{$t('no_filters')}</div>
     {:else}
-      <div class="filters-grid">
-        {#each (filters || []) as filter}
-          <div class="filter-card">
-            <div class="filter-info">
-              <div class="pattern-row">
-                <span class="label">{$t('pattern')}:</span>
-                <code class="pattern">{filter.pattern}</code>
-              </div>
-              <div class="tags">
-                <span class="tag action-{filter.action.toLowerCase()}">{filter.action}</span>
-                <span class="tag target">{filter.target}</span>
-                {#if filter.feed_id}
-                  <span class="tag feed-specific">
-                    {feeds.find(f => f.id === filter.feed_id)?.title || 'Feed'}
-                  </span>
-                {:else}
-                  <span class="tag global">Global</span>
-                {/if}
-              </div>
-            </div>
-            <button class="delete-btn" on:click={() => handleDelete(filter.id)}>
-              <Trash2 size={16} />
-            </button>
-          </div>
-        {/each}
+      <div class="filters-table-wrapper">
+        <table class="filters-table">
+          <thead>
+            <tr>
+              <th class="th-pattern">{$t('pattern')}</th>
+              <th class="th-action">{$t('action')}</th>
+              <th class="th-target">{$t('target')}</th>
+              <th class="th-apply">Apply To</th>
+              <th class="th-actions"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {#each (filters || []) as filter}
+              <tr class="filter-row">
+                <td class="td-pattern">
+                  <code class="pattern">{filter.pattern}</code>
+                </td>
+                <td class="td-action">
+                  <span class="tag action-{filter.action.toLowerCase()}">{filter.action}</span>
+                </td>
+                <td class="td-target">
+                  <span class="tag target">{filter.target}</span>
+                </td>
+                <td class="td-apply">
+                  {#if filter.feed_id}
+                    <span class="tag feed-specific">
+                      {feeds.find(f => f.id === filter.feed_id)?.title || 'Feed'}
+                    </span>
+                  {:else}
+                    <span class="tag global">Global</span>
+                  {/if}
+                </td>
+                <td class="td-actions">
+                  <button class="delete-btn" on:click={() => handleDelete(filter.id)} title="Delete filter">
+                    <Trash2 size={16} />
+                  </button>
+                </td>
+              </tr>
+            {/each}
+          </tbody>
+        </table>
       </div>
     {/if}
   </div>
@@ -231,26 +247,60 @@
     position: relative;
     z-index: 10;
   }
-  .filters-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
   
-  .filter-card {
+  .filters-table-wrapper {
     background: var(--md-surface);
     border: 1px solid var(--md-outline);
     border-radius: var(--radius-xl);
-    padding: 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    transition: transform 0.2s, background 0.2s;
-  }
-  .filter-card:hover {
-    background: var(--md-surface-variant);
-    transform: translateY(-2px);
+    overflow: hidden;
+    width: 100%;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   }
 
-  .pattern-row { margin-bottom: 12px; display: flex; align-items: center; }
-  .label { font: var(--m3-label-small); opacity: 0.6; margin-right: 8px; text-transform: uppercase; font-weight: 700; }
-  .pattern { font-family: var(--font-mono); color: var(--md-primary); background: var(--md-primary-container); padding: 4px 10px; border-radius: var(--radius-full); font-size: 13px; font-weight: 600; }
+  .filters-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+  }
+
+  .filters-table th {
+    background: var(--md-surface-variant);
+    padding: 14px 20px;
+    font: var(--m3-label-medium);
+    color: var(--md-on-surface-variant);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--md-outline);
+  }
+
+  .filters-table td {
+    padding: 12px 20px;
+    font: var(--m3-body-medium);
+    color: var(--md-on-surface);
+    border-bottom: 1px solid var(--md-outline-variant);
+    vertical-align: middle;
+  }
+
+  .filter-row:last-child td {
+    border-bottom: none;
+  }
+
+  .filter-row {
+    transition: background 0.2s;
+  }
+
+  .filter-row:hover {
+    background: var(--md-surface-variant);
+  }
+
+  .th-pattern, .td-pattern { width: 35%; }
+  .th-action, .td-action { width: 15%; }
+  .th-target, .td-target { width: 15%; }
+  .th-apply, .td-apply { width: 25%; }
+  .th-actions, .td-actions { width: 10%; text-align: right; }
+
+  .pattern { font-family: var(--font-mono); color: var(--md-primary); background: var(--md-primary-container); padding: 4px 10px; border-radius: var(--radius-full); font-size: 13px; font-weight: 600; display: inline-block; }
 
   .tags { display: flex; gap: 8px; flex-wrap: wrap; }
   .tag { font: var(--m3-label-small); font-weight: 800; padding: 4px 12px; border-radius: var(--radius-full); text-transform: uppercase; letter-spacing: 0.5px; }
