@@ -1,7 +1,7 @@
 <script>
   import { stripHtml } from './utils.js';
   import { Star, Share2 } from 'lucide-svelte';
-  /** @type {{id: string, title: string, source: string, time: string, category: string, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean}} */
+  /** @type {{id: string, title: string, source: string, time: string, category: string, is_read?: boolean, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean}} */
   export let article;
   
   /** @type {(id: string | number) => void} */
@@ -17,14 +17,17 @@
 </script>
 
 <div 
-  class="post-card {article.selected ? 'selected' : ''}" 
+  data-id={article.id}
+  class="post-card {article.selected ? 'selected' : ''} {article.is_read ? 'read' : ''}" 
   on:click={() => onClick(article.id)}
   role="button"
   tabindex="0"
   on:keydown={(e) => e.key === 'Enter' && onClick(article.id)}
 >
   <div class="title-row">
-    <h3 class="title" class:active-title={article.selected}>{article.title}</h3>
+    <h3 class="title" class:active-title={article.selected}>
+      {article.title}
+    </h3>
     <span class="time">{article.time}</span>
   </div>
 
@@ -66,12 +69,19 @@
     outline: none;
     display: block;
     text-align: left;
+    position: relative;
+    opacity: 0.8; /* Slightly muted by default for read entries */
+  }
+
+  .post-card:not(.read) {
+    opacity: 1; /* Full brightness for unread */
   }
 
   .post-card:hover {
     background: var(--md-secondary-container);
     border-color: var(--md-primary);
     transform: translateX(2px);
+    opacity: 1;
   }
 
   .post-card.selected {
@@ -80,6 +90,7 @@
     border-left: 4px solid var(--md-primary);
     padding-left: 12px; 
     box-shadow: none;
+    opacity: 1;
   }
 
   .post-card.selected .title {
@@ -102,16 +113,24 @@
   .title {
     font-family: var(--font-display);
     font-size: 18px;
-    font-weight: 800;
+    font-weight: 500; /* Regular for read */
     margin: 0;
     flex: 1;
     line-height: 1.35;
-    color: var(--md-on-surface);
+    color: var(--md-on-surface-variant); /* Muted for read */
     display: -webkit-box;
     -webkit-line-clamp: 3;
     line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
+    position: relative;
+    padding-left: 0;
+    transition: all 0.2s;
+  }
+
+  .post-card:not(.read) .title {
+    font-weight: 800; /* Extra bold for unread */
+    color: var(--md-on-surface);
   }
 
   .time {
@@ -123,6 +142,13 @@
     white-space: nowrap;
     margin-top: 4px;
     font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .post-card:not(.read) .time {
+    color: var(--md-primary);
+    opacity: 1;
+    font-weight: 700;
   }
 
   .summary {
@@ -131,12 +157,16 @@
     color: var(--md-on-surface-variant);
     margin: 0;
     display: -webkit-box;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.5;
-    opacity: 0.8;
+    opacity: 0.6; /* More muted for read */
+  }
+
+  .post-card:not(.read) .summary {
+    opacity: 0.85;
   }
 
   .footer-row {

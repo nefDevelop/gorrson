@@ -234,6 +234,50 @@ func (s *Store) MarkAsRead(entryID string) error {
 	return err
 }
 
+func (s *Store) MarkAllRead(category, feedID, search string, limit int) error {
+	query := "UPDATE entries SET is_read = 1"
+	var args []interface{}
+
+	if search != "" {
+		// For search, mark entries that match the FTS search
+		query = `UPDATE entries SET is_read = 1 WHERE id IN (
+			SELECT entries.id FROM entries 
+			JOIN entries_fts ON entries.rowid = entries_fts.rowid 
+			WHERE entries_fts MATCH ?
+			ORDER BY entries.published_at DESC`
+		if limit > 0 {
+			query += " LIMIT ?"
+			args = append(args, search, limit)
+		} else {
+			args = append(args, search)
+		}
+		query += ")"
+	} else {
+		// Handle category and feed_id
+		query = `UPDATE entries SET is_read = 1 WHERE id IN (
+			SELECT e.id FROM entries e
+			JOIN feeds f ON e.feed_id = f.id
+			WHERE 1=1`
+		if category != "" {
+			query += " AND f.category COLLATE NOCASE = ?"
+			args = append(args, category)
+		}
+		if feedID != "" {
+			query += " AND e.feed_id = ?"
+			args = append(args, feedID)
+		}
+		query += " ORDER BY e.published_at DESC"
+		if limit > 0 {
+			query += " LIMIT ?"
+			args = append(args, limit)
+		}
+		query += ")"
+	}
+
+	_, err := s.db.Exec(query, args...)
+	return err
+}
+
 func (s *Store) ToggleFavorite(entryID string, isFavorite bool) error {
 	if isFavorite {
 		_, err := s.db.Exec("UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE id = ?", entryID)

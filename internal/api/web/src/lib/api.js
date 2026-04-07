@@ -35,6 +35,20 @@ export async function markAsRead(id) {
   return res.ok;
 }
 
+export async function markAllRead(params = {}) {
+  const clean = Object.fromEntries(
+    Object.entries(params).filter(([, v]) => v != null && v !== '' && v !== 'null')
+  );
+  const query = new URLSearchParams(clean).toString();
+  const res = await fetch(`/news/read-all?${query}`, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  return res.ok;
+}
+
 export async function toggleFavorite(id, favorite = true) {
   const res = await fetch(`/news/${id}/favorite?favorite=${favorite}`, {
     method: 'PUT',

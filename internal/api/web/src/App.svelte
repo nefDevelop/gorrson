@@ -13,11 +13,19 @@
   import { Inbox, Star, Bookmark, Archive, Shield } from 'lucide-svelte';
   import { t } from './lib/i18n.js';
   import { onMount } from 'svelte';
-  import { fetchNews, markAsRead, fetchFeeds, toggleFavorite } from './lib/api.js';
+  import { fetchNews, markAsRead, markAllRead, fetchFeeds, toggleFavorite } from './lib/api.js';
 
   let selectedId = null;
   let searchQuery = "";
   let isMobile = false;
+  
+  let offset = 0;
+  const LIMIT = 50;
+  let allLoaded = false;
+  let loadingMore = false;
+  let scrollRead = localStorage.getItem('gorrson-scroll-read') === 'true';
+
+  $: localStorage.setItem('gorrson-scroll-read', scrollRead.toString());
 
   const STOP_WORDS = new Set(['de', 'a', 'el', 'la', 'en', 'y', 'que', 'os', 'un', 'una', 'con', 'para', 'por', 'lo', 'las', 'los', 'su', 'al', 'se', 'del', 'the', 'and', 'with', 'that', 'this', 'from']);
 
@@ -41,32 +49,65 @@
     { id: "favorites", name: "Favorites", icon: Star },
   ];
 
-  async function loadData() {
+  async function loadData(append = false) {
     try {
-      loading = true;
+      if (!append) {
+        loading = true;
+        offset = 0;
+        allLoaded = false;
+      } else {
+        loadingMore = true;
+      }
+
+      const params = { 
+        category: activeCategory, 
+        feed_id: activeSource, 
+        sort: currentView === 'favorites' ? 'favorite' : undefined,
+        search: searchQuery,
+        limit: LIMIT,
+        offset: offset
+      };
+      
       const [newsData, feedsData] = await Promise.all([
-        fetchNews({ 
-          category: activeCategory, 
-          feed_id: activeSource, 
-          sort: currentView === 'favorites' ? 'favorite' : undefined
-        }),
+        fetchNews(params),
         fetchFeeds()
       ]);
       
-      articles = (newsData || []).map(a => ({
+      const newArticles = (newsData || []).map(a => ({
         ...a,
         time: a.published_at ? formatTimeAgo(a.published_at) : 'Now',
         source: (feedsData || []).find(f => f.id === a.feed_id)?.title || 'RSS',
         category: (feedsData || []).find(f => f.id === a.feed_id)?.category || 'General'
       }));
 
+      if (append) {
+        articles = [...articles, ...newArticles];
+      } else {
+        articles = newArticles;
+      }
+      
+      if (newArticles.length < LIMIT) {
+        allLoaded = true;
+      }
+      
+      offset += newArticles.length;
       feeds = feedsData || [];
-      if (articles.length > 0 && !selectedId) selectedId = articles[0].id;
+      
+      if (articles.length > 0 && !selectedId && !append) {
+        selectedId = articles[0].id;
+      }
     } catch (e) {
       error = e.message;
       if (e.message === 'Unauthorized') isAuthenticated = false;
     } finally {
       loading = false;
+      loadingMore = false;
+    }
+  }
+
+  function handleLoadMore() {
+    if (!allLoaded && !loadingMore && !loading) {
+      loadData(true);
     }
   }
 
@@ -266,11 +307,33 @@
     count: feeds.filter(f => (f.category || 'General') === catName).reduce((acc, f) => acc + f.unread_count, 0)
   }));
 
+  async function handleMarkAsRead(id) {
+    if (articles.find(a => a.id === id)?.is_read) return;
+    await markAsRead(id);
+    articles = articles.map(a => a.id === id ? {...a, is_read: true} : a);
+  }
+
   async function handleSelect(id) {
     selectedId = id;
-    await markAsRead(id);
-    // Update local read state
-    articles = articles.map(a => a.id === id ? {...a, is_read: true} : a);
+    handleMarkAsRead(id);
+  }
+
+  async function handleMarkAllRead() {
+    try {
+      const params = {
+        category: activeCategory,
+        feed_id: activeSource,
+        search: searchQuery,
+        limit: articles.length // Only mark what's loaded in the UI
+      };
+      const unreadCount = articles.filter(a => !a.is_read).length;
+      await markAllRead(params);
+      
+      articles = articles.map(a => ({...a, is_read: true}));
+      toastSuccess(`Marked ${unreadCount} items as read`);
+    } catch (e) {
+      toastError('Failed to mark as read');
+    }
   }
 
   async function handleToggleFavorite(id) {
@@ -372,8 +435,14 @@
             isExpanded={isFeedExpanded}
             onToggleExpand={toggleFeedExpand}
             onSelect={handleSelect} 
+            onMarkAsRead={handleMarkAsRead}
             onToggleFavorite={handleToggleFavorite}
             onShare={handleShare}
+            onMarkAllRead={handleMarkAllRead}
+            onLoadMore={handleLoadMore}
+            {loadingMore}
+            {allLoaded}
+            {scrollRead}
           />
         {/if}
       {/if}
@@ -387,7 +456,7 @@
     {:else if error}
       <div class="error-view">
         <p>{error}</p>
-        <button on:click={loadData}>Retry</button>
+        <button on:click={() => loadData()}>Retry</button>
       </div>
     {:else}
       {#if currentView === 'inbox' || currentView === 'favorites'}
@@ -402,7 +471,12 @@
       {:else if currentView === 'filters'}
         <Filters />
       {:else if currentView === 'settings'}
-        <Settings {feeds} onLogout={handleLogout} />
+        <Settings 
+          {feeds} 
+          onLogout={handleLogout} 
+          username={localStorage.getItem('username')}
+          bind:scrollRead
+        />
       {/if}
     {/if}
 

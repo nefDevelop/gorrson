@@ -7,6 +7,8 @@
 
   export let onLogout = () => {};
   export let feeds = [];
+  export let username = '';
+  export let scrollRead = false;
 
   let activeTab = 'general';
   
@@ -114,8 +116,8 @@
         onSecondaryContainer: onSecondaryContainer,
         tertiary: tertiary,
         surface: currentA.surface,
-        onSurface: hslToHex(h, 10, 95),
-        onSurfaceVariant: hslToHex(h, 15, 75),
+        onSurface: hslToHex(h, 10, 85),
+        onSurfaceVariant: hslToHex(h, 15, 65),
         background: currentA.bg,
         variant: currentA.card,
         outline: currentA.border
@@ -171,7 +173,7 @@
     locale.update(l => l === 'en' ? 'es' : 'en');
   };
 
-  const username = localStorage.getItem('username') || "User";
+
 
   $: categoriesList = Array.from(new Set(feeds.map(f => f.category || 'General'))).sort();
 
@@ -297,6 +299,15 @@
           </div>
           <button class="btn-toggle" on:click={toggleLanguage}>
             {$locale === 'en' ? 'English' : 'Español'}
+          </button>
+        </div>
+        <div class="setting-item">
+          <div class="text">
+            <div class="label">Auto-mark Read</div>
+            <div class="desc">Mark articles as read when you scroll past them.</div>
+          </div>
+          <button class="btn-toggle" on:click={() => scrollRead = !scrollRead}>
+            {scrollRead ? 'ON' : 'OFF'}
           </button>
         </div>
       </div>

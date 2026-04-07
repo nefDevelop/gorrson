@@ -5,6 +5,7 @@
   import { Search, CheckCheck, PanelRightClose, PanelRightOpen, Inbox, X } from 'lucide-svelte';
   import { t } from './i18n.js';
   import { fade, slide } from 'svelte/transition';
+  import { onMount } from 'svelte';
   
   /** @type {Array<any>} */
   export let articles = [];
@@ -13,13 +14,27 @@
   export let selectedId;
   
   export let isExpanded = false;
+  
+  /** @type {() => void} */
   export let onToggleExpand = () => {};
+  
+  /** @type {() => void} */
+  export let onLoadMore = () => {};
+  
+  /** @type {boolean} */
+  export let loadingMore = false;
+  
+  /** @type {boolean} */
+  export let allLoaded = false;
 
-  /** @type {(id: number) => void} */
+  /** @type {(id: string | number) => void} */
   export let onSelect;
 
   /** @type {(id: string) => void} */
   export let onToggleFavorite;
+
+  /** @type {(id: string) => void} */
+  export let onMarkAsRead;
 
   /** @type {(article: any) => void} */
   export let onShare;
@@ -40,6 +55,54 @@
     if (e.key === 'Escape' && showSearch) toggleSearch();
   }
 
+  /** @type {() => void} */
+  export let onMarkAllRead;
+
+  /** @type {boolean} */
+  export let scrollRead = false;
+ 
+  let observer;
+ 
+  onMount(() => {
+    observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        // Infinite scroll check at the bottom
+        if (entry.target.classList.contains('sentinel')) {
+          if (entry.isIntersecting && !loadingMore && !allLoaded) {
+            onLoadMore();
+          }
+          return;
+        }
+
+        // Scroll to read check (only when article is in the top 30% area)
+        if (scrollRead && entry.isIntersecting && entry.target.classList.contains('post-card') && !entry.target.classList.contains('read')) {
+          const id = entry.target.getAttribute('data-id');
+          if (id) onMarkAsRead(id);
+        }
+      });
+    }, { 
+      root: document.querySelector('.articles-container'),
+      // Focus on the top 20% of the screen. 
+      // This means as they are about to leave the top or are well into view.
+      rootMargin: '0px 0px -80% 0px',
+      threshold: 0.1
+    });
+
+    return () => {
+      if (observer) observer.disconnect();
+    };
+  });
+
+  // Re-observe when list or scrollRead changed
+  let sentinelEl;
+  $: if (observer && (articles || scrollRead !== undefined)) {
+    observer.disconnect();
+    setTimeout(() => {
+      const cards = document.querySelectorAll('.post-card:not(.read)');
+      cards.forEach(card => observer.observe(card));
+      if (sentinelEl) observer.observe(sentinelEl);
+    }, 100);
+  }
 </script>
 
 <section class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0 ? 'is-empty' : ''}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
@@ -53,7 +116,7 @@
           <Search size={18} />
         {/if}
       </button>
-      <button class="action-btn" title="Mark visible as read">
+      <button class="action-btn" on:click={onMarkAllRead} title="Mark all as read">
         <CheckCheck size={18} />
       </button>
       <button class="action-btn expand-btn" on:click={onToggleExpand} title={isExpanded ? 'Show reader panel' : 'Expand feed list'}>
@@ -94,13 +157,15 @@
 
   <div class="feed-content">
     <div class="articles-container scroll-area" class:search-open={showSearch}>
-      {#each articles as item}
-          <PostCard 
-            article={{...item, selected: selectedId === item.id}} 
-            onClick={onSelect} 
-            {onToggleFavorite}
-            onShare={() => onShare(item)}
-          />
+      {#each articles as item (item.id)}
+          <div data-id={item.id} class="card-wrapper {item.is_read ? 'read' : ''}">
+            <PostCard 
+              article={{...item, selected: selectedId === item.id}} 
+              onClick={onSelect} 
+              {onToggleFavorite}
+              onShare={() => onShare(item)}
+            />
+          </div>
       {:else}
         <div class="empty-state" transition:fly={{ y: 20, duration: 400 }}>
           <div class="empty-icon">
@@ -112,6 +177,14 @@
           <p>{$t('no_articles_desc') || 'There are no articles to display in this view right now.'}</p>
         </div>
       {/each}
+
+      {#if articles.length > 0 && !allLoaded}
+        <div class="sentinel" bind:this={sentinelEl}>
+          {#if loadingMore}
+            <div class="loading-more-spinner"></div>
+          {/if}
+        </div>
+      {/if}
     </div>
   </div>
 </section>
@@ -346,5 +419,27 @@
       left: 12px;
       right: 12px;
     }
+  }
+
+  .sentinel {
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    margin-top: 12px;
+  }
+
+  .loading-more-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--md-primary);
+    border-top-color: transparent;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 </style>

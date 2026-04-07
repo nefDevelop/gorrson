@@ -119,6 +119,7 @@ func (s *Server) routes() {
 
 		r.Get("/news", s.handleListNews)
 		r.Get("/news/{id}/content", s.handleGetFullContent)
+		r.Put("/news/read-all", s.handleMarkAllRead)
 		r.Put("/news/{id}/read", s.handleMarkRead)
 		r.Put("/news/{id}/favorite", s.handleMarkFavorite)
 
@@ -361,6 +362,25 @@ func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		defer store.Close()
 		store.MarkAsRead(id)
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	
+	category := r.URL.Query().Get("category")
+	feedID := r.URL.Query().Get("feed_id")
+	search := r.URL.Query().Get("search")
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	
+	if category == "null" || category == "undefined" { category = "" }
+	if feedID == "null" || feedID == "undefined" { feedID = "" }
+
+	store, err := db.NewStore(s.dataDir, username)
+	if err == nil {
+		defer store.Close()
+		store.MarkAllRead(category, feedID, search, limit)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
