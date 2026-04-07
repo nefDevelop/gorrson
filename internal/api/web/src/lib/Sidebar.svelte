@@ -587,7 +587,7 @@
     align-items: center;
     gap: 12px;
     cursor: pointer;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-full);
     transition: background 0.2s;
   }
   .popup-item:hover {
@@ -607,7 +607,7 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 4px 10px;
+    padding: 10px;
     border-radius: var(--radius-full);
     cursor: pointer;
     min-width: 0;

@@ -1,7 +1,7 @@
 <script>
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal } from 'lucide-svelte';
+  import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal, Maximize2, Minimize2 } from 'lucide-svelte';
   import { t } from './i18n.js';
   import { toggleFavorite } from './api.js';
   import { success as toastSuccess } from './toast.js';
@@ -10,6 +10,8 @@
   /** @type {any} */
   export let article;
   export let onBack = () => {};
+  export let isFullscreen = false;
+  export let onToggleFullscreen = () => {};
 
   let exportServices = [];
   function loadServices() {
@@ -172,6 +174,14 @@
           </div>
           <div class="meta-right">
             <span class="info time">{article.time}</span>
+            <button class="action-btn desktop-only" on:click={onToggleFullscreen} title={isFullscreen ? 'Exit reader mode' : 'Expand to reader mode'}>
+              {#if isFullscreen}
+                <Minimize2 size={18} />
+              {:else}
+                <Maximize2 size={18} />
+              {/if}
+            </button>
+
             <button class="action-btn" on:click={shareArticle} title={$t('share')}>
               <Share2 size={18} />
             </button>
@@ -259,7 +269,15 @@
     display: none !important;
   }
 
+  @media (min-width: 1001px) {
+    .desktop-only {
+      display: flex !important;
+    }
+  }
   @media (max-width: 1000px) {
+    .desktop-only {
+      display: none !important;
+    }
     .mobile-only {
       display: flex !important;
     }
@@ -317,7 +335,7 @@
     background: transparent;
     border: none;
     padding: 10px 16px;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-full);
     color: var(--md-on-surface);
     font: var(--m3-label-large);
     text-align: left;

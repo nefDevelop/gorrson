@@ -335,9 +335,9 @@
   }
 
   let isFeedExpanded = false;
-  function toggleFeedExpand() {
-    isFeedExpanded = !isFeedExpanded;
-  }
+  let fullscreenReader = false;
+  const toggleFeedExpand = () => isFeedExpanded = !isFeedExpanded;
+  const toggleFullscreen = () => fullscreenReader = !fullscreenReader;
 
   // Auto-collapse feed list if user shrinks the browser
   $: if (isMobile && isFeedExpanded) {
@@ -349,16 +349,35 @@
   <Login onLoginSuccess={handleLoginSuccess} />
 {:else}
   <main class="app-container {selectedId ? 'has-selection' : ''}">
-    <Sidebar 
-      {navItems} 
-      {categories} 
-      {feeds}
-      {isMobile}
-      activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
-      onViewChange={handleViewChange} 
-      onAddFeed={handleAddFeed}
-      onRefresh={loadData}
-    />
+    <div class="nav-panels" class:collapsed={fullscreenReader}>
+      {#if !isMobile || (isMobile && !selectedId)}
+        <Sidebar 
+          {navItems} 
+          {categories} 
+          {feeds}
+          {isMobile}
+          activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
+          onViewChange={handleViewChange} 
+          onAddFeed={handleAddFeed}
+          onRefresh={loadData}
+        />
+      {/if}
+      
+      {#if currentView === 'inbox' || currentView === 'favorites'}
+        {#if !isMobile || (isMobile && !selectedId)}
+          <FeedList 
+            bind:searchQuery
+            articles={filteredArticles} 
+            selectedId={selectedId} 
+            isExpanded={isFeedExpanded}
+            onToggleExpand={toggleFeedExpand}
+            onSelect={handleSelect} 
+            onToggleFavorite={handleToggleFavorite}
+            onShare={handleShare}
+          />
+        {/if}
+      {/if}
+    </div>
     
     {#if loading && articles.length === 0}
       <div class="loading-overlay">
@@ -372,23 +391,12 @@
       </div>
     {:else}
       {#if currentView === 'inbox' || currentView === 'favorites'}
-        {#if !isMobile || (isMobile && !selectedId)}
-          <FeedList 
-            bind:searchQuery
-            articles={filteredArticles} 
-            {selectedId} 
-            isExpanded={isFeedExpanded}
-            onToggleExpand={toggleFeedExpand}
-            onSelect={handleSelect} 
-            onToggleFavorite={handleToggleFavorite}
-            onShare={handleShare}
-          />
-        {/if}
-        
         {#if filteredArticles.length > 0 && (!isMobile || (isMobile && selectedId))}
           <PostViewer 
             article={selectedArticle} 
             onBack={() => selectedId = null}
+            isFullscreen={fullscreenReader}
+            onToggleFullscreen={toggleFullscreen}
           />
         {/if}
       {:else if currentView === 'filters'}
@@ -410,6 +418,25 @@
     display: flex;
     height: 100vh;
     overflow: hidden;
+    background: var(--md-background);
+  }
+  .nav-panels {
+    display: flex;
+    height: 100%;
+    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+    transform-origin: left center;
+    flex-shrink: 0;
+    max-width: 1000px; /* High enough to allow full sidebar + list */
+  }
+  .nav-panels.collapsed {
+    max-width: 0 !important;
+    opacity: 0;
+    pointer-events: none;
+    transform: scaleX(0.95);
+  }
+  .app-container > :global(.sidebar),
+  .app-container > :global(.feed-list) {
+     flex-shrink: 0;
   }
   .loading-overlay, .error-view {
     flex: 1;
@@ -427,7 +454,7 @@
     height: 40px;
     border: 4px solid var(--md-surface-variant);
     border-top: 4px solid var(--md-primary);
-    border-radius: 50%;
+    border-radius: var(--radius-full);
     animation: spin 1s linear infinite;
   }
   @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

@@ -105,28 +105,32 @@
 </div>
 
 <style>
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center; z-index: 3000; backdrop-filter: blur(4px); }
-  .modal { background: var(--md-surface); width: 100%; max-width: 460px; border-radius: var(--radius-xl); border: 1px solid var(--md-outline); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6); overflow: hidden; }
-  .modal-header { padding: 24px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--md-outline); }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); display: flex; align-items: center; justify-content: center; z-index: 3000; backdrop-filter: blur(8px); }
+  .modal { background: var(--md-surface); width: 100%; max-width: 480px; border-radius: 32px; border: 1px solid var(--md-outline); box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4); overflow: hidden; }
+  .modal-header { padding: 32px 32px 12px 32px; display: flex; align-items: center; justify-content: space-between; }
   .header-left { display: flex; align-items: center; gap: 12px; }
-  .header-left h2 { font: var(--m3-headline-small); margin: 0; color: var(--md-on-surface); font-weight: 700; }
-  .close-btn { background: transparent; border: none; color: var(--md-on-surface-variant); cursor: pointer; padding: 4px; border-radius: var(--radius-full); }
+  .header-left h2 { font: var(--m3-headline-small); margin: 0; color: var(--md-on-surface); font-weight: 800; }
+  .close-btn { background: var(--md-surface-variant); border: none; color: var(--md-on-surface-variant); cursor: pointer; padding: 10px; border-radius: var(--radius-full); display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+  .close-btn:hover { background: var(--md-outline); color: var(--md-on-surface); }
   
-  .input-area { padding: 32px 24px; }
-  .field label { display: block; font: var(--m3-label-medium); color: var(--md-on-surface-variant); margin-bottom: 8px; font-weight: 600; }
+  .input-area { padding: 24px 32px 40px 32px; }
+  .field label { display: block; font: var(--m3-label-large); color: var(--md-primary); margin-bottom: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
   
   .input-wrapper { position: relative; display: flex; align-items: center; }
-  .detect-badge { position: absolute; right: 12px; font: var(--m3-label-small); padding: 4px 10px; border-radius: var(--radius-s); background: var(--md-surface-variant); color: var(--md-on-surface-variant); font-weight: 800; text-transform: uppercase; pointer-events: none; transition: all 0.2s; }
-  .detect-badge.reddit { background: #FF4500; color: white; }
-  .detect-badge.mastodon { background: #6364FF; color: white; }
-  .detect-badge.rss { background: var(--md-primary-container); color: var(--md-on-primary-container); }
+  .detect-badge { position: absolute; right: 12px; font: var(--m3-label-small); padding: 4px 12px; border-radius: var(--radius-full); background: var(--md-surface-variant); color: var(--md-on-surface-variant); font-weight: 800; text-transform: uppercase; pointer-events: none; transition: all 0.2s; border: 1px solid var(--md-outline); }
+  .detect-badge.reddit { background: #FF4500; color: white; border: none; }
+  .detect-badge.mastodon { background: #6364FF; color: white; border: none; }
+  .detect-badge.rss { background: var(--md-primary-container); color: var(--md-on-primary-container); border: 1px solid var(--md-primary); }
 
-  .field input { width: 100%; background: var(--md-surface-variant); border: 1px solid var(--md-outline); padding: 14px 16px; border-radius: var(--radius-m); color: var(--md-on-surface); font: var(--m3-body-large); outline: none; transition: border-color 0.2s; }
-  .field input:focus { border-color: var(--md-primary); }
-  .error-msg { margin-top: 12px; color: #ff5252; font: var(--m3-label-medium); }
-  .modal-footer { padding: 20px 24px; display: flex; justify-content: flex-end; gap: 12px; background: var(--md-surface-variant); border-top: 1px solid var(--md-outline); opacity: 0.9; }
-  .btn-text { background: transparent; border: none; color: var(--md-on-surface-variant); padding: 10px 20px; cursor: pointer; font: var(--m3-label-large); font-weight: 700; }
-  .btn-primary { background: var(--md-primary); color: var(--md-on-primary); border: none; padding: 10px 24px; border-radius: var(--radius-m); font: var(--m3-label-large); font-weight: 700; cursor: pointer; }
-  .animate-in { animation: modalIn 0.2s ease-out; }
-  @keyframes modalIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+  .field input { width: 100%; background: var(--md-surface); border: 1px solid var(--md-outline); padding: 16px 20px; border-radius: var(--radius-full); color: var(--md-on-surface); font: var(--m3-body-large); outline: none; transition: all 0.2s; }
+  .field input:focus { border-color: var(--md-primary); box-shadow: 0 0 0 2px var(--md-primary-container); }
+  .error-msg { margin-top: 12px; color: #ff5252; font: var(--m3-label-medium); padding: 8px 16px; background: #ff525211; border-radius: var(--radius-m); }
+  .modal-footer { padding: 24px 32px; display: flex; justify-content: flex-end; gap: 16px; background: var(--md-surface-variant); border-top: 1px solid var(--md-outline); }
+  .btn-text { background: transparent; border: none; color: var(--md-on-surface-variant); padding: 12px 24px; cursor: pointer; font: var(--m3-label-large); font-weight: 700; border-radius: var(--radius-full); }
+  .btn-text:hover { background: var(--md-outline); }
+  .btn-primary { background: var(--md-primary); color: var(--md-on-primary); border: none; padding: 12px 32px; border-radius: var(--radius-full); font: var(--m3-label-large); font-weight: 700; cursor: pointer; transition: all 0.2s; }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 12px var(--md-primary-container); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+  .animate-in { animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
+  @keyframes modalIn { from { opacity: 0; transform: translateY(20px) scale(0.98); } to { opacity: 1; transform: translateY(0) scale(1); } }
 </style>

@@ -49,7 +49,7 @@ clean:
 	rm -rf $(DATA_DIR)/*
 
 # Tests & Benchmarks
-test:
+test: build-ui
 	go test -v ./internal/...
 
 bench:
