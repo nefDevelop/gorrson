@@ -25,6 +25,17 @@ jobs:
         go mod tidy
         go mod download
 
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Build Frontend
+      run: |
+        cd internal/api/web
+        npm install
+        npm run build
+
     - name: Run Tests
       run: go test -v ./internal/...
 
