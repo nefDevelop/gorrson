@@ -72,6 +72,7 @@
 
   const handleNavClick = (id) => {
     activePopover = null;
+    showUserMenu = false;
     onViewChange(id);
   };
   
@@ -85,6 +86,7 @@
   };
 
   const handleLogout = () => {
+    showUserMenu = false;
     localStorage.removeItem('token');
     window.location.reload();
   };

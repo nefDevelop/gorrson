@@ -2,13 +2,14 @@
 
 :root {
   /* Adwaita 4 + MD3 Expressive Base */
-  --md-primary: #D0BCFF;
+  --md-primary: #A58BFF; /* Muted Primary */
   --md-on-primary: #381E72;
   --md-primary-container: #4F378B;
   --md-on-primary-container: #EADDFF;
 
   --md-surface: #242424; /* Adwaita Surface */
-  --md-on-surface: #FFFFFF;
+  --md-on-surface: #B0B0B0; /* Muted Gray Text */
+  --md-on-surface-variant: #808080; /* Darker Variant Gray */
   --md-background: #1E1E1E; /* Adwaita Deep */
   --md-outline: #353535;
   --md-surface-variant: #2D2D2D;

@@ -416,8 +416,14 @@
         </div>
       </div>
     {:else}
-      <div class="filters-view-embedded">
-        <Filters {feeds} />
+      <div class="settings-section">
+        <div class="section-header">
+          <Shield size={18} />
+          <span>Filters & Content Cleaning</span>
+        </div>
+        <div class="filters-view-embedded">
+          <Filters {feeds} headless={true} />
+        </div>
       </div>
     {/if}
   </div>
