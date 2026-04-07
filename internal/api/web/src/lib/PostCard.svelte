@@ -33,6 +33,7 @@
   </p>
 
   <div class="footer-row">
+    <span class="source-tag">{article.source}</span>
     <div class="actions">
       <button 
         class="action-btn" 
@@ -74,15 +75,20 @@
   }
 
   .post-card.selected {
-    background: var(--md-primary-container);
-    border-color: var(--md-primary);
-    box-shadow: none; /* Adwaita 4 prefers flat surfaces */
+    background: var(--md-surface-variant);
+    border-color: var(--md-outline);
+    border-left: 4px solid var(--md-primary);
+    padding-left: 12px; 
+    box-shadow: none;
   }
 
-  .post-card.selected .title,
+  .post-card.selected .title {
+    color: var(--md-primary);
+  }
+
   .post-card.selected .summary,
   .post-card.selected .time {
-    color: var(--md-on-primary-container);
+    color: var(--md-on-surface);
     opacity: 1;
   }
   .title-row {
@@ -134,10 +140,23 @@
   }
 
   .footer-row {
-    margin-top: 8px; /* Reduced from 16px */
+    margin-top: 8px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
+  }
+
+  .source-tag {
+    font: var(--m3-label-small);
+    color: var(--md-on-surface-variant);
+    opacity: 0.6;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 160px;
   }
 
   .actions {

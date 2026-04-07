@@ -46,18 +46,6 @@
   <header class="header-bar">
     <div></div> <!-- Empty spacer to keep actions aligned -->
     <div class="actions">
-      {#if showSearch}
-        <div class="search-box" transition:slide={{ axis: 'x', duration: 300 }}>
-          <input 
-            bind:value={searchQuery} 
-            bind:this={searchInput}
-            placeholder={$t('search') || 'Search...'} 
-            on:keydown={handleKeydown}
-            class="search-input"
-          />
-        </div>
-      {/if}
-
       <button class="action-btn {showSearch ? 'active' : ''}" on:click={toggleSearch} title="Search feeds">
         {#if showSearch}
           <X size={18} />
@@ -78,6 +66,26 @@
     </div>
   </header>
 
+  {#if showSearch}
+    <div class="floating-search" in:fly={{ y: -10, duration: 300 }} out:fly={{ y: -10, duration: 200 }}>
+      <span class="search-icon-inner">
+        <Search size={16} />
+      </span>
+      <input 
+        bind:value={searchQuery} 
+        bind:this={searchInput}
+        placeholder={$t('search') || 'Search...'} 
+        on:keydown={handleKeydown}
+        class="search-input"
+      />
+      {#if searchQuery}
+        <button class="clear-btn" on:click={() => searchQuery = ""}>
+          <X size={14} />
+        </button>
+      {/if}
+    </div>
+  {/if}
+
   <!-- Solid surface background for the gap -->
   <div class="corner-bg"></div>
   
@@ -85,7 +93,7 @@
   <div class="corner-arc"></div>
 
   <div class="feed-content">
-    <div class="articles-container scroll-area">
+    <div class="articles-container scroll-area" class:search-open={showSearch}>
       {#each articles as item}
           <PostCard 
             article={{...item, selected: selectedId === item.id}} 
@@ -196,7 +204,8 @@
 
   .actions {
     display: flex;
-    gap: 8px;
+    gap: 4px;
+    align-items: center;
   }
 
   .action-btn {
@@ -204,19 +213,29 @@
     border: none;
     color: var(--md-on-surface-variant);
     cursor: pointer;
-    padding: 8px;
-    border-radius: var(--radius-full); /* Redondeado perfecto */
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
     transition: all 0.2s;
+    flex-shrink: 0;
   }
   .action-btn:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
 
 
   .articles-container {
     flex: 1;
-    padding: 24px 16px 24px 16px;
+    padding: 24px 16px;
     display: flex;
     flex-direction: column;
     gap: 12px;
+    transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .articles-container.search-open {
+    padding-top: 80px;
   }
 
   .empty-state {
@@ -278,27 +297,54 @@
     background: var(--md-primary-container);
   }
 
-  .search-box {
+  .floating-search {
+    position: absolute;
+    top: calc(var(--header-height) + 12px);
+    left: 24px;
+    right: 24px;
+    z-index: 100;
     display: flex;
     align-items: center;
-    background: var(--md-surface-variant);
-    border-radius: var(--radius-m);
-    padding: 0 12px;
-    margin-right: 8px;
-    height: 36px;
+    background: var(--md-surface);
     border: 1px solid var(--md-outline);
+    border-radius: var(--radius-full);
+    padding: 0 16px;
+    height: 44px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    gap: 12px;
+  }
+
+  .search-icon-inner {
+    color: var(--md-primary);
+    opacity: 0.7;
   }
 
   .search-input {
     background: transparent;
     border: none;
     color: var(--md-on-surface);
-    font: var(--m3-label-large);
+    font: var(--m3-body-large);
     outline: none;
-    width: 200px;
+    flex: 1;
+  }
+
+  .clear-btn {
+    background: var(--md-surface-variant);
+    border: none;
+    color: var(--md-on-surface-variant);
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
   }
 
   @media (max-width: 600px) {
-    .search-input { width: 120px; }
+    .floating-search {
+      left: 12px;
+      right: 12px;
+    }
   }
 </style>
