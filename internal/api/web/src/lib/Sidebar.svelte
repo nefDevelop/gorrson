@@ -206,14 +206,6 @@
               {/if}
             </button>
           {/each}
-          <button class="cat-item add-ghost-item" on:click={handleAddClick}>
-            <div class="item-left">
-              <div class="plus-circle">
-                <Plus size={12} strokeWidth={4} />
-              </div>
-              <span>{$t('add_feed')}</span>
-            </div>
-          </button>
         </nav>
       {/if}
 
@@ -371,38 +363,6 @@
     display: flex;
     gap: 4px;
     margin-left: auto;
-  }
-
-  .add-ghost-item {
-    margin-top: 4px;
-    opacity: 0.6;
-    border: 1px dashed transparent;
-  }
-
-  .add-ghost-item:hover {
-    opacity: 1;
-    background: var(--md-secondary-container) !important;
-    color: var(--md-primary) !important;
-    border-color: var(--md-primary);
-  }
-
-  .plus-circle {
-    width: 24px; /* Slightly larger base */
-    height: 24px;
-    border-radius: 8px;
-    background: var(--md-surface-variant);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--md-on-surface-variant);
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    flex-shrink: 0;
-  }
-
-  .add-ghost-item:hover .plus-circle {
-    background: var(--md-primary);
-    color: var(--md-on-primary);
-    box-shadow: 0 2px 8px var(--shadow-color);
   }
 
   .nav-group {

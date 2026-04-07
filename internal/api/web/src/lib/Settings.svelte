@@ -4,11 +4,43 @@
   import Filters from './Filters.svelte';
   import { onMount } from 'svelte';
   import { Share2, Plus, Trash2, ExternalLink as ExtIcon } from 'lucide-svelte';
+  import { fly, fade } from 'svelte/transition';
 
   export let onLogout = () => {};
+  export let onRefresh = () => {};
   export let feeds = [];
   export let username = '';
   export let scrollRead = false;
+
+  import { updateFeed, deleteFeed } from './api.js';
+
+  async function handleUpdateFeed(id, title, category) {
+    try {
+      await updateFeed(id, { title, category });
+      onRefresh();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  let feedToDelete = null;
+
+  async function confirmDeleteFeed() {
+    if (!feedToDelete) return;
+    try {
+      await deleteFeed(feedToDelete.id);
+      feedToDelete = null;
+      onRefresh();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function handleDeleteFeed(feed) {
+    feedToDelete = feed;
+  }
+
+  $: uniqueCategories = Array.from(new Set(feeds.map(f => f.category).filter(Boolean))).sort();
 
   let activeTab = 'general';
   
@@ -243,7 +275,7 @@
     </div>
     <div class="tabs">
       <button class="tab {activeTab === 'general' ? 'active' : ''}" on:click={() => activeTab = 'general'}>General</button>
-      <button class="tab {activeTab === 'categories' ? 'active' : ''}" on:click={() => activeTab = 'categories'}>{$t('categories')}</button>
+      <button class="tab {activeTab === 'sources' ? 'active' : ''}" on:click={() => activeTab = 'sources'}>{$t('sources')}</button>
       <button class="tab {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
       <button class="tab {activeTab === 'sharing' ? 'active' : ''}" on:click={() => activeTab = 'sharing'}>{$t('sharing')}</button>
     </div>
@@ -417,6 +449,48 @@
           {/each}
         </div>
       </div>
+    {:else if activeTab === 'sources'}
+      <div class="settings-section">
+        <div class="section-header">
+          <Globe size={18} />
+          <span>{$t('sources')} Management</span>
+        </div>
+        <div class="feeds-admin-list">
+          {#each feeds as feed}
+            <div class="admin-feed-card" in:fly={{ y: 10, duration: 200 }}>
+              <div class="feed-main-info">
+                 <div class="input-stack">
+                   <span class="tiny-label">Title</span>
+                   <input 
+                      class="modern-input title-input" 
+                      bind:value={feed.title} 
+                      on:change={() => handleUpdateFeed(feed.id, feed.title, feed.category)} 
+                    />
+                 </div>
+                 <div class="input-stack cate-stack">
+                   <span class="tiny-label">Category</span>
+                   <input 
+                      class="modern-input cat-input" 
+                      bind:value={feed.category} 
+                      list="category-suggestions"
+                      on:change={() => handleUpdateFeed(feed.id, feed.title, feed.category)} 
+                    />
+                 </div>
+              </div>
+              <button class="btn-icon-danger" on:click={() => handleDeleteFeed(feed)} title="Delete Feed">
+                 <Trash2 size={18} />
+              </button>
+            </div>
+          {:else}
+            <div class="empty-list">No feeds found. Add some from the sidebar.</div>
+          {/each}
+        </div>
+      </div>
+      <datalist id="category-suggestions">
+        {#each uniqueCategories as cat}
+          <option value={cat} />
+        {/each}
+      </datalist>
     {:else}
       <div class="settings-section">
         <div class="section-header">
@@ -429,6 +503,26 @@
       </div>
     {/if}
   </div>
+
+  {#if feedToDelete}
+    <div class="modal-overlay" transition:fade={{ duration: 200 }} on:click={() => feedToDelete = null}>
+      <div class="modal-card" transition:fly={{ y: 20, duration: 300 }} on:click|stopPropagation>
+        <div class="modal-icon-header">
+           <div class="warning-circle">
+              <Trash2 size={24} />
+           </div>
+        </div>
+        <div class="modal-body">
+          <h2>Delete Feed?</h2>
+          <p>Are you sure you want to remove <strong>{feedToDelete.title}</strong>? This will delete all its articles from your database. This action cannot be undone.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-secondary" on:click={() => feedToDelete = null}>Cancel</button>
+          <button class="btn-danger" on:click={confirmDeleteFeed}>Delete Feed</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -713,17 +807,128 @@
     font-weight: 700;
     color: var(--md-on-surface);
   }
-  .edit-input {
-    flex: 1;
-    margin-right: 12px;
-    padding: 8px 16px;
-    border: 1px solid var(--md-primary);
-    border-radius: var(--radius-full);
+  .filters-view-embedded {
+    margin-top: 16px;
+    border: 1px solid var(--md-outline);
+    border-radius: 12px;
+    padding: 12px;
     background: var(--md-surface-variant);
+  }
+
+  /* Sources Management Styles */
+  .feeds-admin-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 16px;
+  }
+
+  .admin-feed-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 16px;
+    background: var(--md-surface-variant);
+    border: 1px solid var(--md-outline);
+    border-radius: 16px;
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+
+  .admin-feed-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px var(--shadow-color);
+  }
+
+  .feed-main-info {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+  }
+
+  .input-stack {
+    flex: 2;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .cate-stack {
+    flex: 1;
+  }
+
+  .tiny-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 700;
+    opacity: 0.5;
+    color: var(--md-on-surface-variant);
+    margin-left: 4px;
+  }
+
+  .btn-icon-danger {
+    background: transparent;
+    border: none;
+    color: #ff5252;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-icon-danger:hover {
+    background: rgba(255, 82, 82, 0.1);
+    transform: scale(1.05);
+  }
+
+  @media (max-width: 800px) {
+    .feed-main-info {
+      flex-direction: column;
+    }
+  }
+
+  /* Shared UI Components */
+  .modern-input {
+    background: var(--md-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-full);
+    padding: 10px 20px;
     color: var(--md-on-surface);
     font: var(--m3-body-medium);
     outline: none;
+    transition: all 0.2s;
+    width: 100%;
+    box-sizing: border-box;
   }
+
+  .modern-input:focus { 
+    border-color: var(--md-primary); 
+    box-shadow: 0 0 0 2px var(--md-primary-container); 
+  }
+
+  .btn-icon-danger {
+    background: transparent;
+    border: none;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .btn-icon-danger:hover { 
+    background: #ff525222; 
+    color: #ff5252; 
+  }
+
   .btn-primary-small {
     background: var(--md-primary);
     color: var(--md-on-primary);
@@ -735,17 +940,6 @@
     cursor: pointer;
   }
   .service-form { display: flex; gap: 12px; margin-bottom: 12px; }
-  .modern-input {
-    background: var(--md-surface);
-    border: 1px solid var(--md-outline);
-    border-radius: var(--radius-full);
-    padding: 12px 20px;
-    color: var(--md-on-surface);
-    font: var(--m3-body-medium);
-    outline: none;
-    transition: all 0.2s;
-  }
-  .modern-input:focus { border-color: var(--md-primary); box-shadow: 0 0 0 2px var(--md-primary-container); }
   .modern-input.wide { flex: 1; }
   
   .btn-primary {
@@ -791,17 +985,100 @@
   .svc-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
   .svc-name { font: var(--m3-title-small); color: var(--md-on-surface); font-weight: 700; }
   .svc-template { font: var(--m3-body-small); color: var(--md-on-surface-variant); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-family: var(--font-mono); }
-  
-  .btn-icon-danger {
-    background: transparent;
-    border: none;
-    color: var(--md-on-surface-variant);
-    cursor: pointer;
-    padding: 8px;
-    border-radius: 50%;
-    transition: all 0.2s;
-  }
-  .btn-icon-danger:hover { background: #ff525222; color: #ff5252; }
+
 
   .empty-list { text-align: center; padding: 40px; color: var(--md-on-surface-variant); font: var(--m3-body-large); opacity: 0.6; }
+
+  /* Modal Styles */
+  .modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-card {
+    background: var(--md-surface);
+    width: 100%;
+    max-width: 400px;
+    border-radius: 28px;
+    border: 1px solid var(--md-outline);
+    box-shadow: 0 24px 48px rgba(0,0,0,0.3);
+    padding: 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .warning-circle {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    background: rgba(255, 82, 82, 0.1);
+    color: #ff5252;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 8px;
+  }
+
+  .modal-body h2 {
+    margin: 0 0 8px 0;
+    color: var(--md-on-surface);
+    font: var(--m3-headline-small);
+  }
+
+  .modal-body p {
+    margin: 0;
+    color: var(--md-on-surface-variant);
+    font: var(--m3-body-medium);
+    line-height: 1.6;
+  }
+
+  .modal-footer {
+    display: flex;
+    gap: 12px;
+    width: 100%;
+    margin-top: 16px;
+  }
+
+  .modal-footer button {
+    flex: 1;
+    height: 48px;
+    border-radius: var(--radius-full);
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font-main);
+  }
+
+  .btn-secondary {
+    background: var(--md-surface-variant);
+    border: 1px solid var(--md-outline);
+    color: var(--md-on-surface);
+  }
+
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .btn-danger {
+    background: #ff5252;
+    border: none;
+    color: white;
+  }
+
+  .btn-danger:hover {
+    background: #ff3333;
+    box-shadow: 0 4px 12px rgba(255, 82, 82, 0.3);
+  }
 </style>

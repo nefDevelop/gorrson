@@ -24,6 +24,8 @@
   let allLoaded = false;
   let loadingMore = false;
   let scrollRead = localStorage.getItem('gorrson-scroll-read') === 'true';
+  let unreadOnly = false;
+  let sortMode = "newest"; // "newest", "oldest"
 
   $: localStorage.setItem('gorrson-scroll-read', scrollRead.toString());
 
@@ -62,7 +64,8 @@
       const params = { 
         category: activeCategory, 
         feed_id: activeSource, 
-        sort: currentView === 'favorites' ? 'favorite' : undefined,
+        sort: currentView === 'favorites' ? 'favorite' : sortMode,
+        unread: unreadOnly ? 'true' : undefined,
         search: searchQuery,
         limit: LIMIT,
         offset: offset
@@ -278,6 +281,10 @@
   }
   */
 
+  $: if (isAuthenticated && (unreadOnly !== undefined || sortMode)) {
+    loadData();
+  }
+
   // Pre-filter search logic (client side)
   $: filteredArticles = (() => {
     if (!searchQuery || searchQuery.trim().length === 0) return articles;
@@ -443,6 +450,8 @@
             {loadingMore}
             {allLoaded}
             {scrollRead}
+            bind:unreadOnly
+            bind:sortMode
           />
         {/if}
       {/if}

@@ -2,7 +2,7 @@
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import PostCard from './PostCard.svelte';
-  import { Search, CheckCheck, PanelRightClose, PanelRightOpen, Inbox, X } from 'lucide-svelte';
+  import { Search, CheckCheck, PanelRightClose, PanelRightOpen, Inbox, X, ListFilter, Clock, CheckCircle2 } from 'lucide-svelte';
   import { t } from './i18n.js';
   import { fade, slide } from 'svelte/transition';
   import { onMount } from 'svelte';
@@ -39,8 +39,15 @@
   /** @type {(article: any) => void} */
   export let onShare;
 
+  /** @type {boolean} */
+  export let unreadOnly = false;
+
+  /** @type {string} */
+  export let sortMode = 'newest';
+
   export let searchQuery = "";
   let showSearch = false;
+  let showFilters = false;
   let searchInput;
 
   function toggleSearch() {
@@ -61,47 +68,56 @@
   /** @type {boolean} */
   export let scrollRead = false;
  
-  let observer;
+  let statusObserver;
+  let scrollObserver;
  
   onMount(() => {
-    observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        // Infinite scroll check at the bottom
-        if (entry.target.classList.contains('sentinel')) {
-          if (entry.isIntersecting && !loadingMore && !allLoaded) {
-            onLoadMore();
+    // Observer for marking articles as read (top 20% of screen)
+    statusObserver = new IntersectionObserver((entries) => {
+      if (scrollRead) {
+        entries.forEach(entry => {
+          if (entry.isIntersecting && entry.target.classList.contains('post-card') && !entry.target.classList.contains('read')) {
+            const id = entry.target.getAttribute('data-id');
+            if (id) onMarkAsRead(id);
           }
-          return;
-        }
-
-        // Scroll to read check (only when article is in the top 30% area)
-        if (scrollRead && entry.isIntersecting && entry.target.classList.contains('post-card') && !entry.target.classList.contains('read')) {
-          const id = entry.target.getAttribute('data-id');
-          if (id) onMarkAsRead(id);
-        }
-      });
+        });
+      }
     }, { 
       root: document.querySelector('.articles-container'),
-      // Focus on the top 20% of the screen. 
-      // This means as they are about to leave the top or are well into view.
       rootMargin: '0px 0px -80% 0px',
       threshold: 0.1
     });
 
+    // Observer for infinite scroll (bottom of the list)
+    scrollObserver = new IntersectionObserver((entries) => {
+      const sentinel = entries[0];
+      if (sentinel.isIntersecting && !loadingMore && !allLoaded) {
+        onLoadMore();
+      }
+    }, { 
+      root: document.querySelector('.articles-container'),
+      threshold: 0.1 
+    });
+
     return () => {
-      if (observer) observer.disconnect();
+      if (statusObserver) statusObserver.disconnect();
+      if (scrollObserver) scrollObserver.disconnect();
     };
   });
 
-  // Re-observe when list or scrollRead changed
+  // Re-observe logic
   let sentinelEl;
-  $: if (observer && (articles || scrollRead !== undefined)) {
-    observer.disconnect();
+  $: if (statusObserver && (articles || scrollRead !== undefined)) {
+    statusObserver.disconnect();
     setTimeout(() => {
       const cards = document.querySelectorAll('.post-card:not(.read)');
-      cards.forEach(card => observer.observe(card));
-      if (sentinelEl) observer.observe(sentinelEl);
+      cards.forEach(card => statusObserver.observe(card));
     }, 100);
+  }
+
+  $: if (scrollObserver && sentinelEl) {
+    scrollObserver.disconnect();
+    scrollObserver.observe(sentinelEl);
   }
 </script>
 
@@ -116,6 +132,34 @@
           <Search size={18} />
         {/if}
       </button>
+      <div class="filter-wrapper">
+        <button class="action-btn {unreadOnly || sortMode !== 'newest' ? 'active' : ''}" on:click={() => showFilters = !showFilters} title="Filter and Sort">
+          <ListFilter size={18} />
+        </button>
+        {#if showFilters}
+          <div class="filter-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
+            <div class="menu-section">
+              <span class="section-title">Filter</span>
+              <button class="menu-item {unreadOnly ? 'selected' : ''}" on:click={() => unreadOnly = !unreadOnly}>
+                <CheckCircle2 size={16} />
+                <span>Unread Only</span>
+              </button>
+            </div>
+            <div class="menu-divider"></div>
+            <div class="menu-section">
+              <span class="section-title">Sort</span>
+              <button class="menu-item {sortMode === 'newest' ? 'selected' : ''}" on:click={() => sortMode = 'newest'}>
+                <Clock size={16} />
+                <span>Newest</span>
+              </button>
+              <button class="menu-item {sortMode === 'oldest' ? 'selected' : ''}" on:click={() => sortMode = 'oldest'}>
+                <Clock size={16} style="transform: rotate(180deg)" />
+                <span>Oldest</span>
+              </button>
+            </div>
+          </div>
+        {/if}
+      </div>
       <button class="action-btn" on:click={onMarkAllRead} title="Mark all as read">
         <CheckCheck size={18} />
       </button>
@@ -178,10 +222,16 @@
         </div>
       {/each}
 
-      {#if articles.length > 0 && !allLoaded}
+      {#if articles.length > 0}
         <div class="sentinel" bind:this={sentinelEl}>
           {#if loadingMore}
             <div class="loading-more-spinner"></div>
+          {:else if !allLoaded}
+            <button class="load-more-btn" on:click={onLoadMore}>
+              Load More
+            </button>
+          {:else}
+            <span class="all-loaded-text">All articles loaded</span>
           {/if}
         </div>
       {/if}
@@ -222,7 +272,7 @@
     max-height: var(--header-height);
     border-bottom-right-radius: 32px; 
     position: relative;
-    z-index: 10;
+    z-index: 20;
   }
 
   /* Eraser for the straight line crossing the curved gap */
@@ -428,6 +478,100 @@
     justify-content: center;
     width: 100%;
     margin-top: 12px;
+  }
+
+  .filter-wrapper {
+    position: relative;
+  }
+
+  .filter-menu {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: 180px;
+    background: var(--md-surface-variant);
+    border-radius: 12px;
+    box-shadow: 0 10px 25px var(--shadow-color);
+    border: 1px solid var(--md-outline);
+    z-index: 100;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .menu-section {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .section-title {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: var(--md-on-surface-variant);
+    opacity: 0.6;
+    padding: 4px 8px;
+    letter-spacing: 0.5px;
+  }
+
+  .menu-divider {
+    height: 1px;
+    background: var(--md-outline);
+    margin: 4px 0;
+    opacity: 0.5;
+  }
+
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border: none;
+    background: transparent;
+    color: var(--md-on-surface);
+    font-size: 13px;
+    font-family: var(--font-main);
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.2s;
+    text-align: left;
+    width: 100%;
+  }
+
+  .menu-item:hover {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .menu-item.selected {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+  }
+
+  .load-more-btn {
+    background: var(--md-surface-variant);
+    border: 1px solid var(--md-outline);
+    color: var(--md-on-surface);
+    padding: 8px 24px;
+    border-radius: var(--radius-full);
+    font-size: 13px;
+    font-family: var(--font-main);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .load-more-btn:hover {
+    background: var(--md-primary-container);
+    border-color: var(--md-primary);
+    color: var(--md-on-primary-container);
+  }
+
+  .all-loaded-text {
+    font-size: 12px;
+    color: var(--md-on-surface-variant);
+    opacity: 0.5;
+    font-weight: 500;
   }
 
   .loading-more-spinner {

@@ -123,3 +123,26 @@ export async function addFeed(url, category = '') {
     return {};
   }
 }
+
+export async function updateFeed(id, data) {
+  const res = await fetch(`/feeds/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(data),
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('Failed to update feed');
+  return res.json();
+}
+
+export async function deleteFeed(id) {
+  const res = await fetch(`/feeds/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  if (!res.ok) throw new Error('Failed to delete feed');
+}
