@@ -3,6 +3,7 @@
   import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon } from 'lucide-svelte';
   import Filters from './Filters.svelte';
   import { onMount } from 'svelte';
+  import { Share2, Plus, Trash2, ExternalLink as ExtIcon } from 'lucide-svelte';
 
   export let onLogout = () => {};
   export let feeds = [];
@@ -195,6 +196,41 @@
     }
     editingCat = null;
   }
+
+  // Export Services state
+  let exportServices = JSON.parse(localStorage.getItem('gorrson-export-services') || '[]');
+  let newServiceName = "";
+  let newServiceTemplate = "";
+
+  function saveServices() {
+    localStorage.setItem('gorrson-export-services', JSON.stringify(exportServices));
+    // Trigger update in app
+    window.dispatchEvent(new Event('storage'));
+  }
+
+  function addService() {
+    if (!newServiceName || !newServiceTemplate) return;
+    exportServices = [...exportServices, { 
+      id: Date.now().toString(), 
+      name: newServiceName, 
+      template: newServiceTemplate 
+    }];
+    newServiceName = "";
+    newServiceTemplate = "";
+    saveServices();
+  }
+
+  function removeService(id) {
+    exportServices = exportServices.filter(s => s.id !== id);
+    saveServices();
+  }
+
+  const examples = [
+    { name: 'Obsidian', template: 'obsidian://new?title={title}&content={url}' },
+    { name: 'Pocket', template: 'https://getpocket.com/edit?url={url}' },
+    { name: 'WhatsApp', template: 'https://wa.me/?text={title}%20{url}' },
+    { name: 'Telegram', template: 'https://t.me/share/url?url={url}&text={title}' }
+  ];
 </script>
 
 <div class="view-container">
@@ -207,6 +243,7 @@
       <button class="tab {activeTab === 'general' ? 'active' : ''}" on:click={() => activeTab = 'general'}>General</button>
       <button class="tab {activeTab === 'categories' ? 'active' : ''}" on:click={() => activeTab = 'categories'}>{$t('categories')}</button>
       <button class="tab {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
+      <button class="tab {activeTab === 'sharing' ? 'active' : ''}" on:click={() => activeTab = 'sharing'}>{$t('sharing')}</button>
     </div>
   </header>
 
@@ -330,6 +367,47 @@
                 </div>
               {/if}
             </div>
+          {/each}
+        </div>
+      </div>
+    {:else if activeTab === 'sharing'}
+      <div class="settings-section">
+        <div class="section-header">
+          <Share2 size={18} />
+          <span>Custom Sharing & Export</span>
+        </div>
+        
+        <div class="service-form">
+          <input bind:value={newServiceName} placeholder={$t('service_name')} class="modern-input" />
+          <input bind:value={newServiceTemplate} placeholder={$t('service_template')} class="modern-input wide" />
+          <button class="btn-primary" on:click={addService}>
+            <Plus size={18} />
+            <span>{$t('add_service')}</span>
+          </button>
+        </div>
+
+        <div class="examples-row">
+          <span class="label">Presets:</span>
+          {#each examples as ex}
+            <button class="example-chip" on:click={() => { newServiceName = ex.name; newServiceTemplate = ex.template; }}>
+              {ex.name}
+            </button>
+          {/each}
+        </div>
+
+        <div class="services-list">
+          {#each exportServices as svc}
+            <div class="svc-card">
+              <div class="svc-info">
+                <span class="svc-name">{svc.name}</span>
+                <span class="svc-template">{svc.template}</span>
+              </div>
+              <button class="btn-icon-danger" on:click={() => removeService(svc.id)}>
+                <Trash2 size={18} />
+              </button>
+            </div>
+          {:else}
+            <div class="empty-list">No custom services added yet. Use presets to get started.</div>
           {/each}
         </div>
       </div>
@@ -540,4 +618,74 @@
     font-weight: 700;
     cursor: pointer;
   }
+  .service-form { display: flex; gap: 12px; margin-bottom: 12px; }
+  .modern-input {
+    background: var(--md-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-m);
+    padding: 12px 16px;
+    color: var(--md-on-surface);
+    font: var(--m3-body-medium);
+    outline: none;
+    transition: all 0.2s;
+  }
+  .modern-input:focus { border-color: var(--md-primary); box-shadow: 0 0 0 2px var(--md-primary-container); }
+  .modern-input.wide { flex: 1; }
+  
+  .btn-primary {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    border: none;
+    padding: 12px 24px;
+    border-radius: var(--radius-m);
+    font: var(--m3-label-large);
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .examples-row { display: flex; align-items: center; gap: 8px; margin-bottom: 32px; }
+  .examples-row .label { font: var(--m3-label-medium); color: var(--md-on-surface-variant); }
+  .example-chip {
+    background: var(--md-surface-variant);
+    border: 1px solid var(--md-outline);
+    padding: 4px 12px;
+    border-radius: var(--radius-full);
+    font: var(--m3-label-small);
+    color: var(--md-primary);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .example-chip:hover { border-color: var(--md-primary); background: var(--md-primary-container); }
+
+  .services-list { display: flex; flex-direction: column; gap: 12px; }
+  .svc-card {
+    background: var(--md-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-m);
+    padding: 16px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s;
+  }
+  .svc-card:hover { border-color: var(--md-primary); transform: translateX(4px); }
+  .svc-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+  .svc-name { font: var(--m3-title-small); color: var(--md-on-surface); font-weight: 700; }
+  .svc-template { font: var(--m3-body-small); color: var(--md-on-surface-variant); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; font-family: var(--font-mono); }
+  
+  .btn-icon-danger {
+    background: transparent;
+    border: none;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+  .btn-icon-danger:hover { background: #ff525222; color: #ff5252; }
+
+  .empty-list { text-align: center; padding: 40px; color: var(--md-on-surface-variant); font: var(--m3-body-large); opacity: 0.6; }
 </style>

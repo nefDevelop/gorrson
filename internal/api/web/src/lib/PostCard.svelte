@@ -1,6 +1,6 @@
 <script>
   import { stripHtml } from './utils.js';
-  import { Star } from 'lucide-svelte';
+  import { Star, Share2 } from 'lucide-svelte';
   /** @type {{id: string, title: string, source: string, time: string, category: string, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean}} */
   export let article;
   
@@ -9,6 +9,9 @@
   
   /** @type {(id: string) => void} */
   export let onToggleFavorite;
+  
+  /** @type {() => void} */
+  export let onShare;
 
   $: summary = stripHtml(article.content || article.summary || "");
 </script>
@@ -31,6 +34,13 @@
 
   <div class="footer-row">
     <div class="actions">
+      <button 
+        class="action-btn" 
+        on:click|stopPropagation={onShare} 
+        title="Share"
+      >
+        <Share2 size={16} strokeWidth={2} />
+      </button>
       <button 
         class="action-btn" 
         class:starred={article.is_favorite} 

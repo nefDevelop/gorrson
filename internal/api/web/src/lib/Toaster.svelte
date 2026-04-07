@@ -24,12 +24,13 @@
 <style>
   .toast-container {
     position: fixed;
-    bottom: 32px;
-    right: 32px;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
     z-index: 9999;
     display: flex;
-    flex-direction: column;
-    gap: 10px;
+    flex-direction: column-reverse;
+    gap: 8px;
     pointer-events: none;
   }
 
@@ -37,38 +38,72 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 14px 18px;
+    padding: 6px 16px;
+    min-height: 48px;
     border-radius: var(--radius-m);
-    backdrop-filter: blur(12px);
+    background: var(--md-surface-variant);
     border: 1px solid var(--md-outline);
-    box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
     font: var(--m3-body-medium);
     pointer-events: all;
-    animation: slideIn 0.25s cubic-bezier(0.2, 0, 0, 1);
-    min-width: 280px;
-    max-width: 440px;
+    animation: toast-in 0.4s cubic-bezier(0, 0, 0.2, 1);
+    min-width: 320px;
+    max-width: 560px;
+    color: var(--md-on-surface);
   }
 
-  .toast-success { background: rgba(20, 40, 20, 0.95); border-color: #4caf50; }
-  .toast-error   { background: rgba(40, 15, 15, 0.95); border-color: #ff5252; }
-  .toast-info    { background: rgba(10, 20, 40, 0.95); border-color: var(--md-primary); }
+  .toast-success { 
+    background: var(--md-primary-container); 
+    border-color: var(--md-primary); 
+    color: var(--md-on-primary-container);
+  }
+  .toast-error { 
+    background: #ffecf0; 
+    border-color: #ff5252; 
+    color: #8c1d1d; 
+  }
+  .toast-info { 
+    background: var(--md-surface); 
+    border-color: var(--md-outline);
+  }
 
-  .toast-msg { flex: 1; color: var(--md-on-surface); }
+  .toast-icon {
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  .toast-msg { 
+    flex: 1; 
+  }
 
   .toast-close {
     background: transparent;
     border: none;
     cursor: pointer;
-    color: var(--md-on-surface-variant);
-    padding: 2px;
+    color: inherit;
+    padding: 8px;
     display: flex;
     align-items: center;
-    border-radius: var(--radius-s);
+    border-radius: 50%;
+    opacity: 0.6;
+    transition: opacity 0.2s;
   }
-  .toast-close:hover { background: rgba(255,255,255,0.1); }
+  .toast-close:hover { opacity: 1; background: rgba(0,0,0,0.05); }
 
-  @keyframes slideIn {
-    from { opacity: 0; transform: translateX(40px); }
-    to   { opacity: 1; transform: translateX(0); }
+  @keyframes toast-in {
+    from { opacity: 0; transform: translateY(20px) scale(0.95); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @media (max-width: 600px) {
+    .toast-container {
+      width: 100%;
+      padding: 0 16px;
+      box-sizing: border-box;
+    }
+    .toast {
+      min-width: 0;
+      width: 100%;
+    }
   }
 </style>

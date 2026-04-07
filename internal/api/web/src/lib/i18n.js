@@ -43,7 +43,15 @@ const translations = {
     "logout": "Logout",
     "language": "Language",
     "all_caught_up": "All Caught Up",
-    "no_articles_desc": "No articles found here. Check back later or try another category."
+    "no_articles_desc": "No articles found here. Check back later or try another category.",
+    "sharing": "Sharing",
+    "add_service": "Add Service",
+    "service_name": "Service Name (e.g. Obsidian)",
+    "service_template": "URL Template ({title}, {url})",
+    "share": "Share",
+    "copy_link": "Copy Link",
+    "link_copied": "Link copied to clipboard ✓",
+    "send_to": "Send To..."
   },
   es: {
     "add_feed": "Añadir Feed",
@@ -85,7 +93,15 @@ const translations = {
     "logout": "Cerrar Sesión",
     "language": "Idioma",
     "all_caught_up": "Todo al día",
-    "no_articles_desc": "No hay artículos aquí. Vuelve más tarde o prueba con otra categoría."
+    "no_articles_desc": "No hay artículos aquí. Vuelve más tarde o prueba con otra categoría.",
+    "sharing": "Compartir",
+    "add_service": "Nuevo Servicio",
+    "service_name": "Nombre (ej. Obsidian)",
+    "service_template": "Plantilla URL ({title}, {url})",
+    "share": "Compartir",
+    "copy_link": "Copiar Enlace",
+    "link_copied": "Enlace copiado al portapapeles ✓",
+    "send_to": "Enviar a..."
   }
 };
 

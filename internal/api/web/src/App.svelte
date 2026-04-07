@@ -3,7 +3,6 @@
   import Sidebar from './lib/Sidebar.svelte';
   import FeedList from './lib/FeedList.svelte';
   import PostViewer from './lib/PostViewer.svelte';
-  import CommandPalette from './lib/CommandPalette.svelte';
   import Login from './lib/Login.svelte';
   import Filters from './lib/Filters.svelte';
   import Settings from './lib/Settings.svelte';
@@ -19,6 +18,8 @@
   let selectedId = null;
   let searchQuery = "";
   let isMobile = false;
+
+  const STOP_WORDS = new Set(['de', 'a', 'el', 'la', 'en', 'y', 'que', 'os', 'un', 'una', 'con', 'para', 'por', 'lo', 'las', 'los', 'su', 'al', 'se', 'del', 'the', 'and', 'with', 'that', 'this', 'from']);
 
   const updateMobile = () => {
     isMobile = window.innerWidth <= 1000;
@@ -47,7 +48,6 @@
         fetchNews({ 
           category: activeCategory, 
           feed_id: activeSource, 
-          search: searchQuery,
           sort: currentView === 'favorites' ? 'favorite' : undefined
         }),
         fetchFeeds()
@@ -230,10 +230,33 @@
     loadData();
   }
 
-  // Real-time search
+  // Real-time search - disabled network trigger to use client-side filtering
+  /*
   $: if (isAuthenticated && searchQuery !== undefined) {
     const timer = setTimeout(loadData, 300);
   }
+  */
+
+  // Pre-filter search logic (client side)
+  $: filteredArticles = (() => {
+    if (!searchQuery || searchQuery.trim().length === 0) return articles;
+    
+    const tokens = searchQuery.toLowerCase()
+      .split(/\s+/)
+      .filter(word => word.length > 2 && !STOP_WORDS.has(word));
+    
+    if (tokens.length === 0 && searchQuery.trim().length > 0) {
+      // If we have query but all are stop words, just do a literal match of the whole query
+      return articles.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase()));
+    }
+    
+    if (tokens.length === 0) return articles;
+
+    return articles.filter(article => {
+      const searchContent = `${article.title} ${article.summary || ''} ${article.content || ''}`.toLowerCase();
+      return tokens.every(token => searchContent.includes(token));
+    });
+  })();
 
   $: selectedArticle = articles.find(n => n.id === selectedId);
 
@@ -265,6 +288,26 @@
        articles = articles.filter(a => a.id !== id);
        if (selectedId === id) selectedId = null;
     }
+  }
+
+  async function handleShare(article) {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: article.title,
+          url: article.url
+        });
+      } catch (e) {
+        await copyToClipboard(article.url);
+      }
+    } else {
+      await copyToClipboard(article.url);
+    }
+  }
+
+  async function copyToClipboard(url) {
+    await navigator.clipboard.writeText(url);
+    toastSuccess($t('link_copied'));
   }
 
   function handleLoginSuccess() {
@@ -331,16 +374,18 @@
       {#if currentView === 'inbox' || currentView === 'favorites'}
         {#if !isMobile || (isMobile && !selectedId)}
           <FeedList 
-            {articles} 
+            bind:searchQuery
+            articles={filteredArticles} 
             {selectedId} 
             isExpanded={isFeedExpanded}
             onToggleExpand={toggleFeedExpand}
             onSelect={handleSelect} 
             onToggleFavorite={handleToggleFavorite}
+            onShare={handleShare}
           />
         {/if}
         
-        {#if articles.length > 0 && (!isMobile || (isMobile && selectedId))}
+        {#if filteredArticles.length > 0 && (!isMobile || (isMobile && selectedId))}
           <PostViewer 
             article={selectedArticle} 
             onBack={() => selectedId = null}
@@ -352,8 +397,6 @@
         <Settings {feeds} onLogout={handleLogout} />
       {/if}
     {/if}
-
-    <CommandPalette bind:searchQuery placeholder={$t('search_placeholder')} />
 
     {#if showAddFeed}
       <AddFeed onSave={handleAddFeedSave} onCancel={handleAddFeedCancel} />

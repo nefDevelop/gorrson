@@ -1,13 +1,37 @@
 <script>
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { Link, Star, ExternalLink, ArrowLeft } from 'lucide-svelte';
+  import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal } from 'lucide-svelte';
   import { t } from './i18n.js';
   import { toggleFavorite } from './api.js';
+  import { success as toastSuccess } from './toast.js';
+  import { onMount } from 'svelte';
   
   /** @type {any} */
   export let article;
   export let onBack = () => {};
+
+  let exportServices = [];
+  function loadServices() {
+    exportServices = JSON.parse(localStorage.getItem('gorrson-export-services') || '[]');
+  }
+  onMount(() => {
+    loadServices();
+    const handleOutsideClick = (e) => {
+      if (showExportMenu && !e.target.closest('.export-popover-container')) {
+        showExportMenu = false;
+      }
+    };
+    window.addEventListener('click', handleOutsideClick);
+    return () => window.removeEventListener('click', handleOutsideClick);
+  });
+
+  // Re-load services if localStorage changes (e.g. from Settings tab)
+  if (typeof window !== 'undefined') {
+    window.addEventListener('storage', loadServices);
+  }
+
+  let showExportMenu = false;
 
   let progress = 0;
   let container;
@@ -29,6 +53,35 @@
     if (!article.is_full_content) {
       loadFullContent();
     }
+  }
+
+  async function shareArticle() {
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: article.title,
+          url: article.url
+        });
+      } catch (e) {
+        // Fallback if shared cancelled or fails
+        await copyToClipboard();
+      }
+    } else {
+      await copyToClipboard();
+    }
+  }
+
+  async function copyToClipboard() {
+    await navigator.clipboard.writeText(article.url);
+    toastSuccess($t('link_copied'));
+  }
+
+  function sendToService(svc) {
+    const url = svc.template
+      .replace('{title}', encodeURIComponent(article.title))
+      .replace('{url}', encodeURIComponent(article.url));
+    window.open(url, '_blank');
+    showExportMenu = false;
   }
 
   async function handleFavorite() {
@@ -91,7 +144,28 @@
           </div>
           <div class="meta-right">
             <span class="info time">{article.time}</span>
-            <button class="action-btn {article.is_favorite ? 'active' : ''}" on:click={handleFavorite} title="Favorite">
+            <button class="action-btn" on:click={shareArticle} title={$t('share')}>
+              <Share2 size={18} />
+            </button>
+
+            {#if exportServices.length > 0}
+              <div class="export-popover-container">
+                <button class="action-btn" on:click={() => showExportMenu = !showExportMenu} title={$t('send_to')}>
+                  <Send size={18} />
+                </button>
+                {#if showExportMenu}
+                  <div class="export-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 150 }}>
+                    {#each exportServices as svc}
+                      <button class="menu-item" on:click={() => sendToService(svc)}>
+                        <span class="svc-name">{svc.name}</span>
+                      </button>
+                    {/each}
+                  </div>
+                {/if}
+              </div>
+            {/if}
+
+            <button class="action-btn {article.is_favorite ? 'active' : ''}" on:click={handleFavorite} title={$t('favorites')}>
               <Star size={18} fill={article.is_favorite ? 'currentColor' : 'none'} />
             </button>
             <a class="action-btn" href={article.url} target="_blank" rel="noopener" title="Open original">
@@ -99,6 +173,7 @@
             </a>
           </div>
         </div>
+
         
         <h1 class="title">{article.title}</h1>
         
@@ -173,15 +248,66 @@
     border: none;
     color: var(--md-on-surface-variant);
     cursor: pointer;
-    padding: 8px;
-    border-radius: var(--radius-full); /* Redondeado perfecto MD3 */
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-full);
     transition: all 0.2s;
     display: flex;
     align-items: center;
+    justify-content: center;
     text-decoration: none;
+    flex-shrink: 0;
   }
   .action-btn:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
   .action-btn.active { color: var(--md-primary); }
+
+  .export-popover-container {
+    position: relative;
+    display: flex;
+  }
+
+  .export-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 12px;
+    background: var(--md-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-xl);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15), 0 8px 40px rgba(0,0,0,0.1);
+    z-index: 1000;
+    min-width: 200px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    pointer-events: all;
+    overflow: hidden;
+  }
+
+  .menu-item {
+    background: transparent;
+    border: none;
+    padding: 10px 16px;
+    border-radius: var(--radius-m);
+    color: var(--md-on-surface);
+    font: var(--m3-label-large);
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.2s;
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .menu-item:hover {
+    background: var(--md-surface-variant);
+  }
+
+  .svc-name {
+    font-weight: 600;
+  }
 
 
 

@@ -2,8 +2,9 @@
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import PostCard from './PostCard.svelte';
-  import { Search, CheckCheck, PanelRightClose, PanelRightOpen, Inbox } from 'lucide-svelte';
+  import { Search, CheckCheck, PanelRightClose, PanelRightOpen, Inbox, X } from 'lucide-svelte';
   import { t } from './i18n.js';
+  import { fade, slide } from 'svelte/transition';
   
   /** @type {Array<any>} */
   export let articles = [];
@@ -20,14 +21,49 @@
   /** @type {(id: string) => void} */
   export let onToggleFavorite;
 
+  /** @type {(article: any) => void} */
+  export let onShare;
+
+  export let searchQuery = "";
+  let showSearch = false;
+  let searchInput;
+
+  function toggleSearch() {
+    showSearch = !showSearch;
+    if (!showSearch) searchQuery = "";
+    else {
+      setTimeout(() => searchInput?.focus(), 50);
+    }
+  }
+
+  function handleKeydown(e) {
+    if (e.key === 'Escape' && showSearch) toggleSearch();
+  }
+
 </script>
 
 <section class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0 ? 'is-empty' : ''}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
   <header class="header-bar">
     <div></div> <!-- Empty spacer to keep actions aligned -->
     <div class="actions">
-      <button class="action-btn" title="Search feeds">
-        <Search size={18} />
+      {#if showSearch}
+        <div class="search-box" transition:slide={{ axis: 'x', duration: 300 }}>
+          <input 
+            bind:value={searchQuery} 
+            bind:this={searchInput}
+            placeholder={$t('search') || 'Search...'} 
+            on:keydown={handleKeydown}
+            class="search-input"
+          />
+        </div>
+      {/if}
+
+      <button class="action-btn {showSearch ? 'active' : ''}" on:click={toggleSearch} title="Search feeds">
+        {#if showSearch}
+          <X size={18} />
+        {:else}
+          <Search size={18} />
+        {/if}
       </button>
       <button class="action-btn" title="Mark visible as read">
         <CheckCheck size={18} />
@@ -51,11 +87,12 @@
   <div class="feed-content">
     <div class="articles-container scroll-area">
       {#each articles as item}
-        <PostCard 
-          article={{...item, selected: selectedId === item.id}} 
-          onClick={onSelect} 
-          {onToggleFavorite}
-        />
+          <PostCard 
+            article={{...item, selected: selectedId === item.id}} 
+            onClick={onSelect} 
+            {onToggleFavorite}
+            onShare={() => onShare(item)}
+          />
       {:else}
         <div class="empty-state" transition:fly={{ y: 20, duration: 400 }}>
           <div class="empty-icon">
@@ -235,5 +272,33 @@
     .expand-btn {
       display: none !important;
     }
+  }
+  .action-btn.active {
+    color: var(--md-primary);
+    background: var(--md-primary-container);
+  }
+
+  .search-box {
+    display: flex;
+    align-items: center;
+    background: var(--md-surface-variant);
+    border-radius: var(--radius-m);
+    padding: 0 12px;
+    margin-right: 8px;
+    height: 36px;
+    border: 1px solid var(--md-outline);
+  }
+
+  .search-input {
+    background: transparent;
+    border: none;
+    color: var(--md-on-surface);
+    font: var(--m3-label-large);
+    outline: none;
+    width: 200px;
+  }
+
+  @media (max-width: 600px) {
+    .search-input { width: 120px; }
   }
 </style>
