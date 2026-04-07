@@ -259,24 +259,15 @@
           <span>Appearance</span>
         </div>
         
-        <div class="setting-item-column">
-          <div class="label">Seed Color</div>
-          <div class="desc" style="color: var(--md-on-surface-variant); font: var(--m3-body-small); margin-bottom: 20px;">
-            Material Design 3 automatically generates harmonious primary, secondary, and tertiary palettes from a single seed color.
+        <div class="setting-item">
+          <div class="text">
+            <div class="label">Accent Color</div>
+            <div class="desc">Tints the entire workspace with your brand/style.</div>
           </div>
-          
-          <div class="seed-color-container">
-            <div class="seed-picker-card">
-              <div class="palette-colors custom-preview large-preview">
-                <div class="color-dot" style="background: {generateTonal(customColor, 'dark').primary}"></div>
-                <div class="color-dot" style="background: {generateTonal(customColor, 'dark').secondary}"></div>
-                <div class="color-dot" style="background: {generateTonal(customColor, 'dark').tertiary}"></div>
-                <div class="color-dot" style="background: {generateTonal(customColor, 'dark').background}"></div>
-                <label class="picker-overlay">
-                   <input type="color" bind:value={customColor} />
-                </label>
-              </div>
-              <span class="seed-label">Selected Seed: {customColor.toUpperCase()}</span>
+          <div class="seed-compact-picker">
+            <span class="seed-hex">{customColor.toUpperCase()}</span>
+            <div class="color-preview-circle" style="background: {customColor}">
+              <input type="color" bind:value={customColor} />
             </div>
           </div>
         </div>
@@ -490,7 +481,8 @@
   }
 
   .header-left { display: flex; align-items: center; gap: 12px; }
-  .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-on-surface); }
+  .header-left :global(svg) { color: var(--md-primary); }
+  .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-primary); }
 
   .tabs { display: flex; gap: 8px; height: 100%; align-items: center; padding-left: 24px; }
   .tab { 
@@ -598,49 +590,42 @@
   .info-item .key { color: var(--md-on-surface-variant); }
   .info-item .value { color: var(--md-on-surface); font-weight: 600; font-family: var(--font-mono); font-size: 13px; }
 
-  .setting-item-column {
-    background: var(--md-surface);
-    border: 1px solid var(--md-outline);
-    border-radius: var(--radius-xl);
-    padding: 24px;
-    margin-bottom: 16px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  }
-  .setting-item-column .label { font: var(--m3-title-medium); color: var(--md-on-surface); margin-bottom: 16px; }
 
-  .seed-color-container { display: flex; justify-content: center; padding: 10px 0; }
-  .seed-picker-card { 
-    background: var(--md-surface); 
-    border: 2px solid var(--md-primary); 
-    border-radius: var(--radius-xl); 
-    padding: 24px; 
-    cursor: pointer; 
+
+  .seed-compact-picker { 
     display: flex; 
-    flex-direction: column; 
     align-items: center; 
-    gap: 16px;
-    color: var(--md-on-surface);
-    font: var(--m3-label-large);
-    position: relative;
-    transition: all 0.2s;
-    width: 210px;
+    gap: 12px; 
+    background: var(--md-surface-variant); 
+    padding: 6px 12px; 
+    border-radius: var(--radius-full); 
+    border: 1px solid var(--md-outline);
   }
-  .seed-picker-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
-  .custom-preview.large-preview { grid-template-columns: repeat(2, 32px); gap: 8px; }
-  .custom-preview.large-preview .color-dot { width: 32px; height: 32px; border-radius: 8px; }
-  .seed-label { font-family: var(--font-mono); font-size: 13px; opacity: 0.8; }
-
-  .palette-colors { display: flex; gap: 4px; }
-  .color-dot { width: 16px; height: 16px; border-radius: var(--radius-full); border: 1px solid rgba(255,255,255,0.1); }
-  .custom-preview { position: relative; display: grid; grid-template-columns: repeat(2, 12px); gap: 2px; }
-  .picker-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; cursor: pointer; }
-  .picker-overlay input { 
+  .seed-hex { 
+    font-family: var(--font-mono); 
+    font-size: 13px; 
+    font-weight: 700; 
+    color: var(--md-primary); 
+    letter-spacing: 0.5px;
+  }
+  .color-preview-circle { 
+    width: 24px; 
+    height: 24px; 
+    border-radius: 50%; 
+    border: 2px solid white; 
+    box-shadow: 0 0 0 1px var(--md-outline); 
+    position: relative; 
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+  .color-preview-circle:hover { transform: scale(1.15); }
+  .color-preview-circle input { 
     position: absolute; 
-    top: 50%; left: 50%; 
-    transform: translate(-50%, -50%);
-    width: 40px; height: 40px; 
-    cursor: pointer; 
+    inset: 0; 
+    width: 100%; 
+    height: 100%; 
     opacity: 0; 
+    cursor: pointer; 
   }
 
   .mode-selector { display: flex; background: var(--md-surface); padding: 4px; border-radius: var(--radius-full); border: 1px solid var(--md-outline); }
