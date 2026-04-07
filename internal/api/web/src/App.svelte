@@ -517,7 +517,7 @@
     transform-origin: left center;
     flex-shrink: 0;
     max-width: 100%;
-    overflow: hidden;
+    min-width: 0;
   }
   .nav-panels.collapsed {
     max-width: 0 !important;

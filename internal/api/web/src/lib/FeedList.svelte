@@ -281,7 +281,6 @@
     z-index: 20;
     width: 100%;
     max-width: 100%;
-    overflow: hidden;
   }
 
   /* Eraser for the straight line crossing the curved gap */
