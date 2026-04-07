@@ -36,11 +36,42 @@
   export let onAddFeed = () => {};
   export let onRefresh = () => {};
   export let activeView = 'inbox';
+  export let isMobile = false;
 
   let catsExpanded = true;
   let feedsExpanded = true;
+  let activePopover = null; // 'categories' or 'sources' or null
+  let popoverY = 0;
+  let popoverMaxHeight = 400;
+
+  const togglePopover = (type, event) => {
+    if (activePopover === type) activePopover = null;
+    else {
+      activePopover = type;
+      if (event) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        const vh = window.innerHeight;
+        
+        let y = rect.top;
+        let spaceBelow = vh - y - 24; // 24px safety margin at bottom
+
+        // If very little space below (< 300px), we shift up to provide at least 400px of view
+        if (spaceBelow < 300) {
+           const idealHeight = Math.min(vh - 40, 480);
+           y = vh - idealHeight - 20;
+           spaceBelow = vh - y - 24;
+        }
+
+        popoverY = Math.max(10, y);
+        popoverMaxHeight = spaceBelow;
+      }
+    }
+  };
+
+  $: if (!isMobile) activePopover = null;
 
   const handleNavClick = (id) => {
+    activePopover = null;
     onViewChange(id);
   };
   
@@ -62,7 +93,7 @@
 <aside class="sidebar">
   <header class="sidebar-header header-bar">
     <div class="logo">
-      <span class="full-logo">GORRSON</span>
+      <span class="full-logo">Gorrson</span>
       <span class="mini-logo">G</span>
     </div>
   </header>
@@ -88,101 +119,200 @@
     <div class="divider"></div>
 
     <!-- CATEGORIES SECTION -->
-    <div class="section-header" on:click={() => catsExpanded = !catsExpanded} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && (catsExpanded = !catsExpanded)}>
-      <div class="header-left">
-        {#if catsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
-        <span class="section-title-text">{$t('categories')}</span>
+    <div class="section-wrapper">
+      <div 
+        class="section-header" 
+        on:click={(e) => isMobile ? togglePopover('categories', e) : (catsExpanded = !catsExpanded)} 
+        role="button" 
+        tabindex="0" 
+        on:keydown={(e) => e.key === 'Enter' && (catsExpanded = !catsExpanded)}
+      >
+        <div class="header-left">
+          {#if !isMobile}
+            {#if catsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+          {/if}
+          <span class="mobile-only-icon"><Hash size={18} /></span>
+          <span class="section-title-text">{$t('categories')}</span>
+        </div>
       </div>
+      
+      {#if catsExpanded && !isMobile}
+        <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
+          {#each categories as cat}
+            <button 
+              class="cat-item {activeView === 'cat:'+cat.id ? 'active' : ''}"
+              on:click={() => handleNavClick('cat:'+cat.id)}
+            >
+              <div class="item-left">
+                <Hash size={14} opacity={0.5} />
+                <span>{cat.name}</span>
+              </div>
+              <span class="count">{cat.count}</span>
+            </button>
+          {/each}
+        </nav>
+      {/if}
+
+      {#if isMobile && activePopover === 'categories'}
+        <!-- Popover moved out for overflow reasons -->
+      {/if}
     </div>
     
-    {#if catsExpanded}
-      <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
-        {#each categories as cat}
-          <button 
-            class="cat-item {activeView === 'cat:'+cat.id ? 'active' : ''}"
-            on:click={() => handleNavClick('cat:'+cat.id)}
-          >
-            <div class="item-left">
-              <Hash size={14} opacity={0.5} />
-              <span>{cat.name}</span>
-            </div>
-            <span class="count">{cat.count}</span>
-          </button>
-        {/each}
-      </nav>
-    {/if}
-
     <div class="divider"></div>
 
     <!-- SOURCES SECTION -->
-    <div class="section-header" on:click={() => feedsExpanded = !feedsExpanded} role="button" tabindex="0" on:keydown={(e) => e.key === 'Enter' && (feedsExpanded = !feedsExpanded)}>
-      <div class="header-left">
-        {#if feedsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
-        <span class="section-title-text">{$t('sources') || 'Sources'}</span>
+    <div class="section-wrapper">
+      <div class="section-header">
+        <div 
+          class="header-left" 
+          on:click={(e) => isMobile ? togglePopover('sources', e) : (feedsExpanded = !feedsExpanded)} 
+          role="button" 
+          tabindex="0" 
+          on:keydown={(e) => e.key === 'Enter' && (feedsExpanded = !feedsExpanded)}
+        >
+          {#if !isMobile}
+            {#if feedsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+          {/if}
+          <span class="mobile-only-icon"><Globe size={18} /></span>
+          <span class="section-title-text">{$t('sources') || 'Sources'}</span>
+        </div>
+        <div class="header-actions">
+          <button class="refresh-btn-inline" on:click|stopPropagation={handleAddClick} title={$t('add_feed')}>
+            <Plus size={14} strokeWidth={2.5} />
+          </button>
+          {#if !isMobile}
+            <button class="refresh-btn-inline" on:click|stopPropagation={onRefresh} title="Sync All">
+              <RefreshCw size={14} />
+            </button>
+          {/if}
+        </div>
       </div>
-      <button class="refresh-btn-inline" on:click|stopPropagation={onRefresh} title="Sync All">
-        <RefreshCw size={12} />
-      </button>
-    </div>
 
-    {#if feedsExpanded}
-      <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
-        {#each feeds as feed}
-          <button 
-            class="cat-item {activeView === 'src:'+feed.id ? 'active' : ''}"
-            on:click={() => handleNavClick('src:'+feed.id)}
-          >
+      {#if feedsExpanded && !isMobile}
+        <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
+          {#each feeds as feed}
+            <button 
+              class="cat-item {activeView === 'src:'+feed.id ? 'active' : ''}"
+              on:click={() => handleNavClick('src:'+feed.id)}
+            >
+              <div class="item-left">
+                <Globe size={14} opacity={0.5} />
+                <span class="truncate">{feed.title}</span>
+              </div>
+              {#if feed.unread_count > 0}
+                <span class="count">{feed.unread_count}</span>
+              {/if}
+            </button>
+          {/each}
+          <button class="cat-item add-ghost-item" on:click={handleAddClick}>
             <div class="item-left">
-              <Globe size={14} opacity={0.5} />
-              <span class="truncate">{feed.title}</span>
+              <div class="plus-circle">
+                <Plus size={12} strokeWidth={4} />
+              </div>
+              <span>{$t('add_feed')}</span>
             </div>
-            {#if feed.unread_count > 0}
-              <span class="count">{feed.unread_count}</span>
-            {/if}
-        </button>
-      {/each}
-      </nav>
-    {/if}
+          </button>
+        </nav>
+      {/if}
+
+      {#if isMobile && activePopover === 'sources'}
+        <!-- Popover moved out for overflow reasons -->
+      {/if}
+    </div>
   </div>
 
   <div class="bottom-actions">
-    <button class="add-btn" on:click={handleAddClick}>
-      <Plus size={20} strokeWidth={3} />
-      <span>{$t('add_feed')}</span>
-    </button>
-
     <div class="user-profile-container">
       {#if showUserMenu}
         <div class="user-popup" transition:fly={{ y: 20, duration: 200 }}>
-          <button class="popup-item" on:click={handleLogout}>
-            <LogOut size={16} />
-            <span>{$t('logout') || 'Log Out'}</span>
+          <button class="popup-item {activeView === 'settings' ? 'active' : ''}" on:click={() => handleNavClick('settings')}>
+            <Settings size={16} />
+            <span>{$t('settings') || 'Settings'}</span>
           </button>
           <button class="popup-item" on:click={() => { toggleLanguage(); showUserMenu = false; }}>
+            <Globe size={16} />
             <span>{$t('language') || 'Language'}: { $locale.toUpperCase() }</span>
+          </button>
+          <div class="divider"></div>
+          <button class="popup-item logout-item" on:click={handleLogout}>
+            <LogOut size={16} />
+            <span>{$t('logout') || 'Log Out'}</span>
           </button>
         </div>
       {/if}
 
       <div class="user-profile {showUserMenu ? 'menu-open' : ''}">
-        <button class="profile-main" on:click={toggleUserMenu}>
+        <button class="profile-main" on:click={toggleUserMenu} title="User menu">
           <div class="avatar">{username[0]?.toUpperCase() || 'U'}</div>
           <div class="user-info">
             <div class="username">{username}</div>
             <div class="status">{$t('membership_gold')}</div>
           </div>
         </button>
-        
-        <button 
-          class="settings-btn {activeView === 'settings' ? 'active' : ''}" 
-          on:click={() => handleNavClick('settings')}
-          title="Settings"
-        >
-          <Settings size={18} />
-        </button>
       </div>
     </div>
   </div>
+
+  <!-- FLOATING POPOVERS (OUTSIDE SCROLL AREA) -->
+  {#if isMobile && activePopover === 'categories'}
+    <div 
+      class="mobile-popover" 
+      style="top: {popoverY}px; max-height: {popoverMaxHeight}px;" 
+      transition:fly={{ x: -20, duration: 250 }}
+    >
+      <header class="popover-header">{$t('categories')}</header>
+      <div class="popover-content">
+        {#each categories as cat}
+          <button 
+            class="cat-item {activeView === 'cat:'+cat.id ? 'active' : ''}"
+            on:click={() => handleNavClick('cat:'+cat.id)}
+          >
+            <div class="item-left">
+              <Hash size={14} />
+              <span>{cat.name}</span>
+            </div>
+            <span class="count">{cat.count}</span>
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
+
+  {#if isMobile && activePopover === 'sources'}
+    <div 
+      class="mobile-popover" 
+      style="top: {popoverY}px; max-height: {popoverMaxHeight}px;" 
+      transition:fly={{ x: -20, duration: 250 }}
+    >
+      <header class="popover-header">
+        <span>{$t('sources') || 'Sources'}</span>
+        <div class="header-actions-group">
+          <button class="refresh-btn-inline" on:click|stopPropagation={handleAddClick} title={$t('add_feed')}>
+            <Plus size={14} strokeWidth={2.5} />
+          </button>
+          <button class="refresh-btn-inline" on:click|stopPropagation={onRefresh}>
+            <RefreshCw size={12} />
+          </button>
+        </div>
+      </header>
+      <div class="popover-content">
+        {#each feeds as feed}
+          <button 
+            class="cat-item {activeView === 'src:'+feed.id ? 'active' : ''}"
+            on:click={() => handleNavClick('src:'+feed.id)}
+          >
+            <div class="item-left">
+              <Globe size={14} />
+              <span class="truncate">{feed.title}</span>
+            </div>
+            {#if feed.unread_count > 0}
+              <span class="count">{feed.unread_count}</span>
+            {/if}
+          </button>
+        {/each}
+      </div>
+    </div>
+  {/if}
 </aside>
 
 <style>
@@ -228,31 +358,46 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 12px;
+    padding: 16px;
+    background: linear-gradient(to top, var(--md-surface), transparent);
   }
 
-  .add-btn {
-    height: 48px;
-    padding: 0 20px;
-    border-radius: var(--radius-l);
-    background: var(--md-primary-container);
-    color: var(--md-on-primary-container);
-    border: none;
-    font: var(--m3-label-large);
-    font-weight: 700;
+  .header-actions {
+    display: flex;
+    gap: 4px;
+    margin-left: auto;
+  }
+
+  .add-ghost-item {
+    margin-top: 4px;
+    opacity: 0.6;
+    border: 1px dashed transparent;
+  }
+
+  .add-ghost-item:hover {
+    opacity: 1;
+    background: var(--md-secondary-container) !important;
+    color: var(--md-primary) !important;
+    border-color: var(--md-primary);
+  }
+
+  .plus-circle {
+    width: 24px; /* Slightly larger base */
+    height: 24px;
+    border-radius: 8px;
+    background: var(--md-surface-variant);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 12px;
-    cursor: pointer;
-    transition: all 0.2s;
-    box-shadow: var(--shadow-1);
-    margin: 0 12px;
+    color: var(--md-on-surface-variant);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
   }
-  .add-btn:hover { 
-    background: var(--md-secondary-container);
-    box-shadow: var(--shadow-2);
-    transform: translateY(-2px);
+
+  .add-ghost-item:hover .plus-circle {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    box-shadow: 0 2px 8px var(--shadow-color);
   }
 
   .nav-group {
@@ -424,6 +569,10 @@
     /* Border delegated to feed-content for unibody path */
     overflow-y: auto;
     overflow-x: hidden;
+    scrollbar-width: none; /* Firefox */
+  }
+  .sidebar-content::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
   }
 
   .popup-item {
@@ -446,13 +595,10 @@
   }
 
   .user-profile {
-    padding: 6px;
-    background: var(--md-surface-variant);
-    border-radius: var(--radius-full);
+    padding: 8px 12px;
     display: flex;
     align-items: center;
     gap: 8px;
-    border: 1px solid var(--md-outline);
     transition: all 0.2s;
   }
 
@@ -486,115 +632,241 @@
     font: var(--m3-label-large);
     font-weight: 800;
     flex-shrink: 0;
+    position: relative;
+    transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+  }
+
+  /* Overlay for hover visibility */
+  .avatar::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: white;
+    opacity: 0;
+    transition: opacity 0.2s;
+  }
+
+  .profile-main:hover .avatar::after {
+    opacity: 0.15;
   }
 
   .user-info { flex: 1; min-width: 0; }
   .username { font: var(--m3-label-large); font-weight: 700; color: var(--md-on-surface); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
   .status { font: var(--m3-label-small); color: var(--md-on-surface-variant); opacity: 0.8; }
 
-  .settings-btn {
-    background: transparent;
-    border: none;
-    color: var(--md-on-surface-variant);
-    cursor: pointer;
-    width: 36px;
-    height: 36px;
-    border-radius: var(--radius-full);
+
+
+  .mobile-only-icon {
+    display: none;
+  }
+
+  .section-wrapper {
+    position: relative;
+  }
+
+  .mobile-popover {
+    position: fixed; /* Fixed to avoid scroll-parent issues */
+    left: 72px;      /* Tighter to the rail */
+    width: 260px;    /* Slightly wider for better text flow */
+    background: var(--md-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-xl);
+    box-shadow: 12px 4px 40px rgba(0,0,0,0.25);
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    animation: popIn 0.2s cubic-bezier(0, 0, 0.2, 1);
+  }
+
+  @keyframes popIn {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: translateX(0); }
+  }
+
+  .popover-header {
+    padding: 16px 20px;
+    font: var(--m3-label-large);
+    font-weight: 800;
+    color: var(--md-primary);
+    border-bottom: 1px solid var(--md-outline);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .popover-content {
+    padding: 8px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .popover-content .cat-item {
+    padding: 0 12px;
+    opacity: 1;
+    height: 44px;
+  }
+
+  .mobile-popover .cat-item span,
+  .mobile-popover .count,
+  .mobile-popover .truncate {
+    display: block !important;
+  }
+
+  .mobile-popover .item-left {
+    gap: 12px;
+    justify-content: flex-start !important;
+  }
+
+  .mobile-popover .cat-item {
+    justify-content: space-between !important;
+    padding: 0 16px !important;
+    border-radius: var(--radius-m);
+  }
+
+  .header-actions-group {
     display: flex;
     align-items: center;
-    justify-content: center;
-    transition: all 0.2s;
-  }
-  .settings-btn:hover {
-    background: var(--md-primary-container);
-    color: var(--md-on-primary-container);
-  }
-  .settings-btn.active {
-    background: var(--md-primary);
-    color: var(--md-on-primary);
+    gap: 8px;
   }
 
   /* Compact Mode (Tablet & Mobile) */
   @media (max-width: 1000px) {
     .sidebar {
-      padding: 16px 8px;
+      padding: 16px 0;
       width: 72px !important;
+      z-index: 1000;
+      border-right: 1px solid var(--md-outline);
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      box-sizing: border-box !important;
+    }
+    .sidebar-header,
+    .sidebar-content,
+    .bottom-actions {
+      width: 100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+      align-items: center !important;
+      padding-left: 0 !important;
+      padding-right: 0 !important;
+      box-sizing: border-box !important;
     }
     .full-logo, 
     .nav-item span, 
     .cat-item span, 
     .section-title-text,
-    .section-header div span,
-    .add-btn span, 
     .user-info, 
     .badge, 
-    .count {
+    .count,
+    .divider {
       display: none !important;
     }
+
+    .nav-group {
+      gap: 12px;
+    }
+
+    /* Unified Rail Item Style */
+    .nav-item, 
+    .section-header,
+    .profile-main {
+      width: 48px !important;
+      height: 48px !important;
+      padding: 0 !important;
+      margin: 8px 0 !important; /* Vertical spacing only */
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      border-radius: var(--radius-full) !important;
+      background: transparent;
+      border: none;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+      position: relative;
+    }
+
+    .nav-item:hover, 
+    .section-header:hover, 
+    .profile-main:hover {
+      background: var(--md-surface-variant);
+    }
+
+    .nav-item.active {
+      background: var(--md-primary-container) !important;
+      color: var(--md-on-primary-container) !important;
+    }
+
+    .header-left,
+    .item-left,
+    .mobile-only-icon {
+      width: 100% !important;
+      height: 100% !important;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
+      margin: 0 !important;
+      padding: 0 !important;
+      gap: 0 !important; /* Extremely important to prevent off-centering */
+    }
+
+    .header-actions {
+      display: none !important;
+    }
+
     .divider {
       margin: 12px 10px;
+      display: none !important;
     }
+
     .mini-logo {
       display: block !important;
       font-size: 24px;
+      font-weight: 900;
+      letter-spacing: -1px;
     }
     .logo {
-      padding: 10px;
-      margin: 0 auto;
-    }
-    .nav-item, .cat-item, .add-btn {
-      justify-content: center;
-      padding: 12px 0;
-    }
-    .item-left {
-      gap: 0;
-      justify-content: center;
+      padding: 0 !important;
+      margin: 0 !important;
+      width: 100%;
+      height: 100%;
+      display: flex !important;
+      align-items: center !important;
+      justify-content: center !important;
     }
     .bottom-actions {
       align-items: center;
       padding: 12px 0;
-    }
-    .add-btn {
-      width: 44px;
-      height: 44px;
-      padding: 0;
-      margin: 8px 0;
-      border-radius: var(--radius-full);
+      width: 100%;
     }
     .user-profile {
       display: flex;
-      flex-direction: column-reverse;
+      flex-direction: column;
       align-items: center;
-      gap: 12px;
-      padding: 16px 0;
       width: 100%;
-      background: transparent;
-      border: none;
+      background: transparent !important;
+      border: none !important;
       margin: 0;
-      position: relative;
+      padding: 0;
+    }
+    .profile-main {
+      margin: 8px 0 !important;
     }
     .user-popup {
       left: 64px;
       bottom: 20px;
       width: 180px;
-      right: auto;
       box-shadow: 4px 4px 20px rgba(0,0,0,0.3);
     }
     .avatar {
-      width: 36px;
-      height: 36px;
-      font-size: 16px;
+      width: 32px;
+      height: 32px;
+      font-size: 14px;
       border-radius: var(--radius-full);
       box-shadow: 0 0 0 2px var(--md-outline);
-    }
-    .settings-btn {
-      width: 44px;
-      height: 44px;
-      background: var(--md-surface-variant);
-      border-radius: var(--radius-l);
-      display: flex;
-      align-items: center;
-      justify-content: center;
     }
   }
 </style>

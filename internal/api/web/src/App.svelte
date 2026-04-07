@@ -14,14 +14,14 @@
   import { Inbox, Star, Bookmark, Archive, Shield } from 'lucide-svelte';
   import { t } from './lib/i18n.js';
   import { onMount } from 'svelte';
-  import { fetchNews, markAsRead, fetchFeeds } from './lib/api.js';
+  import { fetchNews, markAsRead, fetchFeeds, toggleFavorite } from './lib/api.js';
 
   let selectedId = null;
   let searchQuery = "";
   let isMobile = false;
 
   const updateMobile = () => {
-    isMobile = window.innerWidth <= 800;
+    isMobile = window.innerWidth <= 1000;
   };
   let articles = [];
   let feeds = [];
@@ -44,7 +44,12 @@
     try {
       loading = true;
       const [newsData, feedsData] = await Promise.all([
-        fetchNews({ category: activeCategory, feed_id: activeSource, search: searchQuery }),
+        fetchNews({ 
+          category: activeCategory, 
+          feed_id: activeSource, 
+          search: searchQuery,
+          sort: currentView === 'favorites' ? 'favorite' : undefined
+        }),
         fetchFeeds()
       ]);
       
@@ -221,6 +226,7 @@
       activeSource = null;
       currentView = viewId;
     }
+    articles = []; // Reset list
     loadData();
   }
 
@@ -240,6 +246,25 @@
   async function handleSelect(id) {
     selectedId = id;
     await markAsRead(id);
+    // Update local read state
+    articles = articles.map(a => a.id === id ? {...a, is_read: true} : a);
+  }
+
+  async function handleToggleFavorite(id) {
+    const article = articles.find(a => a.id === id);
+    if (!article) return;
+    
+    const newState = !article.is_favorite;
+    await toggleFavorite(id, newState);
+    
+    // Update local state across all views
+    articles = articles.map(a => a.id === id ? {...a, is_favorite: newState} : a);
+    
+    // If we're in favorites view, remove it if un-starred
+    if (currentView === 'favorites' && !newState) {
+       articles = articles.filter(a => a.id !== id);
+       if (selectedId === id) selectedId = null;
+    }
   }
 
   function handleLoginSuccess() {
@@ -285,6 +310,7 @@
       {navItems} 
       {categories} 
       {feeds}
+      {isMobile}
       activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
       onViewChange={handleViewChange} 
       onAddFeed={handleAddFeed}
@@ -302,7 +328,7 @@
         <button on:click={loadData}>Retry</button>
       </div>
     {:else}
-      {#if currentView === 'inbox'}
+      {#if currentView === 'inbox' || currentView === 'favorites'}
         {#if !isMobile || (isMobile && !selectedId)}
           <FeedList 
             {articles} 
@@ -310,10 +336,11 @@
             isExpanded={isFeedExpanded}
             onToggleExpand={toggleFeedExpand}
             onSelect={handleSelect} 
+            onToggleFavorite={handleToggleFavorite}
           />
         {/if}
         
-        {#if !isMobile || (isMobile && selectedId)}
+        {#if articles.length > 0 && (!isMobile || (isMobile && selectedId))}
           <PostViewer 
             article={selectedArticle} 
             onBack={() => selectedId = null}

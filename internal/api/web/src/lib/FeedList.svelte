@@ -2,7 +2,7 @@
   import { fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
   import PostCard from './PostCard.svelte';
-  import { Search, CheckCheck, PanelRightClose, PanelRightOpen } from 'lucide-svelte';
+  import { Search, CheckCheck, PanelRightClose, PanelRightOpen, Inbox } from 'lucide-svelte';
   import { t } from './i18n.js';
   
   /** @type {Array<any>} */
@@ -17,9 +17,12 @@
   /** @type {(id: number) => void} */
   export let onSelect;
 
+  /** @type {(id: string) => void} */
+  export let onToggleFavorite;
+
 </script>
 
-<section class="feed-list {isExpanded ? 'expanded' : ''}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
+<section class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0 ? 'is-empty' : ''}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
   <header class="header-bar">
     <div></div> <!-- Empty spacer to keep actions aligned -->
     <div class="actions">
@@ -51,7 +54,18 @@
         <PostCard 
           article={{...item, selected: selectedId === item.id}} 
           onClick={onSelect} 
+          {onToggleFavorite}
         />
+      {:else}
+        <div class="empty-state" transition:fly={{ y: 20, duration: 400 }}>
+          <div class="empty-icon">
+            <div class="icon-circle">
+              <Inbox size={48} strokeWidth={1.5} />
+            </div>
+          </div>
+          <h3>{$t('all_caught_up') || 'All Caught Up'}</h3>
+          <p>{$t('no_articles_desc') || 'There are no articles to display in this view right now.'}</p>
+        </div>
       {/each}
     </div>
   </div>
@@ -70,6 +84,10 @@
   .feed-list.expanded {
     width: calc(100vw - var(--sidebar-width));
     flex-shrink: 0;
+  }
+  .feed-list.is-empty {
+    flex: 1;
+    width: auto;
   }
 
   .header-bar { 
@@ -161,7 +179,48 @@
     padding: 24px 16px 24px 16px;
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 12px;
+  }
+
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--md-on-surface-variant);
+  }
+
+  .empty-icon {
+    margin-bottom: 24px;
+  }
+
+  .icon-circle {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: var(--md-surface-variant);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--md-primary);
+  }
+
+  .empty-state h3 {
+    margin: 8px 0;
+    color: var(--md-on-surface);
+    font: var(--m3-headline-small);
+    font-weight: 600;
+  }
+
+  .empty-state p {
+    font: var(--m3-body-medium);
+    max-width: 240px;
+    margin: 0;
+    opacity: 0.7;
+    line-height: 1.5;
   }
 
   @media (max-width: 1000px) {
@@ -169,9 +228,6 @@
       padding-left: 12px;
       padding-right: 12px;
     }
-  }
-
-  @media (max-width: 768px) {
     .feed-list {
       width: 100% !important;
       border-right: none;

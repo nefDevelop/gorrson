@@ -41,7 +41,9 @@ const translations = {
     "save": "Save",
     "cancel": "Cancel",
     "logout": "Logout",
-    "language": "Language"
+    "language": "Language",
+    "all_caught_up": "All Caught Up",
+    "no_articles_desc": "No articles found here. Check back later or try another category."
   },
   es: {
     "add_feed": "Añadir Feed",
@@ -81,7 +83,9 @@ const translations = {
     "save": "Guardar",
     "cancel": "Cancelar",
     "logout": "Cerrar Sesión",
-    "language": "Idioma"
+    "language": "Idioma",
+    "all_caught_up": "Todo al día",
+    "no_articles_desc": "No hay artículos aquí. Vuelve más tarde o prueba con otra categoría."
   }
 };
 

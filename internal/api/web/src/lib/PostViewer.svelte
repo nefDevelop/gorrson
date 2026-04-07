@@ -156,7 +156,7 @@
     display: none !important;
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 1000px) {
     .mobile-only {
       display: flex !important;
     }
