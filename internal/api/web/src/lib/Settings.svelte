@@ -3,7 +3,7 @@
   import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon } from 'lucide-svelte';
   import Filters from './Filters.svelte';
   import { onMount } from 'svelte';
-  import { Share2, Plus, Trash2, ExternalLink as ExtIcon } from 'lucide-svelte';
+  import { Share2, Plus, Trash2, ExternalLink as ExtIcon, Download, Upload, FileJson, FileCode } from 'lucide-svelte';
   import { fly, fade } from 'svelte/transition';
 
   export let onLogout = () => {};
@@ -11,6 +11,7 @@
   export let feeds = [];
   export let username = '';
   export let scrollRead = false;
+  export let cardStyle = 'default';
 
   import { updateFeed, deleteFeed } from './api.js';
 
@@ -28,7 +29,9 @@
   async function confirmDeleteFeed() {
     if (!feedToDelete) return;
     try {
-      await deleteFeed(feedToDelete.id);
+      const idToDelete = feedToDelete.id;
+      await deleteFeed(idToDelete);
+      feeds = feeds.filter(f => f.id !== idToDelete);
       feedToDelete = null;
       onRefresh();
     } catch (e) {
@@ -195,6 +198,7 @@
     localStorage.setItem('gorrson-theme', themeId);
     localStorage.setItem('gorrson-mode', modeId);
     localStorage.setItem('gorrson-custom-color', seed);
+    localStorage.setItem('gorrson-card-style', cardStyle);
   }
 
   $: if (typeof document !== 'undefined') {
@@ -259,6 +263,122 @@
     saveServices();
   }
 
+  // Data Import/Export
+  async function exportConfig() {
+    try {
+      const res = await fetch('/config/export', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const serverConfig = await res.json();
+      
+      const config = {
+        ...serverConfig,
+        local: {
+          theme: localStorage.getItem('gorrson-theme'),
+          mode: localStorage.getItem('gorrson-mode'),
+          color: localStorage.getItem('gorrson-custom-color'),
+          services: exportServices,
+          locale: localStorage.getItem('gorrson-locale'),
+          scrollRead: scrollRead
+        },
+        exportedAt: new Date().toISOString()
+      };
+      
+      const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `gorrson-config-${new Date().toISOString().split('T')[0]}.json`;
+      a.click();
+    } catch (e) {
+      console.error(e);
+      alert('Export failed');
+    }
+  }
+
+  async function importConfig(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        if (typeof e.target.result !== 'string') return;
+        const config = JSON.parse(e.target.result);
+        
+        // Save local settings
+        if (config.local) {
+          const l = config.local;
+          if (l.theme) localStorage.setItem('gorrson-theme', l.theme);
+          if (l.mode) localStorage.setItem('gorrson-mode', l.mode);
+          if (l.color) localStorage.setItem('gorrson-custom-color', l.color);
+          if (l.services) {
+             exportServices = l.services;
+             saveServices();
+          }
+          if (l.locale) locale.set(l.locale);
+          if (l.scrollRead !== undefined) scrollRead = l.scrollRead;
+        }
+
+        // Upload to backend
+        const res = await fetch('/config/import', {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('token')}` 
+          },
+          body: JSON.stringify({ filters: config.filters })
+        });
+
+        if (res.ok) {
+           alert('Configuration imported. Page will refresh.');
+           window.location.reload();
+        }
+      } catch (err) {
+        console.error(err);
+        alert('Invalid config file');
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  async function exportOPMLBlob() {
+    const res = await fetch('/feeds/export', {
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+    });
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'gorrson.opml';
+    a.click();
+  }
+
+  async function importOPML(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const res = await fetch('/feeds/import', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}` 
+        },
+        body: formData
+      });
+      if (res.ok) {
+        alert('OPML Import started. Feeds will appear shortly.');
+        onRefresh();
+      }
+    } catch (e) {
+      console.error(e);
+      alert('OPML import failed');
+    }
+  }
+
   const examples = [
     { name: 'Obsidian', template: 'obsidian://new?title={title}&content={url}' },
     { name: 'Pocket', template: 'https://getpocket.com/edit?url={url}' },
@@ -278,6 +398,7 @@
       <button class="tab {activeTab === 'sources' ? 'active' : ''}" on:click={() => activeTab = 'sources'}>{$t('sources')}</button>
       <button class="tab {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
       <button class="tab {activeTab === 'sharing' ? 'active' : ''}" on:click={() => activeTab = 'sharing'}>{$t('sharing')}</button>
+      <button class="tab {activeTab === 'data' ? 'active' : ''}" on:click={() => activeTab = 'data'}>Data</button>
     </div>
   </header>
 
@@ -341,6 +462,31 @@
           <button class="btn-toggle" on:click={() => scrollRead = !scrollRead}>
             {scrollRead ? 'ON' : 'OFF'}
           </button>
+        </div>
+
+        <div class="setting-item vertical">
+          <div class="text">
+            <div class="label">News Card Style</div>
+            <div class="desc">Choose how articles are displayed in the feed.</div>
+          </div>
+          <div class="style-selector">
+            <button class="style-btn {cardStyle === 'default' ? 'active' : ''}" on:click={() => cardStyle = 'default'}>
+              <div class="style-preview def"></div>
+              <span>Default</span>
+            </button>
+            <button class="style-btn {cardStyle === 'image' ? 'active' : ''}" on:click={() => cardStyle = 'image'}>
+              <div class="style-preview img"></div>
+              <span>Image</span>
+            </button>
+            <button class="style-btn {cardStyle === 'compact' ? 'active' : ''}" on:click={() => cardStyle = 'compact'}>
+              <div class="style-preview com"></div>
+              <span>Compact</span>
+            </button>
+            <button class="style-btn {cardStyle === 'minimal' ? 'active' : ''}" on:click={() => cardStyle = 'minimal'}>
+              <div class="style-preview min"></div>
+              <span>Minimal</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -488,10 +634,10 @@
       </div>
       <datalist id="category-suggestions">
         {#each uniqueCategories as cat}
-          <option value={cat} />
+          <option value={cat}></option>
         {/each}
       </datalist>
-    {:else}
+    {:else if activeTab === 'filters'}
       <div class="settings-section">
         <div class="section-header">
           <Shield size={18} />
@@ -501,12 +647,81 @@
           <Filters {feeds} headless={true} />
         </div>
       </div>
+    {:else if activeTab === 'data'}
+      <div class="settings-section">
+        <div class="section-header">
+          <FileCode size={18} />
+          <span>Import / Export OPML</span>
+        </div>
+        <div class="data-actions">
+           <div class="data-card">
+              <div class="icon-box"><Globe size={24} /></div>
+              <div class="card-text">
+                 <strong>Feeds (OPML)</strong>
+                 <p>Standard format to move your subscriptions between apps.</p>
+              </div>
+              <div class="actions">
+                 <button class="btn-secondary" on:click={exportOPMLBlob}>
+                    <Download size={16} />
+                    <span>Export</span>
+                 </button>
+                 <label class="btn-primary file-label">
+                    <Upload size={16} />
+                    <span>Import</span>
+                    <input type="file" accept=".opml,.xml" on:change={importOPML} style="display:none" />
+                 </label>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="section-header">
+          <FileJson size={18} />
+          <span>Full Configuration (JSON)</span>
+        </div>
+        <div class="data-actions">
+           <div class="data-card">
+              <div class="icon-box"><Shield size={24} /></div>
+              <div class="card-text">
+                 <strong>Filters & Settings</strong>
+                 <p>Backup all your filtering rules, custom sharing services, and theme preferences.</p>
+              </div>
+              <div class="actions">
+                 <button class="btn-secondary" on:click={exportConfig}>
+                    <Download size={16} />
+                    <span>Export</span>
+                 </button>
+                 <label class="btn-primary file-label">
+                    <Upload size={16} />
+                    <span>Import</span>
+                    <input type="file" accept=".json" on:change={importConfig} style="display:none" />
+                 </label>
+              </div>
+           </div>
+        </div>
+      </div>
     {/if}
   </div>
 
   {#if feedToDelete}
-    <div class="modal-overlay" transition:fade={{ duration: 200 }} on:click={() => feedToDelete = null}>
-      <div class="modal-card" transition:fly={{ y: 20, duration: 300 }} on:click|stopPropagation>
+    <div 
+      class="modal-overlay" 
+      role="button" 
+      tabindex="0"
+      transition:fade={{ duration: 200 }} 
+      on:click={() => feedToDelete = null}
+      on:keydown={(e) => e.key === 'Escape' && (feedToDelete = null)}
+    >
+      <div 
+        class="modal-card" 
+        role="dialog"
+        aria-modal="true"
+        tabindex="-1"
+        transition:fly={{ y: 20, duration: 300 }} 
+        on:click|stopPropagation
+        on:keydown|stopPropagation
+      >
         <div class="modal-icon-header">
            <div class="warning-circle">
               <Trash2 size={24} />
@@ -546,6 +761,7 @@
     box-sizing: border-box;
     position: relative;
     z-index: 20;
+    border-bottom: 1px solid var(--md-outline);
   }
 
   /* Eraser for the straight line crossing the curved gap */
@@ -652,6 +868,12 @@
     align-items: center;
     margin-bottom: 16px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  }
+
+  .setting-item.vertical {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
   }
 
   .text .label { font: var(--m3-title-medium); color: var(--md-on-surface); margin-bottom: 4px; }
@@ -954,6 +1176,12 @@
     display: flex;
     align-items: center;
     gap: 8px;
+    transition: all 0.2s;
+  }
+  .btn-primary:hover {
+    background: var(--md-primary-container);
+    color: var(--md-primary);
+    transform: translateY(-1px);
   }
 
   .examples-row { display: flex; align-items: center; gap: 8px; margin-bottom: 32px; }
@@ -1065,10 +1293,21 @@
     background: var(--md-surface-variant);
     border: 1px solid var(--md-outline);
     color: var(--md-on-surface);
+    padding: 12px 24px;
+    border-radius: var(--radius-full);
+    font: var(--m3-label-large);
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    transition: all 0.2s;
   }
 
   .btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: var(--md-outline);
+    transform: translateY(-1px);
   }
 
   .btn-danger {
@@ -1081,4 +1320,107 @@
     background: #ff3333;
     box-shadow: 0 4px 12px rgba(255, 82, 82, 0.3);
   }
+
+  .data-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: 24px;
+    max-width: 900px;
+  }
+  .data-card {
+    background: var(--md-surface-variant);
+    border: 1px solid var(--md-outline);
+    border-radius: 20px;
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    transition: all 0.2s;
+  }
+  .data-card:hover {
+    border-color: var(--md-primary);
+    background: var(--md-secondary-container);
+  }
+  .icon-box {
+    width: 64px;
+    height: 64px;
+    background: var(--md-primary-container);
+    color: var(--md-on-primary-container);
+    border-radius: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .card-text {
+    flex: 1;
+  }
+  .card-text strong {
+    display: block;
+    font-size: 18px;
+    color: var(--md-on-surface);
+    margin-bottom: 4px;
+    font-family: var(--font-display);
+  }
+  .card-text p {
+    font-size: 14px;
+    color: var(--md-on-surface-variant);
+    margin: 0;
+    opacity: 0.8;
+  }
+  .data-card .actions {
+    display: flex;
+    gap: 12px;
+  }
+  .file-label {
+    cursor: pointer;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .style-selector {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin-top: 16px;
+    width: 100%;
+  }
+  .style-btn {
+    background: var(--md-surface-variant);
+    border: none;
+    border-radius: 16px;
+    padding: 16px 12px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    color: var(--md-on-surface-variant);
+  }
+  .style-btn:hover { background: var(--md-secondary-container); color: var(--md-primary); transform: translateY(-2px); }
+  .style-btn.active { background: var(--md-primary-container); color: var(--md-primary); }
+  
+  .style-preview {
+    width: 64px;
+    height: 48px;
+    background: var(--md-surface);
+    border-radius: 8px;
+    border: none;
+    position: relative;
+    overflow: hidden;
+    box-shadow: inset 0 0 10px rgba(0,0,0,0.05);
+  }
+  .style-preview.def::after { content: ""; position: absolute; top: 10px; left: 10px; right: 10px; height: 5px; background: var(--md-primary); opacity: 0.4; border-radius: 2px; }
+  .style-preview.def::before { content: ""; position: absolute; top: 20px; left: 10px; right: 20px; height: 4px; background: var(--md-on-surface-variant); opacity: 0.15; border-radius: 2px; }
+  
+  .style-preview.img::after { content: ""; position: absolute; top: 10px; left: 10px; right: 28px; height: 5px; background: var(--md-primary); opacity: 0.4; border-radius: 2px; }
+  .style-preview.img::before { content: ""; position: absolute; top: 10px; right: 10px; width: 14px; height: 14px; background: var(--md-secondary); opacity: 0.3; border-radius: 4px; }
+  
+  .style-preview.com::after { content: ""; position: absolute; top: 8px; left: 8px; right: 8px; height: 4px; background: var(--md-primary); opacity: 0.4; border-radius: 2px; }
+  .style-preview.com::before { content: ""; position: absolute; top: 16px; left: 8px; right: 8px; height: 4px; background: var(--md-on-surface-variant); opacity: 0.15; border-radius: 2px; }
+  
+  .style-preview.min::after { content: ""; position: absolute; top: 10px; left: 10px; right: 10px; height: 5px; background: var(--md-primary); opacity: 0.4; border-radius: 2px; }
 </style>

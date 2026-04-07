@@ -37,6 +37,7 @@
   export let onRefresh = () => {};
   export let activeView = 'inbox';
   export let isMobile = false;
+  export let isMini = false;
 
   let catsExpanded = true;
   let feedsExpanded = true;
@@ -95,7 +96,7 @@
 <aside class="sidebar">
   <header class="sidebar-header header-bar">
     <div class="logo">
-      <span class="full-logo">Gorrson</span>
+      <span class="full-logo">GO<span class="rss-logo-part-sidebar">RSS</span>ON</span>
       <span class="mini-logo">G</span>
     </div>
   </header>
@@ -124,13 +125,13 @@
     <div class="section-wrapper">
       <div 
         class="section-header" 
-        on:click={(e) => isMobile ? togglePopover('categories', e) : (catsExpanded = !catsExpanded)} 
+        on:click={(e) => (isMobile || isMini) ? togglePopover('categories', e) : (catsExpanded = !catsExpanded)} 
         role="button" 
         tabindex="0" 
         on:keydown={(e) => e.key === 'Enter' && (catsExpanded = !catsExpanded)}
       >
         <div class="header-left">
-          {#if !isMobile}
+          {#if !isMobile && !isMini}
             {#if catsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
           {/if}
           <span class="mobile-only-icon"><Hash size={18} /></span>
@@ -138,7 +139,7 @@
         </div>
       </div>
       
-      {#if catsExpanded && !isMobile}
+      {#if catsExpanded && !isMobile && !isMini}
         <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
           {#each categories as cat}
             <button 
@@ -167,12 +168,12 @@
       <div class="section-header">
         <div 
           class="header-left" 
-          on:click={(e) => isMobile ? togglePopover('sources', e) : (feedsExpanded = !feedsExpanded)} 
+          on:click={(e) => (isMobile || isMini) ? togglePopover('sources', e) : (feedsExpanded = !feedsExpanded)} 
           role="button" 
           tabindex="0" 
           on:keydown={(e) => e.key === 'Enter' && (feedsExpanded = !feedsExpanded)}
         >
-          {#if !isMobile}
+          {#if !isMobile && !isMini}
             {#if feedsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
           {/if}
           <span class="mobile-only-icon"><Globe size={18} /></span>
@@ -182,7 +183,7 @@
           <button class="refresh-btn-inline" on:click|stopPropagation={handleAddClick} title={$t('add_feed')}>
             <Plus size={14} strokeWidth={2.5} />
           </button>
-          {#if !isMobile}
+          {#if !isMobile && !isMini}
             <button class="refresh-btn-inline" on:click|stopPropagation={onRefresh} title="Sync All">
               <RefreshCw size={14} />
             </button>
@@ -190,7 +191,7 @@
         </div>
       </div>
 
-      {#if feedsExpanded && !isMobile}
+      {#if feedsExpanded && !isMobile && !isMini}
         <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
           {#each feeds as feed}
             <button 
@@ -318,6 +319,7 @@
     flex-direction: column;
     gap: 0; /* Gap managed by children */
     transition: all var(--layout-transition);
+    overflow: hidden;
   }
 
   .sidebar-header {
@@ -346,6 +348,12 @@
     letter-spacing: -2px;
     display: flex;
     align-items: center;
+  }
+
+  .rss-logo-part-sidebar {
+    font-size: 1.1em;
+    font-weight: 950;
+    margin: 0 -1px;
   }
 
   .mini-logo { display: none; }

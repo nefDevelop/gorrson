@@ -45,6 +45,9 @@
   /** @type {string} */
   export let sortMode = 'newest';
 
+  /** @type {string} */
+  export let cardStyle = 'default';
+
   export let searchQuery = "";
   let showSearch = false;
   let showFilters = false;
@@ -121,7 +124,7 @@
   }
 </script>
 
-<section class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0 ? 'is-empty' : ''}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
+<section class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0 ? 'is-empty' : ''} style-{cardStyle}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
   <header class="header-bar">
     <div></div> <!-- Empty spacer to keep actions aligned -->
     <div class="actions">
@@ -205,6 +208,7 @@
           <div data-id={item.id} class="card-wrapper {item.is_read ? 'read' : ''}">
             <PostCard 
               article={{...item, selected: selectedId === item.id}} 
+              viewMode={cardStyle}
               onClick={onSelect} 
               {onToggleFavorite}
               onShare={() => onShare(item)}
@@ -249,6 +253,9 @@
     height: 100vh;
     transition: all var(--layout-transition);
   }
+  .feed-list.style-image {
+    --feed-width: calc(var(--feed-width-base) * 1.25);
+  }
   .feed-list.expanded {
     width: calc(100vw - var(--sidebar-width));
     flex-shrink: 0;
@@ -264,7 +271,6 @@
     align-items: center; 
     padding: 0 24px; 
     border-bottom: 1px solid var(--md-outline); 
-    border-right: 1px solid var(--md-outline); 
     background: var(--md-surface);
     box-sizing: border-box; 
     height: var(--header-height); 
@@ -273,6 +279,9 @@
     border-bottom-right-radius: 32px; 
     position: relative;
     z-index: 20;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
   }
 
   /* Eraser for the straight line crossing the curved gap */

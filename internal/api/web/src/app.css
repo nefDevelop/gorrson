@@ -6,6 +6,8 @@
   --md-on-primary: #381E72;
   --md-primary-container: #4F378B;
   --md-on-primary-container: #EADDFF;
+  --md-tertiary: #D0BCFF; 
+  --md-on-tertiary: #381E72;
 
   --md-surface: #242424; /* Adwaita Surface */
   --md-on-surface: #B0B0B0; /* Muted Gray Text */
@@ -29,7 +31,8 @@
 
   /* Adwaita Metrics */
   --sidebar-width: 280px;
-  --feed-width: 400px;
+  --feed-width-base: 400px;
+  --feed-width: var(--feed-width-base);
   --header-height: 64px;
   --radius-xl: 12px;
   --radius-full: 9999px;
@@ -47,43 +50,42 @@
 /* Gradual Breakpoints for Organic Scaling */
 @media (max-width: 1440px) {
   :root {
-    --sidebar-width: 240px;
-    --feed-width: 360px;
+    --sidebar-width: 260px;
+    --feed-width-base: 360px;
   }
 }
 
 @media (max-width: 1200px) {
   :root {
-    --sidebar-width: 210px;
-    --feed-width: 320px;
+    --sidebar-width: 240px;
+    --feed-width-base: 320px;
   }
 }
 
 @media (max-width: 1000px) {
   :root {
-    --sidebar-width: 72px;
-    --feed-width: 300px;
+    --sidebar-width: 72px; /* Collapsed sidebar for more room */
+    --feed-width-base: clamp(260px, 30vw, 300px); /* Dinámico entre 1000px y 768px */
   }
 }
 
+/* Mobile: Single Panel Logic */
 @media (max-width: 768px) {
   :root {
-    --sidebar-width: 64px; 
-    --feed-width: calc(100% - 64px);
+    --sidebar-width: 0px; 
+    --feed-width: 100%;
   }
   
-  .app-container.has-selection .feed-list {
+  .app-container.has-selection > .nav-panels {
     display: none !important;
   }
   
-  .app-container.has-selection .post-viewer {
-    width: calc(100% - 64px) !important;
-    display: flex !important;
-  }
-
-  /* When no selection, show FeedList */
-  .app-container:not(.has-selection) .post-viewer {
-    display: none !important;
+  .app-container.has-selection :global(.post-viewer) {
+    width: 100% !important;
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 100;
   }
 }
 

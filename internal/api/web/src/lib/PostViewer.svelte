@@ -165,50 +165,57 @@
         {/if}
         
         <div class="meta">
-          <div class="meta-left">
-            <button class="action-btn mobile-only back-btn" on:click={onBack} title="Back to list">
-              <ArrowLeft size={20} />
-            </button>
-            <span class="category">{article.category || 'General'}</span>
-            <span class="info">{article.source}</span>
-          </div>
-          <div class="meta-right">
-            <span class="info time">{article.time}</span>
-            <button class="action-btn desktop-only" on:click={onToggleFullscreen} title={isFullscreen ? 'Exit reader mode' : 'Expand to reader mode'}>
-              {#if isFullscreen}
-                <Minimize2 size={18} />
-              {:else}
-                <Maximize2 size={18} />
-              {/if}
-            </button>
-
-            <button class="action-btn" on:click={shareArticle} title={$t('share')}>
-              <Share2 size={18} />
-            </button>
-
-            {#if exportServices.length > 0}
-              <div class="export-popover-container">
-                <button class="action-btn" on:click={() => showExportMenu = !showExportMenu} title={$t('send_to')}>
-                  <Send size={18} />
-                </button>
-                {#if showExportMenu}
-                  <div class="export-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 150 }}>
-                    {#each exportServices as svc}
-                      <button class="menu-item" on:click={() => sendToService(svc)}>
-                        <span class="svc-name">{svc.name}</span>
-                      </button>
-                    {/each}
-                  </div>
+          <div class="meta-top">
+            <div class="info-left">
+              <button class="action-btn mobile-only back-btn" on:click={onBack} title="Back to list">
+                <ArrowLeft size={20} />
+              </button>
+              <span class="category">{article.category || 'General'}</span>
+              <span class="info-sep">•</span>
+              <span class="info">{article.source}</span>
+            </div>
+            
+            <div class="meta-actions">
+              <button class="action-btn desktop-only" on:click={onToggleFullscreen} title={isFullscreen ? 'Exit reader mode' : 'Expand to reader mode'}>
+                {#if isFullscreen}
+                  <Minimize2 size={18} />
+                {:else}
+                  <Maximize2 size={18} />
                 {/if}
-              </div>
-            {/if}
-
-            <button class="action-btn {article.is_favorite ? 'active' : ''}" on:click={handleFavorite} title={$t('favorites')}>
-              <Star size={18} fill={article.is_favorite ? 'currentColor' : 'none'} />
-            </button>
-            <a class="action-btn" href={article.url} target="_blank" rel="noopener" title="Open original">
-              <ExternalLink size={18} />
-            </a>
+              </button>
+  
+              <button class="action-btn" on:click={shareArticle} title={$t('share')}>
+                <Share2 size={18} />
+              </button>
+  
+              {#if exportServices.length > 0}
+                <div class="export-popover-container">
+                  <button class="action-btn" on:click={() => showExportMenu = !showExportMenu} title={$t('send_to')}>
+                    <Send size={18} />
+                  </button>
+                  {#if showExportMenu}
+                    <div class="export-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 150 }}>
+                      {#each exportServices as svc}
+                        <button class="menu-item" on:click={() => sendToService(svc)}>
+                          <span class="svc-name">{svc.name}</span>
+                        </button>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+  
+              <button class="action-btn {article.is_favorite ? 'active' : ''}" on:click={handleFavorite} title={$t('favorites')}>
+                <Star size={18} fill={article.is_favorite ? 'currentColor' : 'none'} />
+              </button>
+              <a class="action-btn" href={article.url} target="_blank" rel="noopener" title="Open original">
+                <ExternalLink size={18} />
+              </a>
+            </div>
+          </div>
+          
+          <div class="meta-bottom">
+            <span class="info time">{article.time}</span>
           </div>
         </div>
 
@@ -381,18 +388,48 @@
 
   .meta {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 12px;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 24px;
+    width: 100%;
   }
-  .meta-left, .meta-right {
+
+  .meta-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .info-left {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 8px;
   }
-  .meta-right {
+
+  .info-sep {
+    opacity: 0.3;
+    font-size: 10px;
+  }
+
+  .meta-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .meta-actions .action-btn {
+    opacity: 0.6;
+    transition: opacity 0.2s;
+  }
+
+  .meta-actions .action-btn:hover {
+    opacity: 1;
+  }
+
+  .meta-bottom {
+    display: flex;
     justify-content: flex-end;
   }
   .category {

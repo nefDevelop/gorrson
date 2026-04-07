@@ -101,6 +101,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 
 		// Apply Filters
+		matchedAction := ""
 		skip := false
 		for _, rf := range readyFilters {
 			filter := rf.f
@@ -110,7 +111,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			matchContent := filter.Target == "content" || filter.Target == "both"
 
 			if (matchTitle && re.MatchString(title)) || (matchContent && re.MatchString(cleanContent)) {
-				if filter.Action == "BLOCK" {
+				if filter.Action == "BLOCK" || filter.Action == "HIDE" {
 					skip = true
 					break
 				}
@@ -121,6 +122,12 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 					if matchContent {
 						cleanContent = re.ReplaceAllString(cleanContent, filter.Replacement)
 					}
+				}
+				if filter.Action == "SILENT" {
+					matchedAction = "SILENT"
+				}
+				if filter.Action == "HIGHLIGHT" {
+					matchedAction = "HIGHLIGHT"
 				}
 			}
 		}
@@ -166,16 +173,18 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 
 		entry := &models.Entry{
-			ID:          uuid.New().String(),
-			FeedID:      feedID,
-			Title:       title,
-			Summary:     summary,
-			Content:     cleanContent,
-			URL:         item.Link,
-			ImageURL:    imageURL,
-			PublishedAt: pubDate,
-			IsRead:      false,
-			IsFavorite:  false,
+			ID:             uuid.New().String(),
+			FeedID:         feedID,
+			Title:          title,
+			Summary:        summary,
+			Content:        cleanContent,
+			URL:            item.Link,
+			ImageURL:       imageURL,
+			PublishedAt:    pubDate,
+			IsRead:         false,
+			IsFavorite:     false,
+			IsFullContent:  false,
+			MatchedAction:  matchedAction,
 		}
 
 		if err := store.AddEntry(entry); err != nil {

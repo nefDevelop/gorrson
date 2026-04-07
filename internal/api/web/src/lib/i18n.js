@@ -52,7 +52,8 @@ const translations = {
     "share": "Share",
     "copy_link": "Copy Link",
     "link_copied": "Link copied to clipboard ✓",
-    "send_to": "Send To..."
+    "send_to": "Send To...",
+    "login_subtitle": "Your RSS, without algorithms. Your freedom."
   },
   es: {
     "add_feed": "Añadir Feed",
@@ -103,7 +104,8 @@ const translations = {
     "share": "Compartir",
     "copy_link": "Copiar Enlace",
     "link_copied": "Enlace copiado al portapapeles ✓",
-    "send_to": "Enviar a..."
+    "send_to": "Enviar a...",
+    "login_subtitle": "Tu RSS, sin algoritmos. Tu libertad."
   }
 };
 

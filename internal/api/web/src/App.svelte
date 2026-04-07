@@ -26,13 +26,17 @@
   let scrollRead = localStorage.getItem('gorrson-scroll-read') === 'true';
   let unreadOnly = false;
   let sortMode = "newest"; // "newest", "oldest"
+  let cardStyle = localStorage.getItem('gorrson-card-style') || 'default';
 
   $: localStorage.setItem('gorrson-scroll-read', scrollRead.toString());
+  $: localStorage.setItem('gorrson-card-style', cardStyle);
 
   const STOP_WORDS = new Set(['de', 'a', 'el', 'la', 'en', 'y', 'que', 'os', 'un', 'una', 'con', 'para', 'por', 'lo', 'las', 'los', 'su', 'al', 'se', 'del', 'the', 'and', 'with', 'that', 'this', 'from']);
 
+  let isSidebarMini = false;
   const updateMobile = () => {
-    isMobile = window.innerWidth <= 1000;
+    isMobile = window.innerWidth <= 768;
+    isSidebarMini = window.innerWidth <= 1000;
   };
   let articles = [];
   let feeds = [];
@@ -426,6 +430,7 @@
           {categories} 
           {feeds}
           {isMobile}
+          isMini={isSidebarMini}
           activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
           onViewChange={handleViewChange} 
           onAddFeed={handleAddFeed}
@@ -450,6 +455,7 @@
             {loadingMore}
             {allLoaded}
             {scrollRead}
+            {cardStyle}
             bind:unreadOnly
             bind:sortMode
           />
@@ -485,6 +491,7 @@
           onLogout={handleLogout} 
           username={localStorage.getItem('username')}
           bind:scrollRead
+          bind:cardStyle
         />
       {/if}
     {/if}
@@ -509,7 +516,8 @@
     transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: left center;
     flex-shrink: 0;
-    max-width: 1000px; /* High enough to allow full sidebar + list */
+    max-width: 100%;
+    overflow: hidden;
   }
   .nav-panels.collapsed {
     max-width: 0 !important;

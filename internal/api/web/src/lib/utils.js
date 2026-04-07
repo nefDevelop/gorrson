@@ -37,3 +37,32 @@ export function stripHtml(html) {
     .replace(/&amp;/g, "&")
     .trim();
 }
+export function extractFirstImage(html) {
+  if (!html) return null;
+  // Use browser's native DOMParser to safely inspect attributes
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+  const imgs = doc.querySelectorAll('img');
+  
+  for (const img of imgs) {
+    const src = img.getAttribute('src');
+    if (!src) continue;
+    
+    // Ignore images that look like tracking pixels or spacers
+    const lowerSrc = src.toLowerCase();
+    if (lowerSrc.includes('pixel') || lowerSrc.includes('spacer') || lowerSrc.includes('1x1') || lowerSrc.includes('tracking')) {
+      continue;
+    }
+
+    // Check dimensions if specified as attributes
+    const w = parseInt(img.getAttribute('width') || '101'); // Assume large if not specified
+    const h = parseInt(img.getAttribute('height') || '101');
+    
+    // Skip small icons or author thumbnails (like the 40x40 ESPN example)
+    if (w > 0 && w < 100) continue;
+    if (h > 0 && h < 100) continue;
+
+    return src;
+  }
+  return null;
+}

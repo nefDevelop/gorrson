@@ -132,6 +132,9 @@ func (s *Server) routes() {
 		
 		r.Put("/categories/{name}", s.handleRenameCategory)
 
+		r.Get("/config/export", s.handleExportConfig)
+		r.Post("/config/import", s.handleImportConfig)
+
 		r.Get("/filters", s.handleListFilters)
 		r.Post("/filters", s.handleAddFilter)
 		r.Delete("/filters/{id}", s.handleDeleteFilter)
@@ -685,4 +688,52 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 	html := `<!doctype html><html><head><meta charset="utf-8"><script type="module" src="https://unpkg.com/rapidoc/dist/rapidoc-min.js"></script><title>Gorrson API</title></head><body><rapi-doc spec-url="/openapi.yaml" theme="dark" show-header="false" allow-authentication="true" render-style="focused"></rapi-doc></body></html>`
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(html))
+}
+func (s *Server) handleExportConfig(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	filters, _ := store.ListFilters()
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Content-Disposition", "attachment; filename=gorrson-config.json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"version": "1.0",
+		"filters": filters,
+	})
+}
+
+func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value("username").(string)
+	var config struct {
+		Filters []models.Filter `json:"filters"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	for _, f := range config.Filters {
+		if f.Pattern == "" {
+			continue
+		}
+		if f.ID == "" {
+			f.ID = uuid.New().String()
+		}
+		store.AddFilter(&f)
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Configuration imported successfully"})
 }

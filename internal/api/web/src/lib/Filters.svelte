@@ -71,7 +71,9 @@
         <input class="modern-input pattern-input" type="text" bind:value={newFilter.pattern} placeholder="Pattern (e.g. crypto|spam)" />
         
         <select class="modern-select" bind:value={newFilter.action}>
-          <option value="BLOCK">{$t('block')}</option>
+          <option value="HIDE">Hide (No sale)</option>
+          <option value="SILENT">Silent (Desactivada)</option>
+          <option value="HIGHLIGHT">Highlight (Destacar)</option>
           <option value="REPLACE">{$t('replace')}</option>
         </select>
 
@@ -278,8 +280,10 @@
   .feed-badge.global { border-color: var(--md-primary); color: var(--md-primary); }
   .feed-badge.specific { background: var(--md-secondary-container); color: var(--md-on-secondary-container); }
   
-  .action-block { background: #ff525222; color: #ff5252; border-color: #ff525244; }
-  .action-replace { background: #4caf5022; color: #4caf50; border-color: #4caf5044; }
+  .tag.action-hide, .tag.action-block { background: #ff525222; color: #ff5252; border-color: #ff525244; }
+  .tag.action-replace { background: #4caf5022; color: #4caf50; border-color: #4caf5044; }
+  .tag.action-silent { background: var(--md-outline); color: var(--md-on-surface-variant); opacity: 0.6; }
+  .tag.action-highlight { background: var(--md-secondary-container); color: var(--md-secondary); border-color: var(--md-secondary); }
 
   .delete-btn { background: transparent; border: none; color: var(--md-on-surface-variant); cursor: pointer; padding: 10px; border-radius: var(--radius-full); transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
   .delete-btn:hover { background: #ff525222; color: #ff5252; }

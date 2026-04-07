@@ -13,18 +13,21 @@ type Feed struct {
 }
 
 type Entry struct {
-	ID          string    `json:"id"`
-	FeedID      string    `json:"feed_id"`
-	Title       string    `json:"title"`
-	Summary     string    `json:"summary"`
-	Content     string    `json:"content"`
-	URL         string    `json:"url"`
-	ImageURL    string    `json:"image_url"`
-	PublishedAt time.Time `json:"published_at"`
-	IsRead          bool      `json:"is_read"`
-	IsFavorite      bool      `json:"is_favorite"`
-	IsFullContent   bool      `json:"is_full_content"`
-	}
+	ID            string    `json:"id"`
+	FeedID        string    `json:"feed_id"`
+	Title         string    `json:"title"`
+	Summary       string    `json:"summary"`
+	Content       string    `json:"content"`
+	URL           string    `json:"url"`
+	ImageURL      string    `json:"image_url"`
+	PublishedAt   time.Time `json:"published_at"`
+	IsRead        bool      `json:"is_read"`
+	IsFavorite    bool      `json:"is_favorite"`
+	IsFullContent bool      `json:"is_full_content"`
+	MatchedAction string    `json:"matched_action,omitempty"`
+	Source        string    `json:"source,omitempty"`
+	Category      string    `json:"category,omitempty"`
+}
 
 
 type Filter struct {

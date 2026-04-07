@@ -83,6 +83,7 @@ func (s *Store) migrate() error {
 			is_favorite BOOLEAN DEFAULT 0,
 			was_ever_favorite BOOLEAN DEFAULT 0,
 			is_full_content BOOLEAN DEFAULT 0,
+			matched_action TEXT,
 			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 		);`,
 		`CREATE TABLE IF NOT EXISTS filters (
@@ -121,6 +122,10 @@ func (s *Store) migrate() error {
 			return err
 		}
 	}
+
+	// Hot-fix for existing databases that don't have the matched_action column
+	s.db.Exec("ALTER TABLE entries ADD COLUMN matched_action TEXT")
+
 	return nil
 }
 
@@ -131,8 +136,8 @@ func (s *Store) AddFeed(f *models.Feed) error {
 }
 
 func (s *Store) AddEntry(e *models.Entry) error {
-	_, err := s.db.Exec(`INSERT INTO entries (id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent)
+	_, err := s.db.Exec(`INSERT INTO entries (id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+		e.ID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.MatchedAction)
 	return err
 }
 
@@ -158,7 +163,7 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 }
 
 func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int, category, feedID string) ([]models.Entry, error) {
-	query := `SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content 
+	query := `SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
               FROM entries e 
               JOIN feeds f ON e.feed_id = f.id`
 	var args []interface{}
@@ -206,9 +211,15 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	var entries []models.Entry
 	for rows.Next() {
 		var e models.Entry
-		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent); err != nil {
+		var summary, content, imageURL, matchedAction, category sql.NullString
+		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
 			return nil, err
 		}
+		e.Summary = summary.String
+		e.Content = content.String
+		e.ImageURL = imageURL.String
+		e.MatchedAction = matchedAction.String
+		e.Category = category.String
 		entries = append(entries, e)
 	}
 	return entries, nil
@@ -216,11 +227,21 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 
 func (s *Store) GetEntryByID(id string) (*models.Entry, error) {
 	var e models.Entry
-	err := s.db.QueryRow(`SELECT id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content FROM entries WHERE id = ?`, id).
-		Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent)
+	var summary, content, imageURL, matchedAction, category sql.NullString
+	err := s.db.QueryRow(`
+		SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+		FROM entries e
+		JOIN feeds f ON e.feed_id = f.id
+		WHERE e.id = ?`, id).
+		Scan(&e.ID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category)
 	if err != nil {
 		return nil, err
 	}
+	e.Summary = summary.String
+	e.Content = content.String
+	e.ImageURL = imageURL.String
+	e.MatchedAction = matchedAction.String
+	e.Category = category.String
 	return &e, nil
 }
 
@@ -300,9 +321,10 @@ func (s *Store) CleanupOldEntries() (int64, error) {
 }
 
 func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
-	query := `SELECT id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content 
-              FROM entries 
-              JOIN entries_fts ON entries.rowid = entries_fts.rowid 
+	query := `SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+              FROM entries e
+              JOIN feeds f ON e.feed_id = f.id
+              JOIN entries_fts ON e.rowid = entries_fts.rowid 
               WHERE entries_fts MATCH ? 
               ORDER BY rank`
 	rows, err := s.db.Query(query, searchTerm)
@@ -314,9 +336,15 @@ func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
 	var entries []models.Entry
 	for rows.Next() {
 		var e models.Entry
-		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &e.Summary, &e.Content, &e.URL, &e.ImageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent); err != nil {
+		var summary, content, imageURL, matchedAction, category sql.NullString
+		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
 			return nil, err
 		}
+		e.Summary = summary.String
+		e.Content = content.String
+		e.ImageURL = imageURL.String
+		e.MatchedAction = matchedAction.String
+		e.Category = category.String
 		entries = append(entries, e)
 	}
 	return entries, nil
