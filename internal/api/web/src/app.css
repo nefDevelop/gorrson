@@ -80,7 +80,7 @@
     display: none !important;
   }
   
-  .app-container.has-selection :global(.post-viewer) {
+  .app-container.has-selection .post-viewer {
     width: 100% !important;
     position: fixed;
     top: 0;

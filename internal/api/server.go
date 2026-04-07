@@ -428,6 +428,19 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username := r.Context().Value("username").(string)
+	
+	// Auto-tag social media domains if no category provided
+	if req.Category == "" {
+		lowerURL := strings.ToLower(req.URL)
+		if strings.Contains(lowerURL, "reddit.com") {
+			req.Category = "Reddit"
+		} else if strings.Contains(lowerURL, "/@") || strings.Contains(lowerURL, "mastodon") {
+			req.Category = "Mastodon"
+		} else if strings.Contains(lowerURL, "bsky.app") {
+			req.Category = "Bluesky"
+		}
+	}
+
 	slog.Info("handleAddFeed: request", "user", username, "url", req.URL, "category", req.Category)
 
 	store, err := db.NewStore(s.dataDir, username)

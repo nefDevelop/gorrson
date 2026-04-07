@@ -44,6 +44,9 @@ make build
 
 ### 🌐 REST API Highlights
 - **GET `/news`**: List articles with `unread`, `sort`, `limit`, and `search` filters.
+- **GET `/news/{id}/content`**: Smart full-content scraping with charset detection.
+- **PUT `/categories/{name}`**: Bulk rename categories across multiple feeds.
+- **GET/POST `/filters`**: Programmable Regex-based content filtering.
 - **GET `/proxy?url=...`**: Securely fetch and cache images.
 - **POST `/feeds/import`**: Bulk import feeds from OPML files.
 - **GET `/docs`**: Interactive API documentation (Rapidoc).

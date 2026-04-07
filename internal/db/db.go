@@ -64,7 +64,10 @@ func (s *Store) migrate() error {
 			site_url TEXT,
 			feed_url TEXT UNIQUE NOT NULL,
 			category TEXT,
-			last_updated DATETIME
+			last_updated DATETIME,
+			user_agent TEXT,
+			username TEXT,
+			password TEXT
 		);`,
 		`CREATE TABLE IF NOT EXISTS users (
 			username TEXT PRIMARY KEY,
@@ -123,15 +126,21 @@ func (s *Store) migrate() error {
 		}
 	}
 
-	// Hot-fix for existing databases that don't have the matched_action column
+	// Hot-fix for existing databases
 	s.db.Exec("ALTER TABLE entries ADD COLUMN matched_action TEXT")
+	s.db.Exec("ALTER TABLE feeds ADD COLUMN user_agent TEXT")
+	s.db.Exec("ALTER TABLE feeds ADD COLUMN username TEXT")
+	s.db.Exec("ALTER TABLE feeds ADD COLUMN password TEXT")
 
 	return nil
 }
 
 func (s *Store) AddFeed(f *models.Feed) error {
-	_, err := s.db.Exec(`INSERT INTO feeds (id, title, site_url, feed_url, category, last_updated) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(feed_url) DO UPDATE SET last_updated=excluded.last_updated`,
-		f.ID, f.Title, f.SiteURL, f.FeedURL, f.Category, f.LastUpdated)
+	_, err := s.db.Exec(`INSERT INTO feeds (id, title, site_url, feed_url, category, last_updated, user_agent, username, password) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
+                         ON CONFLICT(feed_url) 
+                         DO UPDATE SET last_updated=excluded.last_updated, user_agent=excluded.user_agent, username=excluded.username, password=excluded.password`,
+		f.ID, f.Title, f.SiteURL, f.FeedURL, f.Category, f.LastUpdated, f.UserAgent, f.Username, f.Password)
 	return err
 }
 
@@ -143,7 +152,7 @@ func (s *Store) AddEntry(e *models.Entry) error {
 
 func (s *Store) ListFeeds() ([]models.Feed, error) {
 	rows, err := s.db.Query(`
-		SELECT f.id, f.title, f.site_url, f.feed_url, f.category, f.last_updated,
+		SELECT f.id, f.title, f.site_url, f.feed_url, f.category, f.last_updated, f.user_agent, f.username, f.password,
 		       (SELECT COUNT(*) FROM entries e WHERE e.feed_id = f.id AND e.is_read = 0) as unread_count
 		FROM feeds f`)
 	if err != nil {
@@ -154,9 +163,13 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 	var feeds []models.Feed
 	for rows.Next() {
 		var f models.Feed
-		if err := rows.Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &f.UnreadCount); err != nil {
+		var ua, user, pass sql.NullString
+		if err := rows.Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &ua, &user, &pass, &f.UnreadCount); err != nil {
 			return nil, err
 		}
+		f.UserAgent = ua.String
+		f.Username = user.String
+		f.Password = pass.String
 		feeds = append(feeds, f)
 	}
 	return feeds, nil
@@ -352,11 +365,15 @@ func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
 
 func (s *Store) GetFeedByURL(url string) (*models.Feed, error) {
 	var f models.Feed
-	err := s.db.QueryRow("SELECT id, title, site_url, feed_url, category, last_updated FROM feeds WHERE feed_url = ?", url).
-		Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated)
+	var ua, user, pass sql.NullString
+	err := s.db.QueryRow("SELECT id, title, site_url, feed_url, category, last_updated, user_agent, username, password FROM feeds WHERE feed_url = ?", url).
+		Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &ua, &user, &pass)
 	if err != nil {
 		return nil, err
 	}
+	f.UserAgent = ua.String
+	f.Username = user.String
+	f.Password = pass.String
 	return &f, nil
 }
 
@@ -388,11 +405,15 @@ func (s *Store) RenameCategory(oldName, newName string) error {
 
 func (s *Store) GetFeedByID(id string) (*models.Feed, error) {
 	var f models.Feed
-	err := s.db.QueryRow("SELECT id, title, site_url, feed_url, category, last_updated FROM feeds WHERE id = ?", id).
-		Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated)
+	var ua, user, pass sql.NullString
+	err := s.db.QueryRow("SELECT id, title, site_url, feed_url, category, last_updated, user_agent, username, password FROM feeds WHERE id = ?", id).
+		Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &ua, &user, &pass)
 	if err != nil {
 		return nil, err
 	}
+	f.UserAgent = ua.String
+	f.Username = user.String
+	f.Password = pass.String
 	return &f, nil
 }
 

@@ -10,6 +10,9 @@ type Feed struct {
 	Category    string    `json:"category"`
 	LastUpdated time.Time `json:"last_updated"`
 	UnreadCount int       `json:"unread_count"`
+	UserAgent   string    `json:"user_agent,omitempty"`
+	Username    string    `json:"username,omitempty"`
+	Password    string    `json:"password,omitempty"`
 }
 
 type Entry struct {

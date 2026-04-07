@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"regexp"
 	"strings"
 	"time"
@@ -14,6 +15,23 @@ import (
 	"github.com/nef734/gorrson/internal/models"
 	"github.com/nef734/gorrson/internal/sanitizer"
 )
+
+type transport struct {
+	rt   http.RoundTripper
+	ua   string
+	user string
+	pass string
+}
+
+func (t *transport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if t.ua != "" {
+		req.Header.Set("User-Agent", t.ua)
+	}
+	if t.user != "" || t.pass != "" {
+		req.SetBasicAuth(t.user, t.pass)
+	}
+	return t.rt.RoundTrip(req)
+}
 
 type Parser struct {
 	fp *gofeed.Parser
@@ -29,14 +47,47 @@ func NewParser() *Parser {
 func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) error {
 	slog.Info("SyncFeed starting", "url", url, "user", store.GetUsername())
 
-	feed, err := p.fp.ParseURLWithContext(url, ctx)
+	// Get feed settings if it exists
+	existing, _ := store.GetFeedByURL(url)
+	
+	ua := "Gorrson/1.2 (+https://github.com/nef734/gorrson)"
+	user := ""
+	pass := ""
+
+	if existing != nil {
+		if existing.UserAgent != "" {
+			ua = existing.UserAgent
+		}
+		user = existing.Username
+		pass = existing.Password
+	}
+
+	// Automatic User-Agent for known social domains to avoid blocking
+	if (existing == nil || existing.UserAgent == "") && 
+	   (strings.Contains(url, "reddit.com") || strings.Contains(url, "mastodon") || strings.Contains(url, "bsky.app")) {
+		ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
+	}
+
+	// Create a local parser to be thread-safe with custom client
+	fp := gofeed.NewParser()
+	fp.Client = &http.Client{
+		Timeout: 30 * time.Second,
+		Transport: &transport{
+			rt:   http.DefaultTransport,
+			ua:   ua,
+			user: user,
+			pass: pass,
+		},
+	}
+
+	feed, err := fp.ParseURLWithContext(url, ctx)
 	if err != nil {
 		// Try discovery if initial parse fails
 		slog.Info("Direct parse failed, trying discovery", "url", url, "err", err)
 		discoveredURL, discErr := DiscoverFeed(ctx, url)
 		if discErr == nil && discoveredURL != url {
 			url = discoveredURL
-			feed, err = p.fp.ParseURLWithContext(url, ctx)
+			feed, err = fp.ParseURLWithContext(url, ctx)
 		}
 		
 		if err != nil {
@@ -48,7 +99,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 	slog.Info("Feed parsed", "title", feed.Title, "items", len(feed.Items), "url", url)
 
 	// Check if feed exists to maintain the ID
-	existing, _ := store.GetFeedByURL(url)
+	existing, _ = store.GetFeedByURL(url)
 	feedID := uuid.New().String()
 	if existing != nil {
 		feedID = existing.ID
@@ -170,6 +221,13 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 					imageURL = matches[1]
 				}
 			}
+		}
+
+		// Special handling for Mastodon & Bluesky
+		isMastodon := strings.Contains(url, "/@") || strings.Contains(feed.Generator, "Mastodon")
+		isBluesky := strings.Contains(url, "bsky.app")
+		if (isMastodon || isBluesky) && imageURL == "" && feed.Image != nil {
+			imageURL = feed.Image.URL
 		}
 
 		entry := &models.Entry{

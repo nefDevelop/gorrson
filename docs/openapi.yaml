@@ -328,3 +328,165 @@ paths:
       responses:
         '204':
           description: Feed deleted
+  /proxy:
+    get:
+      summary: Fetch and cache an external image
+      tags: [System]
+      parameters:
+        - name: url
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Remote image URL.
+      responses:
+        '200':
+          description: The proxied image content
+          content:
+            image/*:
+              schema:
+                type: string
+                format: binary
+
+  /news/read-all:
+    put:
+      summary: Mark all entries as read
+      tags: [News]
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: All entries marked as read
+
+  /news/{id}/content:
+    get:
+      summary: Get full scraped content of an entry
+      tags: [News]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Scraped HTML content
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content:
+                    type: string
+
+  /categories/{name}:
+    put:
+      summary: Rename a category across all feeds
+      tags: [Feeds]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The old category name.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  description: The new category name.
+      responses:
+        '204':
+          description: Category renamed
+
+  /config/export:
+    get:
+      summary: Export filters and system configuration
+      tags: [Config]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: JSON configuration file
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /config/import:
+    post:
+      summary: Import filters and system configuration
+      tags: [Config]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Configuration imported
+
+  /filters:
+    get:
+      summary: List all active content filters
+      tags: [Filters]
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: List of filters
+    post:
+      summary: Add a new content filter
+      tags: [Filters]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pattern, action, target]
+              properties:
+                pattern:
+                  type: string
+                action:
+                  type: string
+                  enum: [BLOCK, REPLACE]
+                target:
+                  type: string
+                  enum: [title, content, all]
+                replacement:
+                  type: string
+      responses:
+        '201':
+          description: Filter created
+
+  /filters/{id}:
+    delete:
+      summary: Delete a filter
+      tags: [Filters]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Filter deleted

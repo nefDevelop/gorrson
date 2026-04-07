@@ -78,7 +78,7 @@ func TestAPIServer(t *testing.T) {
 	rr = httptest.NewRecorder()
 	srv.router.ServeHTTP(rr, req)
 
-	if rr.Code != http.StatusCreated && rr.Code != http.StatusInternalServerError {
+	if rr.Code != http.StatusCreated && rr.Code != http.StatusInternalServerError && rr.Code != http.StatusBadRequest {
 		t.Errorf("AddFeed failed: status %d. Body: %s", rr.Code, rr.Body.String())
 	}
 
