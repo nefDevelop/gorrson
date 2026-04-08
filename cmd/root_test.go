@@ -5,6 +5,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/spf13/pflag"
 )
 
 func executeCommand(args ...string) (string, error) {
@@ -13,8 +15,17 @@ func executeCommand(args ...string) (string, error) {
 	rootCmd.SetErr(buf)
 	rootCmd.SetArgs(args)
 
-	// Reset flags to avoid pollution between tests if necessary
-	// In Cobra, we might need to be careful with global state
+	// In Cobra, we need to reset flags to avoid pollution between tests
+	// as PersistentFlags and sub-command flags are persistent in the global rootCmd.
+	for _, cmd := range rootCmd.Commands() {
+		cmd.Flags().VisitAll(func(f *pflag.Flag) {
+			f.Value.Set(f.DefValue)
+		})
+	}
+	rootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
+		f.Value.Set(f.DefValue)
+	})
+
 	err := rootCmd.Execute()
 	return buf.String(), err
 }

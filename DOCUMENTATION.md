@@ -52,16 +52,18 @@ Bulk imports feeds from an OPML file.
 Manage content filtering rules (BLOCK/REPLACE).
 - **Sub-commands**:
     - `add`: Create a new rule.
-        - `--user` (string): User identifier.
-        - `--pattern` (string): **Required.** Regex to match.
-        - `--action` (string): `BLOCK` or `REPLACE`. (Default: `BLOCK`)
-        - `--target` (string): `title`, `content`, or `both`. (Default: `both`)
-        - `--feed` (string): Feed ID (omit for Global filter).
-        - `--replacement` (string): Text to insert (for REPLACE action).
+        - `-n, --user` (string): User identifier.
+        - `-p, --pattern` (string): **Required.** Regex to match.
+        - `-a, --action` (string): `BLOCK` or `REPLACE`. (Default: `BLOCK`)
+        - `-t, --target` (string): `title`, `content`, or `both`. (Default: `both`)
+        - `-f, --feed` (string): Feed ID (omit for Global filter).
+        - `-r, --replacement` (string): Text to insert (for REPLACE action).
     - `list`: Show all filters for a user.
+        - `-n, --user` (string): User identifier.
     - `remove`: Delete a filter.
-        - `--id` (string): Filter ID.
-- **Example**: `./rss-cli filter add --user alice --pattern "crypto" --action BLOCK`
+        - `-n, --user` (string): User identifier.
+        - `-i, --id` (string): **Required.** Filter ID.
+- **Example**: `./rss-cli filter add -n alice -p "crypto" -a BLOCK`
 
 ---
 
@@ -70,11 +72,11 @@ Advanced account management.
 - **Sub-commands**:
     - `list`: List all users with a `.db` file.
     - `passwd`: Change a user's password.
-        - `--user` (string): Username.
-        - `--pass` (string): New password.
+        - `-u, --user` (string): **Required.** Username.
+        - `-p, --pass` (string): **Required.** New password.
     - `delete`: Permanently delete a user and their data.
-        - `--user` (string): Username.
-- **Example**: `./rss-cli user passwd --user alice --pass newsecret`
+        - `-u, --user` (string): **Required.** Username.
+- **Example**: `./rss-cli user passwd -u alice -p newsecret`
 
 ---
 
@@ -139,7 +141,18 @@ Base URL: `http://localhost:7077` (Default)
 **Endpoint**: `/filters`
 - **GET**: List user filters.
 - **POST**: Create filter. Body: `{"pattern", "action", "target", "replacement", "feed_id"}`.
-- **DELETE** `/filters/{id}`: Remove a filter rule.
+- `DELETE` `/filters/{id}`: Remove a filter rule.
+- `GET` `/config/export`: Export all filters as JSON.
+- `POST` `/config/import`: Import filters from JSON.
+
+---
+
+### 🔥 Fever API (Mobile Support)
+**Endpoint**: `/api/fever`
+- **Method**: `GET` / `POST`
+- **Auth**: Query param `?api_key=...` (MD5 of `user:pass`).
+- **Compatibility**: Supports groups, feeds, items, favicons, and unread marks.
+- **Example**: `http://localhost:7077/api/fever?api_key=5927d3...`
 
 ---
 **Gorrson: The Expert RSS Engine.**

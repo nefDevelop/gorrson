@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 
@@ -40,15 +39,15 @@ var importCmd = &cobra.Command{
 		defer store.Close()
 
 		parser := rss.NewParser()
-		fmt.Printf("Importing %d feeds for user %s...\n", len(outlines), user)
+		cmd.Printf("Importing %d feeds for user %s...\n", len(outlines), user)
 		for _, o := range outlines {
-			fmt.Printf("- Syncing: %s\n", o.XMLURL)
+			cmd.Printf("- Syncing: %s\n", o.XMLURL)
 			if err := parser.SyncFeed(context.Background(), o.XMLURL, store); err != nil {
-				fmt.Printf(" [!] Error syncing %s: %v\n", o.XMLURL, err)
+				cmd.Printf(" [!] Error syncing %s: %v\n", o.XMLURL, err)
 			}
 		}
 
-		fmt.Println("Import complete.")
+		cmd.Println("Import complete.")
 	},
 }
 

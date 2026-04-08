@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"regexp"
 
@@ -54,7 +53,7 @@ var filterAddCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		fmt.Printf("Filter '%s' added successfully for user %s\n", pattern, user)
+		cmd.Printf("Filter '%s' added successfully for user %s\n", pattern, user)
 	},
 }
 
@@ -74,15 +73,15 @@ var filterListCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		fmt.Printf("Filters for user %s:\n", user)
-		fmt.Printf("%-36s | %-15s | %-10s | %-10s | %s\n", "ID", "Pattern", "Action", "Target", "FeedID")
-		fmt.Println(string(make([]byte, 100))) // Simple line
+		cmd.Printf("Filters for user %s:\n", user)
+		cmd.Printf("%-36s | %-15s | %-10s | %-10s | %s\n", "ID", "Pattern", "Action", "Target", "FeedID")
+		cmd.Println(string(make([]byte, 100))) // Simple line
 		for _, f := range filters {
 			fid := f.FeedID
 			if fid == "" {
 				fid = "(GLOBAL)"
 			}
-			fmt.Printf("%-36s | %-15s | %-10s | %-10s | %s\n", f.ID, f.Pattern, f.Action, f.Target, fid)
+			cmd.Printf("%-36s | %-15s | %-10s | %-10s | %s\n", f.ID, f.Pattern, f.Action, f.Target, fid)
 		}
 	},
 }
@@ -106,7 +105,7 @@ var filterRemoveCmd = &cobra.Command{
 		if err := store.DeleteFilter(id); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("Filter %s removed.\n", id)
+		cmd.Printf("Filter %s removed.\n", id)
 	},
 }
 

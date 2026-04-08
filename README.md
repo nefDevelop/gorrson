@@ -37,6 +37,7 @@ make build
 | Command | Description |
 | :--- | :--- |
 | `register` | Creates a new user and its dedicated database file. |
+| `user` | Advanced account management (list, passwd, delete). |
 | `add` | Automatically discovers and adds a feed from any URL. |
 | `filter` | Manage Regex rules (`BLOCK`, `REPLACE`) for your feeds. |
 | `serve` | Starts the REST API and the background Sync Workers. |

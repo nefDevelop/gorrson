@@ -34,7 +34,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = store.UpsertUser(username, hash)
+	err = store.UpsertUser(username, hash, "")
 	if err != nil {
 		log.Fatal(err)
 	}

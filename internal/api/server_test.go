@@ -26,7 +26,7 @@ func TestAPIServer(t *testing.T) {
 	// 0. Manual setup of user in DB
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	store.UpsertUser(username, hash)
+	store.UpsertUser(username, hash, "")
 	store.Close()
 
 	// 1. Test Login
@@ -278,7 +278,7 @@ func TestRenameCategoryAPI(t *testing.T) {
 
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	store.UpsertUser(username, hash)
+	store.UpsertUser(username, hash, "")
 	
 	// Pre-seed a feed with category
 	feedID := "feed-1"

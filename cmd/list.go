@@ -27,14 +27,14 @@ var listCmd = &cobra.Command{
 			log.Fatal(fmt.Errorf("failed to list entries: %w", err))
 		}
 
-		fmt.Printf("Displaying records for user: %s (Found: %d)\n", user, len(entries))
-		fmt.Println("-------------------------------------------")
+		cmd.Printf("Displaying records for user: %s (Found: %d)\n", user, len(entries))
+		cmd.Println("-------------------------------------------")
 		for _, e := range entries {
 			status := "[ ]"
 			if e.IsRead {
 				status = "[X]"
 			}
-			fmt.Printf("%s %s\n    URL: %s\n    Published: %s\n", status, e.Title, e.URL, e.PublishedAt.Format("2006-01-02 15:04"))
+			cmd.Printf("%s %s\n    URL: %s\n    Published: %s\n", status, e.Title, e.URL, e.PublishedAt.Format("2006-01-02 15:04"))
 		}
 	},
 }

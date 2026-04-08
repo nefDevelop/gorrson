@@ -68,18 +68,37 @@ curl -X POST http://localhost:7077/feeds \
      -d '{"url": "https://blog.golang.org"}'
 ```
 
-## 5. 🐳 Docker Tips
+## 6. 👤 User Management
 
-### Viewing Logs
+Advanced user operations are available via the CLI.
+
+### List available user databases
 ```bash
-docker logs -f gorrson-server
+./rss-cli user list
 ```
 
-### Accessing the DB inside the container
-The databases are stored in the `./data` volume on your host. You can open them with any SQLite browser:
+### Reset a user's password
 ```bash
-sqlite3 data/admin.db "SELECT title FROM entries LIMIT 5;"
+./rss-cli user passwd --user alice --pass newpassword123
 ```
+
+### Delete a user (and their DB file)
+```bash
+./rss-cli user delete --user olduser
+```
+
+---
+
+## 📱 Mobile Clients (Fever)
+
+Gorrson is compatible with professional RSS readers like **Reeder**, **Fiery Feeds**, and **Unread** using the Fever API.
+
+**Server URL**: `http://your-ip:7077/api/fever`
+**User**: Your Gorrson username.
+**Password**: Your Gorrson password.
+
+> [!NOTE]
+> Gorrson automatically handles the MD5 hashing required by the Fever protocol. Use your plain-text password in the mobile app settings.
 
 ---
 **Gorrson: The Expert RSS Engine.**

@@ -43,7 +43,7 @@ var registerCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		fmt.Printf("User %s registered successfully.\n", user)
+		cmd.Printf("User %s registered successfully.\n", user)
 	},
 }
 

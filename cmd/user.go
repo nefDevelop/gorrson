@@ -27,17 +27,17 @@ var userListCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		fmt.Println("Registered Gorrson Users:")
-		fmt.Println("-------------------------")
+		cmd.Println("Registered Gorrson Users:")
+		cmd.Println("-------------------------")
 		count := 0
 		for _, file := range files {
 			if !file.IsDir() && strings.HasSuffix(file.Name(), ".db") && file.Name() != "global.db" {
 				username := strings.TrimSuffix(file.Name(), ".db")
-				fmt.Printf("- %s\n", username)
+				cmd.Printf("- %s\n", username)
 				count++
 			}
 		}
-		fmt.Printf("\nTotal: %d users found in %s\n", count, dataDir)
+		cmd.Printf("\nTotal: %d users found in %s\n", count, dataDir)
 	},
 }
 
@@ -55,18 +55,18 @@ var userDeleteCmd = &cobra.Command{
 			log.Fatalf("User '%s' does not exist.", user)
 		}
 
-		fmt.Printf("Are you sure you want to delete user '%s' and ALL their data? (y/N): ", user)
+		cmd.Printf("Are you sure you want to delete user '%s' and ALL their data? (y/N): ", user)
 		var confirm string
-		fmt.Scanln(&confirm)
+		fmt.Fscanln(cmd.InOrStdin(), &confirm)
 		if strings.ToLower(confirm) != "y" {
-			fmt.Println("Operation cancelled.")
+			cmd.Println("Operation cancelled.")
 			return
 		}
 
 		if err := os.Remove(dbPath); err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("User '%s' deleted successfully.\n", user)
+		cmd.Printf("User '%s' deleted successfully.\n", user)
 	},
 }
 
@@ -103,7 +103,7 @@ var userPasswdCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		fmt.Printf("Password for user '%s' updated successfully.\n", user)
+		cmd.Printf("Password for user '%s' updated successfully.\n", user)
 	},
 }
 

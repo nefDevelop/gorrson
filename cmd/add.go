@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"log"
 
 	"github.com/spf13/cobra"
@@ -27,12 +26,12 @@ var addCmd = &cobra.Command{
 		defer store.Close()
 
 		parser := rss.NewParser()
-		fmt.Printf("Syncing feed from: %s...\n", url)
+		cmd.Printf("Syncing feed from: %s...\n", url)
 		if err := parser.SyncFeed(context.Background(), url, store); err != nil {
 			log.Fatal(err)
 		}
 
-		fmt.Printf("Feed %s added successfully for user %s\n", url, user)
+		cmd.Printf("Feed %s added successfully for user %s\n", url, user)
 	},
 }
 

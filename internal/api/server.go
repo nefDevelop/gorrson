@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/md5"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -135,7 +134,7 @@ func (s *Server) routes() {
 		r.Get("/feeds/export", s.handleExportOPML)
 		r.Patch("/feeds/{id}", s.handleUpdateFeed)
 		r.Delete("/feeds/{id}", s.handleDeleteFeed)
-		
+
 		r.Put("/categories/{name}", s.handleRenameCategory)
 
 		r.Get("/config/export", s.handleExportConfig)
@@ -298,7 +297,7 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	search := r.URL.Query().Get("search")
 	category := r.URL.Query().Get("category")
 	feedID := r.URL.Query().Get("feed_id")
-	
+
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 {
 		limit = 50 // Default limit for mobile safety
@@ -377,14 +376,18 @@ func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value("username").(string)
-	
+
 	category := r.URL.Query().Get("category")
 	feedID := r.URL.Query().Get("feed_id")
 	search := r.URL.Query().Get("search")
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	
-	if category == "null" || category == "undefined" { category = "" }
-	if feedID == "null" || feedID == "undefined" { feedID = "" }
+
+	if category == "null" || category == "undefined" {
+		category = ""
+	}
+	if feedID == "null" || feedID == "undefined" {
+		feedID = ""
+	}
 
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
@@ -434,7 +437,7 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	username := r.Context().Value("username").(string)
-	
+
 	// Auto-tag social media domains if no category provided
 	if req.Category == "" {
 		lowerURL := strings.ToLower(req.URL)
@@ -624,11 +627,11 @@ func (s *Server) handleImageProxy(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(cachePath); err == nil {
 		// Serve from cache
 		// We'll peek at the file to get the content-type, or just use a generic one
-		// Since browser is smart, serving as octet-stream might work, 
+		// Since browser is smart, serving as octet-stream might work,
 		// but let's try to be accurate.
 		f, _ := os.Open(cachePath)
 		defer f.Close()
-		
+
 		// Set some cache headers for the client browser
 		w.Header().Set("Cache-Control", "public, max-age=31536000") // 1 year
 		http.ServeContent(w, r, "image", time.Time{}, f)
@@ -777,7 +780,6 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 	// Fever doesn't send the username directly, it's hashed in the api_key.
 	// Since Gorrson is designed for one user per DB file, we'll look at the data directory
 	files, _ := os.ReadDir(s.dataDir)
-	var targetUser string
 	var userStore *db.Store
 
 	for _, f := range files {
@@ -795,7 +797,6 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 
 			// Validate MD5 apiKey against bcrypt feverKey
 			if auth.CheckPasswordHash(apiKey, feverKey) {
-				targetUser = username
 				userStore = store
 				break
 			}
@@ -874,7 +875,7 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Has("items") || r.URL.Query().Has("unread_item_ids") {
 		unreadOnly := r.URL.Query().Has("unread_item_ids")
 		entries, _ := userStore.ListEntries(unreadOnly, "desc", 500, 0, "", "")
-		
+
 		if r.URL.Query().Has("unread_item_ids") {
 			var ids []string
 			for _, e := range entries {
