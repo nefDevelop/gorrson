@@ -3,6 +3,7 @@ package rss
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"log/slog"
 	"net/http"
 	"regexp"
@@ -41,6 +42,13 @@ func NewParser() *Parser {
 	return &Parser{
 		fp: gofeed.NewParser(),
 	}
+}
+
+// generateFeverID converts a string ID to a 32-bit integer
+func generateFeverID(id string) int {
+	h := fnv.New32a()
+	h.Write([]byte(id))
+	return int(h.Sum32())
 }
 
 // SyncFeed parses a feed and saves it and its entries to the database.
@@ -107,6 +115,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 	f := &models.Feed{
 		ID:          feedID,
+		FeverID:     generateFeverID(feedID),
 		Title:       feed.Title,
 		SiteURL:     feed.Link,
 		FeedURL:     url,
@@ -244,6 +253,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			IsFullContent:  false,
 			MatchedAction:  matchedAction,
 		}
+		entry.FeverID = generateFeverID(entry.ID)
 
 		if err := store.AddEntry(entry); err != nil {
 			// Skip single entry errors (e.g., duplicated link)

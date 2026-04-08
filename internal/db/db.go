@@ -60,6 +60,7 @@ func (s *Store) migrate() error {
 		`PRAGMA foreign_keys=ON;`,
 		`CREATE TABLE IF NOT EXISTS feeds (
 			id TEXT PRIMARY KEY,
+			fever_id INTEGER DEFAULT 0,
 			title TEXT NOT NULL,
 			site_url TEXT,
 			feed_url TEXT UNIQUE NOT NULL,
@@ -71,10 +72,12 @@ func (s *Store) migrate() error {
 		);`,
 		`CREATE TABLE IF NOT EXISTS users (
 			username TEXT PRIMARY KEY,
-			password_hash TEXT NOT NULL
+			password_hash TEXT NOT NULL,
+			fever_key TEXT DEFAULT ''
 		);`,
 		`CREATE TABLE IF NOT EXISTS entries (
 			id TEXT PRIMARY KEY,
+			fever_id INTEGER DEFAULT 0,
 			feed_id TEXT NOT NULL,
 			title TEXT NOT NULL,
 			summary TEXT,
@@ -131,28 +134,31 @@ func (s *Store) migrate() error {
 	s.db.Exec("ALTER TABLE feeds ADD COLUMN user_agent TEXT")
 	s.db.Exec("ALTER TABLE feeds ADD COLUMN username TEXT")
 	s.db.Exec("ALTER TABLE feeds ADD COLUMN password TEXT")
+	s.db.Exec("ALTER TABLE feeds ADD COLUMN fever_id INTEGER DEFAULT 0")
+	s.db.Exec("ALTER TABLE entries ADD COLUMN fever_id INTEGER DEFAULT 0")
+	s.db.Exec("ALTER TABLE users ADD COLUMN fever_key TEXT DEFAULT ''")
 
 	return nil
 }
 
 func (s *Store) AddFeed(f *models.Feed) error {
-	_, err := s.db.Exec(`INSERT INTO feeds (id, title, site_url, feed_url, category, last_updated, user_agent, username, password) 
-                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) 
+	_, err := s.db.Exec(`INSERT INTO feeds (id, fever_id, title, site_url, feed_url, category, last_updated, user_agent, username, password) 
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                          ON CONFLICT(feed_url) 
-                         DO UPDATE SET last_updated=excluded.last_updated, user_agent=excluded.user_agent, username=excluded.username, password=excluded.password`,
-		f.ID, f.Title, f.SiteURL, f.FeedURL, f.Category, f.LastUpdated, f.UserAgent, f.Username, f.Password)
+                         DO UPDATE SET last_updated=excluded.last_updated, user_agent=excluded.user_agent, username=excluded.username, password=excluded.password, fever_id=excluded.fever_id`,
+		f.ID, f.FeverID, f.Title, f.SiteURL, f.FeedURL, f.Category, f.LastUpdated, f.UserAgent, f.Username, f.Password)
 	return err
 }
 
 func (s *Store) AddEntry(e *models.Entry) error {
-	_, err := s.db.Exec(`INSERT INTO entries (id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.MatchedAction)
+	_, err := s.db.Exec(`INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.MatchedAction)
 	return err
 }
 
 func (s *Store) ListFeeds() ([]models.Feed, error) {
 	rows, err := s.db.Query(`
-		SELECT f.id, f.title, f.site_url, f.feed_url, f.category, f.last_updated, f.user_agent, f.username, f.password,
+		SELECT f.id, f.fever_id, f.title, f.site_url, f.feed_url, f.category, f.last_updated, f.user_agent, f.username, f.password,
 		       (SELECT COUNT(*) FROM entries e WHERE e.feed_id = f.id AND e.is_read = 0) as unread_count
 		FROM feeds f`)
 	if err != nil {
@@ -164,7 +170,7 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 	for rows.Next() {
 		var f models.Feed
 		var ua, user, pass sql.NullString
-		if err := rows.Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &ua, &user, &pass, &f.UnreadCount); err != nil {
+		if err := rows.Scan(&f.ID, &f.FeverID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &ua, &user, &pass, &f.UnreadCount); err != nil {
 			return nil, err
 		}
 		f.UserAgent = ua.String
@@ -176,9 +182,9 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 }
 
 func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int, category, feedID string) ([]models.Entry, error) {
-	query := `SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
-              FROM entries e 
-              JOIN feeds f ON e.feed_id = f.id`
+	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+	FROM entries e 
+	JOIN feeds f ON e.feed_id = f.id`
 	var args []interface{}
 	
 	conditions := []string{}
@@ -225,7 +231,7 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	for rows.Next() {
 		var e models.Entry
 		var summary, content, imageURL, matchedAction, category sql.NullString
-		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
+		if err := rows.Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
 			return nil, err
 		}
 		e.Summary = summary.String
@@ -242,11 +248,11 @@ func (s *Store) GetEntryByID(id string) (*models.Entry, error) {
 	var e models.Entry
 	var summary, content, imageURL, matchedAction, category sql.NullString
 	err := s.db.QueryRow(`
-		SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+		SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
 		FROM entries e
 		JOIN feeds f ON e.feed_id = f.id
 		WHERE e.id = ?`, id).
-		Scan(&e.ID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category)
+		Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category)
 	if err != nil {
 		return nil, err
 	}
@@ -265,6 +271,20 @@ func (s *Store) UpdateEntryContent(id, content string) error {
 
 func (s *Store) MarkAsRead(entryID string) error {
 	_, err := s.db.Exec("UPDATE entries SET is_read = 1 WHERE id = ?", entryID)
+	return err
+}
+
+func (s *Store) MarkAsReadByFeverID(feverID int) error {
+	_, err := s.db.Exec("UPDATE entries SET is_read = 1 WHERE fever_id = ?", feverID)
+	return err
+}
+
+func (s *Store) ToggleFavoriteByFeverID(feverID int, isFavorite bool) error {
+	if isFavorite {
+		_, err := s.db.Exec("UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE fever_id = ?", feverID)
+		return err
+	}
+	_, err := s.db.Exec("UPDATE entries SET is_favorite = 0 WHERE fever_id = ?", feverID)
 	return err
 }
 
@@ -334,7 +354,7 @@ func (s *Store) CleanupOldEntries() (int64, error) {
 }
 
 func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
-	query := `SELECT e.id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
               FROM entries e
               JOIN feeds f ON e.feed_id = f.id
               JOIN entries_fts ON e.rowid = entries_fts.rowid 
@@ -350,7 +370,7 @@ func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
 	for rows.Next() {
 		var e models.Entry
 		var summary, content, imageURL, matchedAction, category sql.NullString
-		if err := rows.Scan(&e.ID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
+		if err := rows.Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
 			return nil, err
 		}
 		e.Summary = summary.String
@@ -377,8 +397,8 @@ func (s *Store) GetFeedByURL(url string) (*models.Feed, error) {
 	return &f, nil
 }
 
-func (s *Store) UpsertUser(username, passwordHash string) error {
-	_, err := s.db.Exec("INSERT INTO users (username, password_hash) VALUES (?, ?) ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash", username, passwordHash)
+func (s *Store) UpsertUser(username, passwordHash, feverKey string) error {
+	_, err := s.db.Exec("INSERT INTO users (username, password_hash, fever_key) VALUES (?, ?, ?) ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, fever_key=excluded.fever_key", username, passwordHash, feverKey)
 	return err
 }
 
@@ -386,6 +406,12 @@ func (s *Store) GetUserHash(username string) (string, error) {
 	var hash string
 	err := s.db.QueryRow("SELECT password_hash FROM users WHERE username = ?", username).Scan(&hash)
 	return hash, err
+}
+
+func (s *Store) GetUserFeverKey(username string) (string, error) {
+	var key string
+	err := s.db.QueryRow("SELECT fever_key FROM users WHERE username = ?", username).Scan(&key)
+	return key, err
 }
 
 func (s *Store) DeleteFeed(id string) error {

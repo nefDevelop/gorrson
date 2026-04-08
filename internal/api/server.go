@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"crypto/md5"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"hash/fnv"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -38,7 +40,7 @@ var (
 
 func (s *Server) loginRateLimit(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" || r.URL.Path != "/login" {
+		if r.Method != "POST" || (r.URL.Path != "/login" && r.URL.Path != "/api/fever") {
 			next.ServeHTTP(w, r)
 			return
 		}
@@ -59,7 +61,7 @@ func (s *Server) loginRateLimit(next http.Handler) http.Handler {
 			}
 		}
 
-		if len(valid) >= 5 {
+		if len(valid) >= 10 { // Slightly higher limit for Fever sync
 			loginMu.Unlock()
 			http.Error(w, "Too many login attempts. Try again in a minute.", http.StatusTooManyRequests)
 			return
@@ -113,6 +115,10 @@ func (s *Server) routes() {
 	s.router.Post("/refresh", s.handleRefresh)
 	s.router.Post("/logout", s.handleLogout)
 	s.router.Get("/proxy", s.handleImageProxy)
+
+	// Fever API endpoint (authentication is handled inside the handler via api_key)
+	s.router.With(s.loginRateLimit).Post("/api/fever", s.handleFeverAPI)
+	s.router.With(s.loginRateLimit).Get("/api/fever", s.handleFeverAPI)
 
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
@@ -749,4 +755,192 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Configuration imported successfully"})
+}
+
+// uuidToInt converts a UUID string to a 32-bit integer for Fever API compatibility
+func uuidToInt(id string) int {
+	h := fnv.New32a()
+	h.Write([]byte(id))
+	return int(h.Sum32())
+}
+
+func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
+	// 1. Get API Key
+	apiKey := r.FormValue("api_key")
+	if apiKey == "" {
+		// Try from POST body if not in query
+		r.ParseForm()
+		apiKey = r.Form.Get("api_key")
+	}
+
+	// 2. We need a username to open the DB.
+	// Fever doesn't send the username directly, it's hashed in the api_key.
+	// Since Gorrson is designed for one user per DB file, we'll look at the data directory
+	files, _ := os.ReadDir(s.dataDir)
+	var targetUser string
+	var userStore *db.Store
+
+	for _, f := range files {
+		if filepath.Ext(f.Name()) == ".db" && f.Name() != "global.db" {
+			username := strings.TrimSuffix(f.Name(), ".db")
+			store, err := db.NewStore(s.dataDir, username)
+			if err != nil {
+				continue
+			}
+			feverKey, err := store.GetUserFeverKey(username)
+			if err != nil || feverKey == "" {
+				store.Close()
+				continue
+			}
+
+			// Validate MD5 apiKey against bcrypt feverKey
+			if auth.CheckPasswordHash(apiKey, feverKey) {
+				targetUser = username
+				userStore = store
+				break
+			}
+			store.Close()
+		}
+	}
+
+	if userStore == nil {
+		slog.Warn("Fever API: Unauthorized access attempt", "api_key", apiKey)
+		// Return auth:0 instead of HTTP error to be Fever-compliant
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"api_version": 3,
+			"auth":        0,
+		})
+		return
+	}
+	defer userStore.Close()
+
+	// Fever Response Base
+	resp := map[string]interface{}{
+		"api_version":            3,
+		"auth":                   1,
+		"last_refreshed_on_time": time.Now().Unix(),
+	}
+
+	// 3. Handle Commands
+	if r.URL.Query().Has("groups") {
+		feeds, _ := userStore.ListFeeds()
+		categories := make(map[string]bool)
+		var groups []map[string]interface{}
+		for _, f := range feeds {
+			if f.Category != "" && !categories[f.Category] {
+				categories[f.Category] = true
+				groups = append(groups, map[string]interface{}{
+					"id":    uuidToInt(f.Category),
+					"title": f.Category,
+				})
+			}
+		}
+		resp["groups"] = groups
+
+		var feedsGroups []map[string]interface{}
+		for cat := range categories {
+			var feedIds []string
+			for _, f := range feeds {
+				if f.Category == cat {
+					feedIds = append(feedIds, strconv.Itoa(f.FeverID))
+				}
+			}
+			feedsGroups = append(feedsGroups, map[string]interface{}{
+				"group_id": uuidToInt(cat),
+				"feed_ids": strings.Join(feedIds, ","),
+			})
+		}
+		resp["feeds_groups"] = feedsGroups
+	}
+
+	if r.URL.Query().Has("feeds") {
+		feeds, _ := userStore.ListFeeds()
+		var feverFeeds []map[string]interface{}
+		for _, f := range feeds {
+			feverFeeds = append(feverFeeds, map[string]interface{}{
+				"id":                   f.FeverID,
+				"favicon_id":           0,
+				"title":                f.Title,
+				"url":                  f.FeedURL,
+				"site_url":             f.SiteURL,
+				"is_spark":             0,
+				"last_updated_on_time": f.LastUpdated.Unix(),
+			})
+		}
+		resp["feeds"] = feverFeeds
+	}
+
+	if r.URL.Query().Has("items") || r.URL.Query().Has("unread_item_ids") {
+		unreadOnly := r.URL.Query().Has("unread_item_ids")
+		entries, _ := userStore.ListEntries(unreadOnly, "desc", 500, 0, "", "")
+		
+		if r.URL.Query().Has("unread_item_ids") {
+			var ids []string
+			for _, e := range entries {
+				ids = append(ids, strconv.Itoa(e.FeverID))
+			}
+			resp["unread_item_ids"] = strings.Join(ids, ",")
+		}
+
+		if r.URL.Query().Has("items") {
+			var items []map[string]interface{}
+			for _, e := range entries {
+				items = append(items, map[string]interface{}{
+					"id":              e.FeverID,
+					"feed_id":         uuidToInt(e.FeedID), // Using uuidToInt for consistency if FeedID is UUID
+					"title":           e.Title,
+					"author":          "",
+					"html":            e.Content,
+					"url":             e.URL,
+					"is_saved":        0,
+					"is_read":         0,
+					"created_on_time": e.PublishedAt.Unix(),
+				})
+			}
+			resp["items"] = items
+		}
+	}
+
+	// Fever Mark Commands
+	if r.FormValue("mark") == "item" {
+		id, _ := strconv.Atoi(r.FormValue("id"))
+		as := r.FormValue("as")
+		if as == "read" {
+			userStore.MarkAsReadByFeverID(id)
+		} else if as == "saved" {
+			userStore.ToggleFavoriteByFeverID(id, true)
+		} else if as == "unsaved" {
+			userStore.ToggleFavoriteByFeverID(id, false)
+		}
+	} else if r.FormValue("mark") == "feed" {
+		id, _ := strconv.Atoi(r.FormValue("id"))
+		as := r.FormValue("as")
+		if as == "read" {
+			// Find category or feed by FeverID and mark all read
+			// For simplicity in prototype, we can list feeds and find the one with this FeverID
+			feeds, _ := userStore.ListFeeds()
+			for _, f := range feeds {
+				if f.FeverID == id {
+					userStore.MarkAllRead("", f.ID, "", 0)
+					break
+				}
+			}
+		}
+	} else if r.FormValue("mark") == "group" {
+		id, _ := strconv.Atoi(r.FormValue("id"))
+		if r.FormValue("as") == "read" {
+			// Find category by FeverID
+			feeds, _ := userStore.ListFeeds()
+			for _, f := range feeds {
+				if uuidToInt(f.Category) == id {
+					userStore.MarkAllRead(f.Category, "", "", 0)
+					break
+				}
+			}
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
 }

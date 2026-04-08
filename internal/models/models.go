@@ -4,6 +4,7 @@ import "time"
 
 type Feed struct {
 	ID          string    `json:"id"`
+	FeverID     int       `json:"fever_id"`
 	Title       string    `json:"title"`
 	SiteURL     string    `json:"site_url"`
 	FeedURL     string    `json:"feed_url"`
@@ -17,6 +18,7 @@ type Feed struct {
 
 type Entry struct {
 	ID            string    `json:"id"`
+	FeverID       int       `json:"fever_id"`
 	FeedID        string    `json:"feed_id"`
 	Title         string    `json:"title"`
 	Summary       string    `json:"summary"`

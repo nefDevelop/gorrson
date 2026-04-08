@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/md5"
 	"fmt"
 	"log"
 	"os"
@@ -84,13 +85,21 @@ var userPasswdCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
+		// Calculate Fever Key: bcrypt(md5(user:pass))
+		feverHash := md5.Sum([]byte(user + ":" + pass))
+		feverApiKey := fmt.Sprintf("%x", feverHash)
+		feverBcrypt, err := auth.HashPassword(feverApiKey)
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		store, err := db.NewStore(dataDir, user)
 		if err != nil {
 			log.Fatal(err)
 		}
 		defer store.Close()
 
-		if err := store.UpsertUser(user, hash); err != nil {
+		if err := store.UpsertUser(user, hash, feverBcrypt); err != nil {
 			log.Fatal(err)
 		}
 
