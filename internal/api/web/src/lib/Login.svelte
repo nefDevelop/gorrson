@@ -135,7 +135,7 @@
 
   .logo-text {
     font: var(--m3-display-large);
-    font-size: 56px;
+    font-size: 55px;
     font-weight: 900;
     letter-spacing: -3px;
     margin: 0;
@@ -153,7 +153,7 @@
     letter-spacing: 0.5px;
   }
   .rss-logo-part {
-    font-size: 1.15em;
+    font-size: 1.12em;
     font-weight: 950;
     margin: 0 -2px;
     display: inline-block;
