@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   gorrson:
     build: .
@@ -10,11 +8,11 @@ services:
     environment:
       - GORRSON_PORT=7077
       - GORRSON_DATA_DIR=/app/data
-      - GORRSON_JWT_SECRET=super-secure-key-for-mobile-access
+      - GORRSON_JWT_SECRET=${GORRSON_JWT_SECRET}
     volumes:
       - ./data:/app/data
     healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:7077/docs"]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:7077/docs" ]
       interval: 30s
       timeout: 10s
       retries: 3

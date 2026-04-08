@@ -27,28 +27,71 @@ Measured on AMD Ryzen 5 5600X with `-benchtime=5s`:
 
 *Notice: Performance remains extremely stable across different CPU configurations. This confirms that Gorrson's efficiency is decoupled from high core counts, making it perfect for low-resource environments.*
 
-## Installation & Setup
+## 🚀 Installation & Setup
 
-### Quick Install (Linux)
-Clone the repository and run the automated installer:
-```bash
-git clone https://github.com/nef734/gorrson.git
-cd gorrson
-chmod +x install.sh && ./install.sh
-```
+### 🐳 Docker (Recommended for Servers)
+The most robust way to deploy Gorrson is using Docker Compose.
 
-### Docker (Recommended for Servers)
-Deploy instantly with Docker Compose:
-```bash
-docker-compose up -d
-```
+1.  **Clone the repository**:
+    ```bash
+    git clone https://github.com/nef734/gorrson.git
+    cd gorrson
+    ```
 
-### Manual Build
-Ensure you have Go 1.21+ installed:
-```bash
-make build
-./rss-cli --help
-```
+2.  **Configure environment**:
+    Copy the template and set a secure secret:
+    ```bash
+    cp .env.example .env
+    # We recommend changing GORRSON_JWT_SECRET in the .env file
+    ```
+
+3.  **Deploy**:
+    ```bash
+    docker compose up -d
+    ```
+
+4.  **Create your first user**:
+    Run the CLI within the container to register:
+    ```bash
+    docker exec -it gorrson-server ./gorrson register --user <admin> --pass <password>
+    ```
+
+---
+
+### 🛠️ Manual Installation (Bare Metal)
+Ensure you have **Go 1.21+** installed on your system.
+
+1.  **Build the project**:
+    ```bash
+    make build
+    ```
+
+2.  **Initialize a user**:
+    ```bash
+    ./rss-cli register --user <name> --pass <secret>
+    ```
+
+3.  **Start the engine**:
+    ```bash
+    ./rss-cli serve
+    ```
+
+---
+
+## 📖 Usage Guide
+
+Once the server is running, you can interact with Gorrson via the API or the CLI.
+
+### API Documentation
+Gorrson includes interactive documentation:
+- **Swagger UI**: [http://localhost:7077/docs](http://localhost:7077/docs)
+- **OpenAPI Spec**: [http://localhost:7077/openapi.yaml](http://localhost:7077/openapi.yaml)
+
+### Mobile Integration (Fever)
+To use Gorrson with mobile apps like Reeder or Unread:
+1. Use the **Fever API** endpoint: `http://your-server:7077/api/fever`
+2. Authenticate with your username and password.
+
 
 ## Architecture & CLI
 
