@@ -55,6 +55,14 @@ test: build-ui
 bench:
 	go test -bench=. ./internal/db -benchmem
 
+stress:
+	@echo "Running internal stress tests..."
+	go test -v -run TestStress ./internal/api
+
+load-test:
+	@echo "Running external load generator (Requires server running at :7077)..."
+	go run scripts/stress/main.go
+
 register: build
 	./$(BINARY_NAME) register --user $(USER_NAME) --pass $(USER_PASS) --data-dir $(DATA_DIR)
 
@@ -62,7 +70,7 @@ register: build
 reset-db:
 	@echo "Resetting and seeding database for user 'user'..."
 	@mkdir -p $(DATA_DIR)
-	go run scripts/seed.go
+	go run scripts/seed/main.go
 
 # Help
 help:
@@ -72,5 +80,8 @@ help:
 	@echo "  make run        - Build and start the production server"
 	@echo "  make dev-ui     - Start Svelte/Vite dev server"
 	@echo "  make dev-go     - Start Go backend in dev mode"
-	@echo "  make clean      - Delete binary and data"
-	@echo "  make test       - Run tests"
+	@echo "  make bench       - Run performance benchmarks"
+	@echo "  make stress      - Run internal concurrency stress tests"
+	@echo "  make load-test   - Run external load generator"
+	@echo "  make clean       - Delete binary and data"
+	@echo "  make test        - Run tests"
