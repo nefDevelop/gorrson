@@ -97,9 +97,6 @@ func (s *Server) routes() {
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Compress(5))
-
-	s.router.Use(middleware.Logger)
-	s.router.Use(middleware.Recoverer)
 	s.router.Use(s.securityHeaders)
 
 	s.router.Get("/openapi.yaml", s.handleOpenAPI)
