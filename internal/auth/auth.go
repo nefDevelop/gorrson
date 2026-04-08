@@ -11,6 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/argon2"
+	"os"
 )
 
 // Argon2id parameters (OWASP recommended)
@@ -22,10 +23,13 @@ const (
 	KeyLength   = 32
 )
 
-// Secret is a hardcoded placeholder for the JWT signing key. In production, this should be an environment variable.
 var Secret = []byte("gorrson-vibrant-rss-secret")
 
 func GetSecret() []byte {
+	envSecret := os.Getenv("GORRSON_JWT_SECRET")
+	if envSecret != "" {
+		return []byte(envSecret)
+	}
 	return Secret
 }
 

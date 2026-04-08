@@ -47,7 +47,7 @@ func TestStoreFull(t *testing.T) {
 	}
 
 	// 2. Test Extended Entries (Images, Summary, Favorites)
-	s.AddFeed(&models.Feed{
+	_ = s.AddFeed(&models.Feed{
 		ID:      "f1",
 		Title:   "Test Feed",
 		FeedURL: "https://example.com/feed",
@@ -95,12 +95,12 @@ func TestListEntriesFilters(t *testing.T) {
 	}
 	defer s.Close()
 
-	s.AddFeed(&models.Feed{ID: "f1", Title: "Tech Feed", FeedURL: "http://f1", Category: "Tech"})
-	s.AddFeed(&models.Feed{ID: "f2", Title: "News Feed", FeedURL: "http://f2", Category: "News"})
+	_ = s.AddFeed(&models.Feed{ID: "f1", Title: "Tech Feed", FeedURL: "http://f1", Category: "Tech"})
+	_ = s.AddFeed(&models.Feed{ID: "f2", Title: "News Feed", FeedURL: "http://f2", Category: "News"})
 
-	s.AddEntry(&models.Entry{ID: "e1", FeedID: "f1", Title: "T1", URL: "u1"})
-	s.AddEntry(&models.Entry{ID: "e2", FeedID: "f1", Title: "T2", URL: "u2"})
-	s.AddEntry(&models.Entry{ID: "e3", FeedID: "f2", Title: "T3", URL: "u3"})
+	_ = s.AddEntry(&models.Entry{ID: "e1", FeedID: "f1", Title: "T1", URL: "u1"})
+	_ = s.AddEntry(&models.Entry{ID: "e2", FeedID: "f1", Title: "T2", URL: "u2"})
+	_ = s.AddEntry(&models.Entry{ID: "e3", FeedID: "f2", Title: "T3", URL: "u3"})
 
 	// Test case-insensitive category filtering
 	list, _ := s.ListEntries(false, "newest", 10, 0, "tech", "")

@@ -19,7 +19,7 @@ func DiscoverFeed(ctx context.Context, pageURL string) (string, error) {
 		slog.Warn("DiscoverFeed: fetch failed", "url", pageURL, "err", err)
 		return "", err
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 
 	doc, err := goquery.NewDocumentFromReader(body)
 	if err != nil {

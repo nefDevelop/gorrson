@@ -20,7 +20,7 @@ func ScrapeFullContent(ctx context.Context, targetURL string, originalTitle stri
 	if err != nil {
 		return "", err
 	}
-	defer body.Close()
+	defer func() { _ = body.Close() }()
 
 	// Detect and convert charset to UTF-8
 	utf8Body, err := decodeToUTF8(body)

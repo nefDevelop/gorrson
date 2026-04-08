@@ -1,68 +1,72 @@
-# 🚀 gorrson: High-Performance RSS CLI & API Engine
+# gorrson: High-Performance RSS CLI & API Engine
 
-**gorrson** is a professional-grade RSS engine written in Go. Designed for developers and power users who need a robust, private, and multi-user RSS solution that runs anywhere—from a cloud server to a mobile device (Termux).
+**gorrson** is a RSS engine written in Go. Robust, private, and multi-user RSS solution that runs anywhere.
 
-## ✨ Key Features (Point-by-Point)
+## Key Features
 
-1.  **🔍 Feed Discovery**: Automatically finds RSS/Atom feeds from any website URL. No need to hunt for the XML link.
-2.  **🛡️ Advanced Filtering**: Rule-based engine with Regex support to `BLOCK` or `REPLACE` content (spam, ads, or reformatting).
-3.  **📖 Full Content Scraping**: Intelligent reader mode extracts the main article text when the RSS only provides a summary. Includes automatic charset detection (UTF-8/Latin1).
-4.  **🕵️ Image Proxy & Cache**: Protects your privacy by proxying images through the server. Features a local disk cache to save data and battery.
-5.  **⚡ SQLite FTS5**: Ultra-fast full-text search across all your saved articles using SQLite's native virtual tables.
-6.  **🔐 Security First**: JWT-based authentication, Argon2id password hashing, and `bluemonday` HTML sanitization.
-7.  **📦 Multi-Tenant**: Each user has a dedicated physical `.db` file for maximum privacy and portability.
+1.  **Feed Discovery**: Automatically finds RSS/Atom feeds from any website URL.
+2.  **Advanced Filtering**: Rule-based engine with Regex support. Actions: `BLOCK`, `HIDE`, `REPLACE`, `SILENT`, `HIGHLIGHT`. Targets: `title`, `content`, or `both`.
+3.  **Full Content Scraping**: Intelligent reader mode extracts main text via `go-readability`. Robust charset detection (UTF-8, Latin1, CP1252, etc.).
+4.  **Image Proxy & Cache**: Proxies images to protect privacy and caches them on disk.
+5.  **SQLite FTS5**: Ultra-fast full-text search across all saved articles.
+6.  **Fever API Support**: Compatible with mobile readers (Reeder, Unread, etc.).
+7.  **Multi-Tenant**: Each user has a dedicated `.db` file for maximum privacy.
 
-## 🛠️ Installation & Setup
+## Performance Benchmarks
 
-### ⚡ Quick Install (Linux/Termux)
-Run the automated installer to build the binary and setup directories:
+Measured on AMD Ryzen 5 5600X with `-benchtime=5s`:
+
+| Operation | CPU Cores | Latency (ns/op) | Throughput |
+| :--- | :--- | :--- | :--- |
+| **Full-Text Search** | 1 CPU | 4,526,220 | ~221 ops/sec |
+| **Full-Text Search** | 2 CPU | 4,550,178 | ~220 ops/sec |
+| **Full-Text Search** | 4 CPU | 4,568,430 | ~218 ops/sec |
+| **List News (Feed)** | 1 CPU | 186,619 | ~5,358 ops/sec |
+| **List News (Feed)** | 2 CPU | 177,149 | ~5,644 ops/sec |
+| **List News (Feed)** | 4 CPU | 190,217 | ~5,257 ops/sec |
+
+*Notice: Performance remains extremely stable across different CPU configurations. This confirms that Gorrson's efficiency is decoupled from high core counts, making it perfect for low-resource environments.*
+
+## Installation & Setup
+
+### Quick Install (Linux)
+Clone the repository and run the automated installer:
 ```bash
+git clone https://github.com/nef734/gorrson.git
+cd gorrson
 chmod +x install.sh && ./install.sh
 ```
 
-### 🐳 Docker (Recommended for Servers)
+### Docker (Recommended for Servers)
 Deploy instantly with Docker Compose:
 ```bash
 docker-compose up -d
 ```
 
-### 🔨 Manual Build
+### Manual Build
+Ensure you have Go 1.21+ installed:
 ```bash
 make build
 ./rss-cli --help
 ```
 
-## 🏗️ Architecture & CLI
+## Architecture & CLI
 
 | Command | Description |
 | :--- | :--- |
-| `register` | Creates a new user and its dedicated database file. |
-| `user` | Advanced account management (list, passwd, delete). |
-| `add` | Automatically discovers and adds a feed from any URL. |
-| `filter` | Manage Regex rules (`BLOCK`, `REPLACE`) for your feeds. |
-| `serve` | Starts the REST API and the background Sync Workers. |
-| `list` | Quick CLI view of the latest news repository. |
+| `register` | Creates a new user and database. |
+| `user` | Management (list, passwd, delete). |
+| `add` | Discovers and adds a feed. |
+| `filter` | Manage rules (`BLOCK`, `REPLACE`, etc.). |
+| `import` | Bulk import feeds from OPML files. |
+| `serve` | Starts the API and Sync Workers. |
+| `list` | CLI news viewer. |
 
-### 🌐 REST API Highlights
-- **GET `/news`**: List articles with `unread`, `sort`, `limit`, and `search` filters.
-- **GET `/news/{id}/content`**: Smart full-content scraping with charset detection.
-- **PUT `/categories/{name}`**: Bulk rename categories across multiple feeds.
-- **GET/POST `/filters`**: Programmable Regex-based content filtering.
-- **GET `/proxy?url=...`**: Securely fetch and cache images.
-- **POST `/feeds/import`**: Bulk import feeds from OPML files.
-- **GET `/docs`**: Interactive API documentation (Rapidoc).
-
-## 👷 CI/CD & Releases
-Gorrson is built for professional workflows:
-- **GitHub Actions**: Automated testing and multi-platform releases (Linux, macOS, Windows).
-- **Gitea Actions**: Fully compatible with self-hosted Gitea runners.
-- **Automated Releases**: Binaries for `amd64` and `arm64` (Raspberry Pi/Mobile) are generated on every tag.
-
-## ⚖️ Why Gorrson?
+## Why Gorrson?
 Inspired by minimalist readers like Miniflux, but optimized for portability:
 - **Zero-Dependency**: No PostgreSQL required; uses embedded SQLite (CGO-free).
 - **Privacy**: Each user owns their physical database file.
 - **Resource Efficient**: Low CPU/RAM footprint, ideal for background daemons.
 
 ---
-**Developed with Go excellence.**
+**Developed with Go.**

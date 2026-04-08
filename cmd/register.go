@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/nef734/gorrson/internal/auth"
 	"github.com/nef734/gorrson/internal/db"
+	"github.com/nef734/gorrson/internal/sanitizer"
 )
 
 var registerCmd = &cobra.Command{
@@ -18,6 +19,10 @@ var registerCmd = &cobra.Command{
 		pass, _ := cmd.Flags().GetString("pass")
 		if user == "" || pass == "" {
 			log.Fatal("Flags --user and --pass are required")
+		}
+
+		if !sanitizer.IsValidUsername(user) {
+			log.Fatalf("Invalid username: %s. Use only letters, numbers, underscores and hyphens.", user)
 		}
 
 		hash, err := auth.HashPassword(pass)

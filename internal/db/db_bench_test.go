@@ -11,18 +11,18 @@ import (
 
 func BenchmarkSearch(b *testing.B) {
 	dataDir := "./test_data_bench"
-	os.MkdirAll(dataDir, 0755)
-	defer os.RemoveAll(dataDir)
+	_ = os.MkdirAll(dataDir, 0755)
+	defer func() { _ = os.RemoveAll(dataDir) }()
 
 	store, _ := NewStore(dataDir, "bench_user")
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	// Seed with 1000 items
 	feedID := uuid.New().String()
-	store.AddFeed(&models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
+	_ = store.AddFeed(&models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
 
 	for i := 0; i < 1000; i++ {
-		store.AddEntry(&models.Entry{
+		_ = store.AddEntry(&models.Entry{
 			ID:      uuid.New().String(),
 			FeedID:  feedID,
 			Title:   fmt.Sprintf("Item %d with keyword gorrson", i),
@@ -39,17 +39,17 @@ func BenchmarkSearch(b *testing.B) {
 
 func BenchmarkListNews(b *testing.B) {
 	dataDir := "./test_data_bench_list"
-	os.MkdirAll(dataDir, 0755)
-	defer os.RemoveAll(dataDir)
+	_ = os.MkdirAll(dataDir, 0755)
+	defer func() { _ = os.RemoveAll(dataDir) }()
 
 	store, _ := NewStore(dataDir, "bench_user_list")
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 
 	feedID := uuid.New().String()
-	store.AddFeed(&models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
+	_ = store.AddFeed(&models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
 
 	for i := 0; i < 5000; i++ {
-		store.AddEntry(&models.Entry{
+		_ = store.AddEntry(&models.Entry{
 			ID:      uuid.New().String(),
 			FeedID:  feedID,
 			Title:   fmt.Sprintf("Item %d", i),

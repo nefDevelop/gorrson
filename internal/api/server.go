@@ -73,6 +73,10 @@ func (s *Server) loginRateLimit(next http.Handler) http.Handler {
 	})
 }
 
+type contextKey string
+
+const usernameKey contextKey = "username"
+
 type Server struct {
 	router  *chi.Mux
 	dataDir string
@@ -94,14 +98,9 @@ func (s *Server) routes() {
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Compress(5))
 
-	s.router.Use(func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("X-Content-Type-Options", "nosniff")
-			w.Header().Set("X-Frame-Options", "DENY")
-			w.Header().Set("X-XSS-Protection", "1; mode=block")
-			next.ServeHTTP(w, r)
-		})
-	})
+	s.router.Use(middleware.Logger)
+	s.router.Use(middleware.Recoverer)
+	s.router.Use(s.securityHeaders)
 
 	s.router.Get("/openapi.yaml", s.handleOpenAPI)
 	s.router.Get("/docs", s.handleDocs)
@@ -191,8 +190,19 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), "username", username)
+		ctx := context.WithValue(r.Context(), usernameKey, username)
 		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func (s *Server) securityHeaders(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http: https:;")
+		next.ServeHTTP(w, r)
 	})
 }
 
@@ -229,10 +239,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		RefreshToken: refreshToken,
 		ExpiresAt:    time.Now().Add(time.Hour * 24 * 30),
 	}
-	store.CreateSession(session)
+	_ = store.CreateSession(session)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"access_token":  accessToken,
 		"refresh_token": refreshToken,
 	})
@@ -265,7 +275,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 
 	newAccessToken, _ := auth.GenerateToken(session.Username)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"access_token": newAccessToken})
+	_ = json.NewEncoder(w).Encode(map[string]string{"access_token": newAccessToken})
 }
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
@@ -278,13 +288,13 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	store, err := db.NewStore(s.dataDir, req.Username)
 	if err == nil {
 		defer store.Close()
-		store.DeleteSession(req.RefreshToken)
+		_ = store.DeleteSession(req.RefreshToken)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -325,12 +335,12 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(entries)
+	_ = json.NewEncoder(w).Encode(entries)
 }
 
 func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -357,7 +367,7 @@ func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store.UpdateEntryContent(id, fullContent)
+	_ = store.UpdateEntryContent(id, fullContent)
 
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(fullContent))
@@ -365,17 +375,17 @@ func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
-		store.MarkAsRead(id)
+		_ = store.MarkAsRead(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	category := r.URL.Query().Get("category")
 	feedID := r.URL.Query().Get("feed_id")
@@ -392,7 +402,7 @@ func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
-		store.MarkAllRead(category, feedID, search, limit)
+		_ = store.MarkAllRead(category, feedID, search, limit)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -400,17 +410,17 @@ func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMarkFavorite(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	isFavorite := r.URL.Query().Get("favorite") != "false"
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
-		store.ToggleFavorite(id, isFavorite)
+		_ = store.ToggleFavorite(id, isFavorite)
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -436,7 +446,7 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing or invalid 'url' field", http.StatusBadRequest)
 		return
 	}
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 
 	// Auto-tag social media domains if no category provided
 	if req.Category == "" {
@@ -481,7 +491,7 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	var reader io.Reader = r.Body
 	if strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data") {
 		file, _, err := r.FormFile("file")
@@ -509,7 +519,7 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleExportOPML(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -533,7 +543,7 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req struct{ Title, Category string }
 	json.NewDecoder(r.Body).Decode(&req)
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
@@ -544,7 +554,7 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
@@ -554,7 +564,7 @@ func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleListFilters(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -584,7 +594,7 @@ func (s *Server) handleAddFilter(w http.ResponseWriter, r *http.Request) {
 	}
 
 	f.ID = uuid.New().String()
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
@@ -597,7 +607,7 @@ func (s *Server) handleAddFilter(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleDeleteFilter(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
@@ -686,7 +696,7 @@ func (s *Server) handleRenameCategory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Internal error", http.StatusInternalServerError)
@@ -712,7 +722,7 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(html))
 }
 func (s *Server) handleExportConfig(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -730,7 +740,7 @@ func (s *Server) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
-	username := r.Context().Value("username").(string)
+	username := r.Context().Value(usernameKey).(string)
 	var config struct {
 		Filters []models.Filter `json:"filters"`
 	}
@@ -906,24 +916,22 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 	// Fever Mark Commands
 	if r.FormValue("mark") == "item" {
 		id, _ := strconv.Atoi(r.FormValue("id"))
-		as := r.FormValue("as")
-		if as == "read" {
-			userStore.MarkAsReadByFeverID(id)
-		} else if as == "saved" {
-			userStore.ToggleFavoriteByFeverID(id, true)
-		} else if as == "unsaved" {
-			userStore.ToggleFavoriteByFeverID(id, false)
+		switch r.FormValue("as") {
+		case "read":
+			_ = userStore.MarkAsReadByFeverID(id)
+		case "saved":
+			_ = userStore.ToggleFavoriteByFeverID(id, true)
+		case "unsaved":
+			_ = userStore.ToggleFavoriteByFeverID(id, false)
 		}
 	} else if r.FormValue("mark") == "feed" {
 		id, _ := strconv.Atoi(r.FormValue("id"))
-		as := r.FormValue("as")
-		if as == "read" {
+		if r.FormValue("as") == "read" {
 			// Find category or feed by FeverID and mark all read
-			// For simplicity in prototype, we can list feeds and find the one with this FeverID
 			feeds, _ := userStore.ListFeeds()
 			for _, f := range feeds {
 				if f.FeverID == id {
-					userStore.MarkAllRead("", f.ID, "", 0)
+					_ = userStore.MarkAllRead("", f.ID, "", 0)
 					break
 				}
 			}
@@ -935,7 +943,7 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 			feeds, _ := userStore.ListFeeds()
 			for _, f := range feeds {
 				if uuidToInt(f.Category) == id {
-					userStore.MarkAllRead(f.Category, "", "", 0)
+					_ = userStore.MarkAllRead(f.Category, "", "", 0)
 					break
 				}
 			}

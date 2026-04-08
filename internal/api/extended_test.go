@@ -31,8 +31,8 @@ func TestFeverAPI(t *testing.T) {
 	feverApiKey := "fever_md5_secret" 
 	feverBcrypt, _ := auth.HashPassword(feverApiKey)
 	
-	store.UpsertUser(username, hash, feverBcrypt)
-	store.Close()
+	_ = store.UpsertUser(username, hash, feverBcrypt)
+	_ = store.Close()
 
 	// 1. Test Fever Auth
 	req := httptest.NewRequest("POST", "/api/fever?api_key="+feverApiKey, nil)
@@ -44,7 +44,7 @@ func TestFeverAPI(t *testing.T) {
 	}
 
 	var resp map[string]interface{}
-	json.Unmarshal(rr.Body.Bytes(), &resp)
+	_ = json.Unmarshal(rr.Body.Bytes(), &resp)
 	if resp["auth"].(float64) != 1 {
 		t.Errorf("Expected auth: 1, got %v", resp["auth"])
 	}
@@ -69,8 +69,8 @@ func TestConfigAPI(t *testing.T) {
 
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	store.UpsertUser(username, hash, "")
-	store.Close()
+	_ = store.UpsertUser(username, hash, "")
+	_ = store.Close()
 
 	token, _ := auth.GenerateToken(username)
 

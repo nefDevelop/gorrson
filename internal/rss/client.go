@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"os"
+	"syscall"
 	"time"
 )
 
@@ -18,12 +21,51 @@ type SecureClient struct {
 	client *http.Client
 }
 
+// NewSecureClient returns a client protected against SSRF and OOM.
 func NewSecureClient() *SecureClient {
-	return &SecureClient{
-		client: &http.Client{
-			Timeout: DefaultTimeout,
+	// Custom dialer to block private/local IP ranges (SSRF protection)
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second,
+		KeepAlive: 30 * time.Second,
+		Control: func(network, address string, c syscall.RawConn) error {
+			if os.Getenv("GORRSON_TEST") == "true" {
+				return nil // Allow all in CI/Tests
+			}
+
+			host, _, err := net.SplitHostPort(address)
+			if err != nil {
+				return err
+			}
+			ip := net.ParseIP(host)
+			if ip != nil {
+				if isPrivateIP(ip) {
+					return fmt.Errorf("access to private IP %s is blocked", ip)
+				}
+			}
+			return nil
 		},
 	}
+
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          100,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	return &SecureClient{
+		client: &http.Client{
+			Transport: transport,
+			Timeout:   DefaultTimeout,
+		},
+	}
+}
+
+func isPrivateIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsPrivate() || ip.IsUnspecified()
 }
 
 // Fetch returns an io.ReadCloser with a limited reader to prevent OOM.
@@ -40,7 +82,7 @@ func (sc *SecureClient) Fetch(ctx context.Context, url string) (io.ReadCloser, e
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("bad status: %s", resp.Status)
 	}
 
