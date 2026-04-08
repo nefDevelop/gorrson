@@ -10,6 +10,7 @@ import (
 
 	_ "modernc.org/sqlite"
 	"github.com/nef734/gorrson/internal/models"
+	"github.com/nef734/gorrson/internal/sanitizer"
 )
 
 type Store struct {
@@ -18,6 +19,10 @@ type Store struct {
 }
 
 func NewStore(dataDir, username string) (*Store, error) {
+	if !sanitizer.IsValidUsername(username) {
+		return nil, fmt.Errorf("invalid username: %s", username)
+	}
+
 	if _, err := os.Stat(dataDir); os.IsNotExist(err) {
 		if err := os.MkdirAll(dataDir, 0755); err != nil {
 			return nil, fmt.Errorf("could not create data directory: %w", err)
@@ -130,13 +135,13 @@ func (s *Store) migrate() error {
 	}
 
 	// Hot-fix for existing databases
-	s.db.Exec("ALTER TABLE entries ADD COLUMN matched_action TEXT")
-	s.db.Exec("ALTER TABLE feeds ADD COLUMN user_agent TEXT")
-	s.db.Exec("ALTER TABLE feeds ADD COLUMN username TEXT")
-	s.db.Exec("ALTER TABLE feeds ADD COLUMN password TEXT")
-	s.db.Exec("ALTER TABLE feeds ADD COLUMN fever_id INTEGER DEFAULT 0")
-	s.db.Exec("ALTER TABLE entries ADD COLUMN fever_id INTEGER DEFAULT 0")
-	s.db.Exec("ALTER TABLE users ADD COLUMN fever_key TEXT DEFAULT ''")
+	_, _ = s.db.Exec("ALTER TABLE entries ADD COLUMN matched_action TEXT")
+	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN user_agent TEXT")
+	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN username TEXT")
+	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN password TEXT")
+	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN fever_id INTEGER DEFAULT 0")
+	_, _ = s.db.Exec("ALTER TABLE entries ADD COLUMN fever_id INTEGER DEFAULT 0")
+	_, _ = s.db.Exec("ALTER TABLE users ADD COLUMN fever_key TEXT DEFAULT ''")
 
 	return nil
 }
@@ -164,7 +169,7 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var feeds []models.Feed
 	for rows.Next() {
@@ -225,7 +230,7 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entries []models.Entry
 	for rows.Next() {
@@ -289,7 +294,7 @@ func (s *Store) ToggleFavoriteByFeverID(feverID int, isFavorite bool) error {
 }
 
 func (s *Store) MarkAllRead(category, feedID, search string, limit int) error {
-	query := "UPDATE entries SET is_read = 1"
+	var query string
 	var args []interface{}
 
 	if search != "" {
@@ -364,7 +369,7 @@ func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var entries []models.Entry
 	for rows.Next() {
@@ -458,7 +463,7 @@ func (s *Store) ListFilters() ([]models.Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var filters []models.Filter
 	for rows.Next() {
@@ -480,7 +485,7 @@ func (s *Store) GetFiltersForFeed(feedID string) ([]models.Filter, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var filters []models.Filter
 	for rows.Next() {

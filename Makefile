@@ -5,7 +5,21 @@ BINARY_NAME=rss-cli
 PORT?=7077
 DATA_DIR?=./data
 
-# Default target: Build everything
+# Default target: Show help
+help:
+	@echo "Gorrson Management:"
+	@echo "  make install    - Install all dependencies (npm & go)"
+	@echo "  make build      - Build full app (Frontend + Backend)"
+	@echo "  make run        - Build and start the production server"
+	@echo "  make dev-ui     - Start Svelte/Vite dev server"
+	@echo "  make dev-go     - Start Go backend in dev mode"
+	@echo "  make bench           - Run basic performance benchmarks"
+	@echo "  make bench-extensive - Run exhaustive multi-CPU benchmarks"
+	@echo "  make stress          - Run internal concurrency stress tests"
+	@echo "  make load-test   - Run external load generator"
+	@echo "  make clean       - Delete binary and data"
+	@echo "  make test        - Run tests"
+
 all: install build
 
 # Install dependencies
@@ -50,10 +64,15 @@ clean:
 
 # Tests & Benchmarks
 test: build-ui
-	go test -v ./internal/...
+	GORRSON_TEST=true go test -v ./internal/...
 
 bench:
+	@echo "Running basic benchmarks..."
 	go test -bench=. ./internal/db -benchmem
+
+bench-extensive:
+	@echo "Running extensive multi-CPU benchmarks (this may take a minute)..."
+	go test -bench=. ./internal/db -benchmem -cpu=1,2,4 -benchtime=5s
 
 stress:
 	@echo "Running internal stress tests..."
@@ -71,17 +90,3 @@ reset-db:
 	@echo "Resetting and seeding database for user 'user'..."
 	@mkdir -p $(DATA_DIR)
 	go run scripts/seed/main.go
-
-# Help
-help:
-	@echo "Gorrson Management:"
-	@echo "  make install    - Install all dependencies (npm & go)"
-	@echo "  make build      - Build full app (Frontend + Backend)"
-	@echo "  make run        - Build and start the production server"
-	@echo "  make dev-ui     - Start Svelte/Vite dev server"
-	@echo "  make dev-go     - Start Go backend in dev mode"
-	@echo "  make bench       - Run performance benchmarks"
-	@echo "  make stress      - Run internal concurrency stress tests"
-	@echo "  make load-test   - Run external load generator"
-	@echo "  make clean       - Delete binary and data"
-	@echo "  make test        - Run tests"

@@ -56,7 +56,7 @@ func TestCLI_Flow(t *testing.T) {
 	}
 
 	// 3. Test Add
-	out, err = executeCommand("add", "--url", "https://news.ycombinator.com/rss", "--user", "tester", "--data-dir", tmpData)
+	_, err = executeCommand("add", "--url", "https://news.ycombinator.com/rss", "--user", "tester", "--data-dir", tmpData)
 	if err != nil {
 		t.Logf("Add might fail due to network: %v", err)
 	}
