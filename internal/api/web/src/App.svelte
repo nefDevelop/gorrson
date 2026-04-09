@@ -449,7 +449,7 @@
   <Login onLoginSuccess={handleLoginSuccess} />
 {:else}
   <main class="app-container {selectedId ? 'has-selection' : ''} {isMobile ? 'mobile-mode' : ''}">
-    <div class="nav-panels" class:collapsed={fullscreenReader}>
+    <div class="nav-panels" class:collapsed={fullscreenReader} class:full-width={currentView === 'settings' || currentView === 'filters' || currentView === 'add-feed'}>
       {#if !isMobile || isSourcesDrawerOpen}
         <div 
           class="sidebar-wrapper" 
@@ -563,8 +563,11 @@
     transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: left center;
     flex-shrink: 0;
-    max-width: 100%;
     min-width: 0;
+  }
+
+  .nav-panels.full-width {
+    flex: 1;
   }
 
   /* Mobile Mode Adjustments */
