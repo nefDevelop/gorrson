@@ -189,6 +189,12 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 				if filter.Action == "HIGHLIGHT" {
 					matchedAction = "HIGHLIGHT"
 				}
+				if filter.Action == "IMPORTANT" || filter.Action == "FIRST" {
+					matchedAction = "IMPORTANT"
+				}
+				if filter.Action == "NOTIFY" {
+					matchedAction = "NOTIFY"
+				}
 			}
 		}
 
@@ -251,6 +257,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			IsRead:         false,
 			IsFavorite:     false,
 			IsFullContent:  false,
+			IsPriority:     matchedAction == "IMPORTANT",
 			MatchedAction:  matchedAction,
 		}
 		entry.FeverID = generateFeverID(entry.ID)

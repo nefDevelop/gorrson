@@ -145,6 +145,11 @@ func (s *Server) routes() {
 		r.Get("/api-keys", s.handleListAPIKeys)
 		r.Post("/api-keys", s.handleCreateAPIKey)
 		r.Delete("/api-keys/{id}", s.handleDeleteAPIKey)
+
+		r.Get("/stats", s.handleGetStats)
+
+		r.Get("/backup/export", s.handleExportBackup)
+		r.Post("/backup/import", s.handleImportBackup)
 	})
 
 	// Serve Svelte Frontend
@@ -1100,4 +1105,87 @@ func (s *Server) handleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleExportBackup(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value(usernameKey).(string)
+	dbPath := filepath.Join(s.dataDir, username+".db")
+
+	if _, err := os.Stat(dbPath); err != nil {
+		http.Error(w, "Database file not found", http.StatusNotFound)
+		return
+	}
+
+	slog.Info("Backup exported", "user", username, "ip", r.RemoteAddr)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=gorrson-%s-backup-%s.db", username, time.Now().Format("2006-01-02")))
+	http.ServeFile(w, r, dbPath)
+}
+
+func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value(usernameKey).(string)
+
+	// Security: Limit size to 100MB to avoid disk filling DOS
+	r.Body = http.MaxBytesReader(w, r.Body, 100<<20)
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Missing file in multipart form or file too large", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	dbPath := filepath.Join(s.dataDir, username+".db")
+	tmpPath := dbPath + ".tmp"
+
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		http.Error(w, "Failed to create temp file", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := io.Copy(out, file); err != nil {
+		out.Close()
+		os.Remove(tmpPath)
+		http.Error(w, "Failed to save file. Check size limits.", http.StatusInternalServerError)
+		return
+	}
+	out.Close()
+
+	// Security: Verify the uploaded file is a valid SQLite DB before replacing
+	if err := db.VerifySQLiteFile(tmpPath); err != nil {
+		os.Remove(tmpPath)
+		slog.Warn("Attempted to upload invalid backup file", "user", username, "err", err)
+		http.Error(w, "Invalid backup file: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Atomic rename. On Linux this overwrites the existing file.
+	if err := os.Rename(tmpPath, dbPath); err != nil {
+		http.Error(w, "Failed to overwrite database. Is it being used?", http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("Backup restored successfully", "user", username, "ip", r.RemoteAddr)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Database restored and verified. Page refresh recommended."})
+}
+
+func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value(usernameKey).(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	stats, err := store.GetStats()
+	if err != nil {
+		http.Error(w, "Failed to retrieve stats", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }

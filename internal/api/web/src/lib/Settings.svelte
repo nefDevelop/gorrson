@@ -3,7 +3,7 @@
   import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon } from 'lucide-svelte';
   import Filters from './Filters.svelte';
   import { onMount } from 'svelte';
-  import { Share2, Plus, Trash2, ExternalLink as ExtIcon, Download, Upload, FileJson, FileCode } from 'lucide-svelte';
+  import { Share2, Plus, Trash2, ExternalLink as ExtIcon, Download, Upload, FileJson, FileCode, Database } from 'lucide-svelte';
   import { fly, fade } from 'svelte/transition';
 
   export let onLogout = () => {};
@@ -52,6 +52,7 @@
   let currentTheme = localStorage.getItem('gorrson-theme') || 'lavender';
   let currentMode = localStorage.getItem('gorrson-mode') || 'dark';
   let customColor = localStorage.getItem('gorrson-custom-color') || '#6750A4';
+  let mastodonInstance = localStorage.getItem('gorrson-mastodon-instance') || 'mastodon.social';
 
 
   const modes = [
@@ -204,6 +205,7 @@
 
   $: if (typeof document !== 'undefined') {
      applyAppearance('custom', currentMode, customColor);
+     localStorage.setItem('gorrson-mastodon-instance', mastodonInstance);
   }
 
   const toggleLanguage = () => {
@@ -280,7 +282,8 @@
           color: localStorage.getItem('gorrson-custom-color'),
           services: exportServices,
           locale: localStorage.getItem('gorrson-locale'),
-          scrollRead: scrollRead
+          scrollRead: scrollRead,
+          mastodonInstance: mastodonInstance
         },
         exportedAt: new Date().toISOString()
       };
@@ -319,6 +322,7 @@
           }
           if (l.locale) locale.set(l.locale);
           if (l.scrollRead !== undefined) scrollRead = l.scrollRead;
+          if (l.mastodonInstance) mastodonInstance = l.mastodonInstance;
         }
 
         // Upload to backend
@@ -377,6 +381,55 @@
     } catch (e) {
       console.error(e);
       alert('OPML import failed');
+    }
+  }
+
+  async function exportBackup() {
+    try {
+      const res = await fetch('/backup/export', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      document.body.appendChild(a);
+      a.download = `gorrson-${username}-backup-${new Date().toISOString().split('T')[0]}.db`;
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error(e);
+      alert('Backup failed');
+    }
+  }
+
+  async function importBackup(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    if (!confirm("WARNING: This will replace your entire database (all feeds, articles, and read status) with the provided file. This cannot be undone. Continue?")) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const res = await fetch('/backup/import', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${localStorage.getItem('token')}` 
+        },
+        body: formData
+      });
+      if (res.ok) {
+        alert('Database restored successfully. The page will now refresh.');
+        window.location.reload();
+      } else {
+        const err = await res.text();
+        alert('Restore failed: ' + err);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('Restore failed');
     }
   }
 
@@ -530,6 +583,25 @@
               <span>Minimal</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="section-header">
+          <Globe size={18} />
+          <span>Integrations</span>
+        </div>
+        <div class="setting-item">
+          <div class="text">
+            <div class="label">Mastodon Instance</div>
+            <div class="desc">Default instance used for hashtags (#tag) and @user searches.</div>
+          </div>
+          <input 
+            class="modern-input" 
+            style="max-width: 200px" 
+            bind:value={mastodonInstance} 
+            placeholder="mastodon.social"
+          />
         </div>
       </div>
 
@@ -739,6 +811,33 @@
                     <Upload size={16} />
                     <span>Import</span>
                     <input type="file" accept=".json" on:change={importConfig} style="display:none" />
+                 </label>
+              </div>
+           </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="section-header">
+          <Database size={18} />
+          <span>Full Database (SQLite)</span>
+        </div>
+        <div class="data-actions">
+           <div class="data-card">
+              <div class="icon-box"><Database size={24} /></div>
+              <div class="card-text">
+                 <strong>Native Backup</strong>
+                 <p>Download your entire database file (.db). This includes all articles, categories, and settings.</p>
+              </div>
+              <div class="actions">
+                 <button class="btn-secondary" on:click={exportBackup}>
+                    <Download size={16} />
+                    <span>Download</span>
+                 </button>
+                 <label class="btn-primary file-label">
+                    <Upload size={16} />
+                    <span>Restore</span>
+                    <input type="file" accept=".db" on:change={importBackup} style="display:none" />
                  </label>
               </div>
            </div>
