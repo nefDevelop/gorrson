@@ -74,6 +74,8 @@
           <option value="HIDE">Hide (No sale)</option>
           <option value="SILENT">Silent (Desactivada)</option>
           <option value="HIGHLIGHT">Highlight (Destacar)</option>
+          <option value="IMPORTANT">Important (Prioridad)</option>
+          <option value="NOTIFY">Notify (Campana)</option>
           <option value="REPLACE">{$t('replace')}</option>
         </select>
 
@@ -284,6 +286,8 @@
   .tag.action-replace { background: #4caf5022; color: #4caf50; border-color: #4caf5044; }
   .tag.action-silent { background: var(--md-outline); color: var(--md-on-surface-variant); opacity: 0.6; }
   .tag.action-highlight { background: var(--md-secondary-container); color: var(--md-secondary); border-color: var(--md-secondary); }
+  .tag.action-important { background: #ffd70033; color: #b8860b; border-color: #ffd70066; font-weight: 900; }
+  .tag.action-notify { background: #e91e6322; color: #e91e63; border-color: #e91e6344; }
 
   .delete-btn { background: transparent; border: none; color: var(--md-on-surface-variant); cursor: pointer; padding: 10px; border-radius: var(--radius-full); transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
   .delete-btn:hover { background: #ff525222; color: #ff5252; }

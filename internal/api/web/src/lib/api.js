@@ -190,3 +190,14 @@ export async function deleteAPIKey(id) {
   });
   if (!res.ok) throw new Error('Failed to delete API key');
 }
+
+export async function fetchStats() {
+  const res = await fetch('/stats', {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  if (res.status === 401) throw new Error('Unauthorized');
+  if (!res.ok) throw new Error('Failed to fetch stats');
+  return res.json();
+}

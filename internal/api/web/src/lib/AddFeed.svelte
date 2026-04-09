@@ -21,13 +21,16 @@
     // Special formats
     if (val.startsWith('r/') || val.startsWith('/r/')) return true;
     if (val.startsWith('@') && val.includes('@', 1)) return true;
+    if (val.startsWith('#') && val.length > 1) return true;
+    if (val.endsWith('.bsky.social')) return true;
     return false;
   })();
 
   $: detectedType = (() => {
     const val = input.trim();
     if (val.startsWith('r/') || val.startsWith('/r/')) return 'reddit';
-    if (val.startsWith('@')) return 'mastodon';
+    if (val.startsWith('@') || val.startsWith('#')) return 'mastodon';
+    if (val.endsWith('.bsky.social') || val.includes('bsky.app')) return 'bluesky';
     if (val.startsWith('http')) return 'rss';
     return 'none';
   })();
@@ -40,17 +43,31 @@
     let url = input.trim();
     
     if (detectedType === 'mastodon') {
-      const parts = url.replace(/^@/, '').split('@');
-      if (parts.length === 2) {
-        url = `https://${parts[1]}/@${parts[0]}.rss`;
+      if (url.startsWith('#')) {
+        const instance = localStorage.getItem('gorrson-mastodon-instance') || 'mastodon.social';
+        const tag = url.replace(/^#/, '');
+        url = `https://${instance}/tags/${tag}.rss`;
       } else {
-        error = "Formato Mastodon: @usuario@instancia";
-        loading = false;
-        return;
+        const parts = url.replace(/^@/, '').split('@');
+        if (parts.length === 2) {
+          url = `https://${parts[1]}/@${parts[0]}.rss`;
+        } else {
+          error = "Formato Mastodon: @usuario@instancia o #hashtag";
+          loading = false;
+          return;
+        }
       }
     } else if (detectedType === 'reddit') {
       const sub = url.replace(/^\/?r\//, '');
       url = `https://www.reddit.com/r/${sub}.rss`;
+    } else if (detectedType === 'bluesky') {
+      if (url.includes('bsky.app/profile/')) {
+        if (!url.endsWith('/rss')) {
+          url = url.replace(/\/$/, '') + '/rss';
+        }
+      } else if (url.endsWith('.bsky.social')) {
+         url = `https://bsky.app/profile/${url}/rss`;
+      }
     }
 
     try {
@@ -83,6 +100,7 @@
           <div class="detect-badge {detectedType}">
             {#if detectedType === 'reddit'}Reddit
             {:else if detectedType === 'mastodon'}Mastodon
+            {:else if detectedType === 'bluesky'}Bluesky
             {:else if detectedType === 'rss'}RSS/URL
             {:else}Inválido
             {/if}
@@ -90,7 +108,7 @@
           <input 
             id="feed-input"
             type="text" 
-            placeholder="r/technology, @user@instance o https://..." 
+            placeholder="r/technology, @user@instance, #hashtag o https://..." 
             bind:value={input}
             disabled={loading}
             on:keydown={(e) => e.key === 'Enter' && isValid && handleAdd()}
@@ -131,6 +149,7 @@
   .detect-badge { position: absolute; right: 12px; font: var(--m3-label-small); padding: 4px 12px; border-radius: var(--radius-full); background: var(--md-surface-variant); color: var(--md-on-surface-variant); font-weight: 800; text-transform: uppercase; pointer-events: none; transition: all 0.2s; border: 1px solid var(--md-outline); }
   .detect-badge.reddit { background: #FF4500; color: white; border: none; }
   .detect-badge.mastodon { background: #6364FF; color: white; border: none; }
+  .detect-badge.bluesky { background: #0085FF; color: white; border: none; }
   .detect-badge.rss { background: var(--md-primary-container); color: var(--md-on-primary-container); border: 1px solid var(--md-primary); }
   .detect-badge.none { background: #555; opacity: 0.5; }
 
