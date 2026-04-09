@@ -15,6 +15,15 @@
   export let isMobile = false;
 
   import { updateFeed, deleteFeed, fetchAPIKeys, createAPIKey, deleteAPIKey } from './api.js';
+  import { success, error as toastError } from './toast.js';
+  import Modal from './Modal.svelte';
+
+  /** @type {{show: boolean, title: string, message: string, type: 'info'|'warning'|'danger', confirmText: string, cancelText: string, onConfirm: (() => void) | null}} */
+  let dialog = { show: false, title: '', message: '', type: 'info', confirmText: '', cancelText: '', onConfirm: null };
+  const openDialog = (title, message, type = 'info', onConfirm = null, confirmText = '', cancelText = '') => {
+    // @ts-ignore
+    dialog = { show: true, title, message, type, onConfirm, confirmText, cancelText };
+  };
 
   async function handleUpdateFeed(id, title, category) {
     try {
@@ -31,12 +40,15 @@
     if (!feedToDelete) return;
     try {
       const idToDelete = feedToDelete.id;
+      const title = feedToDelete.title;
       await deleteFeed(idToDelete);
       feeds = feeds.filter(f => f.id !== idToDelete);
       feedToDelete = null;
+      success(`Feed "${title}" deleted successfully`);
       onRefresh();
     } catch (e) {
       console.error(e);
+      toastError("Failed to delete feed");
     }
   }
 
@@ -296,7 +308,7 @@
       a.click();
     } catch (e) {
       console.error(e);
-      alert('Export failed');
+      toastError('Export failed');
     }
   }
 
@@ -336,12 +348,11 @@
         });
 
         if (res.ok) {
-           alert('Configuration imported. Page will refresh.');
-           window.location.reload();
+           openDialog('Import Success', 'Configuration imported successfully. The page will refresh now.', 'info', () => window.location.reload());
         }
       } catch (err) {
         console.error(err);
-        alert('Invalid config file');
+        toastError('Invalid config file');
       }
     };
     reader.readAsText(file);
@@ -375,12 +386,12 @@
         body: formData
       });
       if (res.ok) {
-        alert('OPML Import started. Feeds will appear shortly.');
+        success('OPML Import started. Feeds will appear shortly.');
         onRefresh();
       }
     } catch (e) {
       console.error(e);
-      alert('OPML import failed');
+      toastError('OPML import failed');
     }
   }
 
@@ -399,7 +410,7 @@
       document.body.removeChild(a);
     } catch (e) {
       console.error(e);
-      alert('Backup failed');
+      toastError('Backup failed');
     }
   }
 
@@ -407,30 +418,33 @@
     const file = event.target.files[0];
     if (!file) return;
     
-    if (!confirm("WARNING: This will replace your entire database (all feeds, articles, and read status) with the provided file. This cannot be undone. Continue?")) return;
-
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    try {
-      const res = await fetch('/backup/import', {
-        method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}` 
-        },
-        body: formData
-      });
-      if (res.ok) {
-        alert('Database restored successfully. The page will now refresh.');
-        window.location.reload();
-      } else {
-        const err = await res.text();
-        alert('Restore failed: ' + err);
-      }
-    } catch (e) {
-      console.error(e);
-      alert('Restore failed');
-    }
+    openDialog(
+      "Confirm Database Restore",
+      "WARNING: This will replace your entire database (all feeds, articles, and read status) with the provided file. This cannot be undone. Continue?",
+      "danger",
+      async () => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+          const res = await fetch('/backup/import', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: formData
+          });
+          if (res.ok) {
+            openDialog('Restore Success', 'Database restored successfully. The page will now refresh.', 'info', () => window.location.reload());
+          } else {
+            const err = await res.text();
+            toastError('Restore failed: ' + err);
+          }
+        } catch (e) {
+          console.error(e);
+          toastError('Restore failed');
+        }
+      },
+      "Proceed with Restore"
+    );
   }
 
   const examples = [
@@ -465,20 +479,38 @@
       newKeyName = "";
       loadAPIKeys();
     } catch (e) {
-      alert(e.message);
+      toastError(e.message);
     }
   }
 
   async function handleDeleteKey(id) {
-    if (!confirm("Are you sure you want to revoke this API key? Devices using it will lose access.")) return;
-    try {
-      await deleteAPIKey(id);
-      loadAPIKeys();
-    } catch (e) {
-      alert(e.message);
-    }
+    openDialog(
+      "Revoke API Key",
+      "Are you sure you want to revoke this API key? Devices using it will lose access.",
+      "warning",
+      async () => {
+        try {
+          await deleteAPIKey(id);
+          success("API Key successfully revoked");
+          loadAPIKeys();
+        } catch (e) {
+          toastError(e.message);
+        }
+      },
+      "Revoke Key"
+    );
   }
 </script>
+
+<Modal 
+  bind:show={dialog.show}
+  title={dialog.title}
+  message={dialog.message}
+  type={dialog.type}
+  confirmText={dialog.confirmText}
+  cancelText={dialog.cancelText}
+  onConfirm={dialog.onConfirm}
+/>
 
 <div class="view-container">
   <header class="header-bar">
@@ -883,63 +915,32 @@
     {/if}
   </div>
 
-  {#if generatedKey}
-    <div class="modal-overlay" transition:fade={{ duration: 200 }}>
-      <div class="modal-card" transition:fly={{ y: 20, duration: 300 }}>
-        <div class="modal-icon-header">
-           <div class="success-circle">
-              <Shield size={24} color="white" />
-           </div>
-        </div>
-        <div class="modal-body">
-          <h2>New API Key Created</h2>
-          <p>Copy this key now. For security reasons, <strong>it will not be shown again</strong>.</p>
-          <div class="key-display">
-            <code>{generatedKey}</code>
-            <button class="btn-ghost-small" on:click={() => { navigator.clipboard.writeText(generatedKey); alert('Copied!'); }}>Copy</button>
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-primary" on:click={() => generatedKey = null}>I've saved it</button>
-        </div>
-      </div>
+  <Modal 
+    show={!!generatedKey} 
+    title="New API Key Created" 
+    type="info"
+    confirmText="I've saved it"
+    onConfirm={() => generatedKey = null}
+  >
+    <p>Copy this key now. For security reasons, <strong>it will not be shown again</strong>.</p>
+    <div class="key-display">
+      <code>{generatedKey}</code>
+      <button class="btn-ghost-small" on:click={() => { navigator.clipboard.writeText(generatedKey); success('Copied!'); }}>Copy</button>
     </div>
-  {/if}
+  </Modal>
 
-  {#if feedToDelete}
-    <div 
-      class="modal-overlay" 
-      role="button" 
-      tabindex="0"
-      transition:fade={{ duration: 200 }} 
-      on:click={() => feedToDelete = null}
-      on:keydown={(e) => e.key === 'Escape' && (feedToDelete = null)}
-    >
-      <div 
-        class="modal-card" 
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        transition:fly={{ y: 20, duration: 300 }} 
-        on:click|stopPropagation
-        on:keydown|stopPropagation
-      >
-        <div class="modal-icon-header">
-           <div class="warning-circle">
-              <Trash2 size={24} />
-           </div>
-        </div>
-        <div class="modal-body">
-          <h2>Delete Feed?</h2>
-          <p>Are you sure you want to remove <strong>{feedToDelete.title}</strong>? This will delete all its articles from your database. This action cannot be undone.</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" on:click={() => feedToDelete = null}>Cancel</button>
-          <button class="btn-danger" on:click={confirmDeleteFeed}>Delete Feed</button>
-        </div>
-      </div>
-    </div>
-  {/if}
+  <Modal 
+    show={!!feedToDelete} 
+    title="Delete Feed?" 
+    type="danger"
+    confirmText="Delete Feed"
+    onConfirm={confirmDeleteFeed}
+    onCancel={() => feedToDelete = null}
+  >
+    {#if feedToDelete}
+      <p>Are you sure you want to remove <strong>{feedToDelete.title}</strong>? This will delete all its articles from your database. This action cannot be undone.</p>
+    {/if}
+  </Modal>
 </div>
 
 <style>

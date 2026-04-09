@@ -3,6 +3,15 @@
   import { fetchFilters, addFilter, deleteFilter } from './api.js';
   import { t } from './i18n.js';
   import { Trash2, Plus, Shield, Search, Globe } from 'lucide-svelte';
+  import { success, error as toastError } from './toast.js';
+  import Modal from './Modal.svelte';
+
+  /** @type {{show: boolean, title: string, message: string, type: 'info'|'warning'|'danger', confirmText: string, onConfirm: (() => void) | null}} */
+  let dialog = { show: false, title: '', message: '', type: 'info', confirmText: '', onConfirm: null };
+  const openDialog = (title, message, type = 'info', onConfirm = null, confirmText = '') => {
+    // @ts-ignore
+    dialog = { show: true, title, message, type, onConfirm, confirmText };
+  };
 
   /** @type {Array<any>} */
   export let feeds = [];
@@ -42,10 +51,21 @@
   }
 
   async function handleDelete(id) {
-    if (confirm('Delete this filter?')) {
-      const ok = await deleteFilter(id);
-      if (ok) loadFilters();
-    }
+    openDialog(
+      "Delete Filter",
+      "Are you sure you want to delete this filter? It will stop affecting new articles.",
+      "warning",
+      async () => {
+        const ok = await deleteFilter(id);
+        if (ok) {
+          success("Filter deleted");
+          loadFilters();
+        } else {
+          toastError("Failed to delete filter");
+        }
+      },
+      "Delete Filter"
+    );
   }
 
   onMount(loadFilters);
@@ -136,6 +156,16 @@
       </div>
     {/if}
   </div>
+{#if !headless}
+  <Modal 
+    bind:show={dialog.show}
+    title={dialog.title}
+    message={dialog.message}
+    type={dialog.type}
+    confirmText={dialog.confirmText}
+    onConfirm={dialog.onConfirm}
+  />
+{/if}
 </div>
 
 <style>
