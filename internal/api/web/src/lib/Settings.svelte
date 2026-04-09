@@ -1328,7 +1328,7 @@
     width: 100vw;
     height: 100vh;
     background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(2px);
     display: flex;
     align-items: center;
     justify-content: center;
