@@ -14,7 +14,7 @@
   export let cardStyle = 'default';
   export let isMobile = false;
 
-  import { updateFeed, deleteFeed } from './api.js';
+  import { updateFeed, deleteFeed, fetchAPIKeys, createAPIKey, deleteAPIKey } from './api.js';
 
   async function handleUpdateFeed(id, title, category) {
     try {
@@ -386,6 +386,45 @@
     { name: 'WhatsApp', template: 'https://wa.me/?text={title}%20{url}' },
     { name: 'Telegram', template: 'https://t.me/share/url?url={url}&text={title}' }
   ];
+
+  // API Keys state
+  let apiKeys = [];
+  let newKeyName = "";
+  let generatedKey = null;
+
+  async function loadAPIKeys() {
+    try {
+      apiKeys = await fetchAPIKeys();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  $: if (activeTab === 'keys') {
+    loadAPIKeys();
+  }
+
+  async function handleCreateKey() {
+    if (!newKeyName) return;
+    try {
+      const data = await createAPIKey(newKeyName);
+      generatedKey = data.api_key;
+      newKeyName = "";
+      loadAPIKeys();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
+
+  async function handleDeleteKey(id) {
+    if (!confirm("Are you sure you want to revoke this API key? Devices using it will lose access.")) return;
+    try {
+      await deleteAPIKey(id);
+      loadAPIKeys();
+    } catch (e) {
+      alert(e.message);
+    }
+  }
 </script>
 
 <div class="view-container">
@@ -401,6 +440,7 @@
       <button class="tab {activeTab === 'sources' ? 'active' : ''}" on:click={() => activeTab = 'sources'}>{$t('sources')}</button>
       <button class="tab {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
       <button class="tab {activeTab === 'sharing' ? 'active' : ''}" on:click={() => activeTab = 'sharing'}>{$t('sharing')}</button>
+      <button class="tab {activeTab === 'keys' ? 'active' : ''}" on:click={() => activeTab = 'keys'}>API Keys</button>
       <button class="tab {activeTab === 'data' ? 'active' : ''}" on:click={() => activeTab = 'data'}>Data</button>
     </div>
   </header>
@@ -704,8 +744,68 @@
            </div>
         </div>
       </div>
+    {:else if activeTab === 'keys'}
+      <div class="settings-section">
+        <div class="section-header">
+          <Shield size={18} />
+          <span>Device API Keys</span>
+        </div>
+        <p class="section-hint">Use these keys to authenticate devices (mobile apps, terminal clients) without using your main password. Format for header: <code>X-API-Key: user:key</code></p>
+        
+        <div class="key-form">
+          <input 
+            bind:value={newKeyName} 
+            placeholder="Key name (e.g. My iPhone)" 
+            class="modern-input"
+            on:keydown={e => e.key === 'Enter' && handleCreateKey()}
+          />
+          <button class="btn-primary" on:click={handleCreateKey} disabled={!newKeyName}>
+            <Plus size={18} />
+            <span>Create Key</span>
+          </button>
+        </div>
+
+        <div class="keys-list">
+          {#each apiKeys as key}
+            <div class="key-card" in:fly={{ y: 10, duration: 200 }}>
+              <div class="key-info">
+                <span class="key-name">{key.name}</span>
+                <span class="key-date">Created on {new Date(key.created_at).toLocaleDateString()}</span>
+              </div>
+              <button class="btn-icon-danger" on:click={() => handleDeleteKey(key.id)} title="Revoke Key">
+                <Trash2 size={18} />
+              </button>
+            </div>
+          {:else}
+            <div class="empty-list">No API keys created yet.</div>
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
+
+  {#if generatedKey}
+    <div class="modal-overlay" transition:fade={{ duration: 200 }}>
+      <div class="modal-card" transition:fly={{ y: 20, duration: 300 }}>
+        <div class="modal-icon-header">
+           <div class="success-circle">
+              <Shield size={24} color="white" />
+           </div>
+        </div>
+        <div class="modal-body">
+          <h2>New API Key Created</h2>
+          <p>Copy this key now. For security reasons, <strong>it will not be shown again</strong>.</p>
+          <div class="key-display">
+            <code>{generatedKey}</code>
+            <button class="btn-ghost-small" on:click={() => { navigator.clipboard.writeText(generatedKey); alert('Copied!'); }}>Copy</button>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn-primary" on:click={() => generatedKey = null}>I've saved it</button>
+        </div>
+      </div>
+    </div>
+  {/if}
 
   {#if feedToDelete}
     <div 
@@ -1426,4 +1526,47 @@
   .style-preview.com::before { content: ""; position: absolute; top: 16px; left: 8px; right: 8px; height: 4px; background: var(--md-on-surface-variant); opacity: 0.15; border-radius: 2px; }
   
   .style-preview.min::after { content: ""; position: absolute; top: 10px; left: 10px; right: 10px; height: 5px; background: var(--md-primary); opacity: 0.4; border-radius: 2px; }
+
+  /* API Keys Styles */
+  .section-hint { font: var(--m3-label-medium); color: var(--md-on-surface-variant); margin-bottom: 24px; opacity: 0.8; }
+  .key-form { display: flex; gap: 12px; margin-bottom: 32px; max-width: 600px; }
+  .keys-list { display: flex; flex-direction: column; gap: 12px; max-width: 600px; }
+  .key-card { 
+    background: var(--md-surface-variant); 
+    border: 1px solid var(--md-outline); 
+    padding: 16px 20px; 
+    border-radius: 16px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    transition: all 0.2s;
+  }
+  .key-card:hover { border-color: var(--md-primary); background: var(--md-secondary-container); }
+  .key-info { display: flex; flex-direction: column; gap: 4px; }
+  .key-name { font: var(--m3-title-medium); color: var(--md-on-surface); font-weight: 700; }
+  .key-date { font: var(--m3-label-small); color: var(--md-on-surface-variant); opacity: 0.7; }
+  
+  .success-circle { 
+    width: 64px; 
+    height: 64px; 
+    background: #4CAF50; 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    margin: 0 auto 16px; 
+    box-shadow: 0 8px 16px rgba(76, 175, 80, 0.3);
+  }
+  .key-display { 
+    background: var(--md-surface); 
+    padding: 16px; 
+    border-radius: 12px; 
+    border: 1px solid var(--md-outline); 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between; 
+    margin-top: 16px;
+    word-break: break-all;
+  }
+  .key-display code { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--md-primary); flex: 1; margin-right: 12px; }
 </style>
