@@ -113,6 +113,12 @@ func (s *Store) migrate() error {
 			refresh_token TEXT UNIQUE NOT NULL,
 			expires_at DATETIME NOT NULL
 		);`,
+		`CREATE TABLE IF NOT EXISTS api_keys (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			key_hash TEXT UNIQUE NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+		);`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
 			title, content, content='entries', content_rowid='rowid'
 		);`,
@@ -538,4 +544,43 @@ func (s *Store) DeleteSession(token string) error {
 func (s *Store) DeleteExpiredSessions() error {
 	_, err := s.db.Exec("DELETE FROM sessions WHERE expires_at < ?", time.Now())
 	return err
+}
+
+func (s *Store) AddAPIKey(id, name, hash string) error {
+	_, err := s.db.Exec("INSERT INTO api_keys (id, name, key_hash) VALUES (?, ?, ?)", id, name, hash)
+	return err
+}
+
+func (s *Store) ListAPIKeys() ([]map[string]interface{}, error) {
+	rows, err := s.db.Query("SELECT id, name, created_at FROM api_keys ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []map[string]interface{}
+	for rows.Next() {
+		var id, name string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &name, &createdAt); err != nil {
+			return nil, err
+		}
+		keys = append(keys, map[string]interface{}{
+			"id":         id,
+			"name":       name,
+			"created_at": createdAt,
+		})
+	}
+	return keys, nil
+}
+
+func (s *Store) DeleteAPIKey(id string) error {
+	_, err := s.db.Exec("DELETE FROM api_keys WHERE id = ?", id)
+	return err
+}
+
+func (s *Store) ValidateAPIKey(hash string) bool {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM api_keys WHERE key_hash = ?", hash).Scan(&count)
+	return err == nil && count > 0
 }

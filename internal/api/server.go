@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"io/fs"
@@ -139,6 +141,10 @@ func (s *Server) routes() {
 		r.Get("/filters", s.handleListFilters)
 		r.Post("/filters", s.handleAddFilter)
 		r.Delete("/filters/{id}", s.handleDeleteFilter)
+
+		r.Get("/api-keys", s.handleListAPIKeys)
+		r.Post("/api-keys", s.handleCreateAPIKey)
+		r.Delete("/api-keys/{id}", s.handleDeleteAPIKey)
 	})
 
 	// Serve Svelte Frontend
@@ -180,18 +186,39 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		var username string
+
+		// 1. Try JWT Bearer Token
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			slog.Warn("Auth failed: missing Authorization header", "path", r.URL.Path, "method", r.Method)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+			username, _ = auth.ValidateToken(token)
+		} else {
+			// 2. Try X-API-Key (format: "user:key")
+			apiKey := r.Header.Get("X-API-Key")
+			if apiKey != "" {
+				parts := strings.SplitN(apiKey, ":", 2)
+				if len(parts) == 2 {
+					u := parts[0]
+					rawKey := parts[1]
+
+					// Check if user exists (by attempting to open store)
+					store, serr := db.NewStore(s.dataDir, u)
+					if serr == nil {
+						defer store.Close()
+						hash := sha256.Sum256([]byte(rawKey))
+						hashHex := hex.EncodeToString(hash[:])
+						if store.ValidateAPIKey(hashHex) {
+							username = u
+						}
+					}
+				}
+			}
 		}
 
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		username, err := auth.ValidateToken(token)
-		if err != nil {
-			slog.Warn("Auth failed: token validation error", "path", r.URL.Path, "err", err)
-			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		if username == "" {
+			slog.Warn("Auth failed: invalid token or API key", "path", r.URL.Path, "method", r.Method)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -792,6 +819,7 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 2. We need a username to open the DB.
+	// 2. We need a username to open the DB.
 	// Fever doesn't send the username directly, it's hashed in the api_key.
 	// Since Gorrson is designed for one user per DB file, we'll look at the data directory
 	files, _ := os.ReadDir(s.dataDir)
@@ -957,4 +985,97 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	username, ok := r.Context().Value(usernameKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	keys, err := store.ListAPIKeys()
+	if err != nil {
+		http.Error(w, "Query failure", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(keys)
+}
+
+func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		http.Error(w, "Bad Request: name is required", http.StatusBadRequest)
+		return
+	}
+
+	username, ok := r.Context().Value(usernameKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// 1. Generate random key
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	rawKey := hex.EncodeToString(b)
+	fullKey := fmt.Sprintf("%s:%s", username, rawKey)
+
+	// 2. Hash it
+	hash := sha256.Sum256([]byte(rawKey))
+	hashHex := hex.EncodeToString(hash[:])
+
+	// 3. Save to DB
+	id := uuid.New().String()
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	if err := store.AddAPIKey(id, req.Name, hashHex); err != nil {
+		http.Error(w, "Failed to save key", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"id":      id,
+		"name":    req.Name,
+		"api_key": fullKey,
+	})
+}
+
+func (s *Server) handleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	username, ok := r.Context().Value(usernameKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	if err := store.DeleteAPIKey(id); err != nil {
+		http.Error(w, "Delete failed", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

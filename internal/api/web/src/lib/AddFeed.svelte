@@ -12,17 +12,28 @@
   let loading = false;
   let error = "";
 
-  // Auto-detection logic
+  // Validation and detection logic
+  $: isValid = (() => {
+    const val = input.trim();
+    if (!val) return false;
+    // Protocol based
+    if (val.startsWith('http://') || val.startsWith('https://')) return true;
+    // Special formats
+    if (val.startsWith('r/') || val.startsWith('/r/')) return true;
+    if (val.startsWith('@') && val.includes('@', 1)) return true;
+    return false;
+  })();
+
   $: detectedType = (() => {
     const val = input.trim();
     if (val.startsWith('r/') || val.startsWith('/r/')) return 'reddit';
     if (val.startsWith('@')) return 'mastodon';
-    if (val.startsWith('http') || val.includes('.')) return 'rss';
-    return 'rss'; // Default
+    if (val.startsWith('http')) return 'rss';
+    return 'none';
   })();
 
   async function handleAdd() {
-    if (!input) return;
+    if (!isValid || loading) return;
     loading = true;
     error = "";
     
@@ -72,8 +83,8 @@
           <div class="detect-badge {detectedType}">
             {#if detectedType === 'reddit'}Reddit
             {:else if detectedType === 'mastodon'}Mastodon
-            {:else if input.includes('.') }RSS/Web
-            {:else}Auto
+            {:else if detectedType === 'rss'}RSS/URL
+            {:else}Inválido
             {/if}
           </div>
           <input 
@@ -82,7 +93,7 @@
             placeholder="r/technology, @user@instance o https://..." 
             bind:value={input}
             disabled={loading}
-            on:keydown={(e) => e.key === 'Enter' && handleAdd()}
+            on:keydown={(e) => e.key === 'Enter' && isValid && handleAdd()}
           />
         </div>
         {#if error}
@@ -97,7 +108,7 @@
 
     <footer class="modal-footer">
       <button class="btn-text" on:click={onCancel}>{$t('cancel')}</button>
-      <button class="btn-primary" on:click={handleAdd} disabled={loading || !input}>
+      <button class="btn-primary" on:click={handleAdd} disabled={loading || !isValid}>
         {#if loading}Adding...{:else}{$t('save')}{/if}
       </button>
     </footer>
@@ -121,6 +132,7 @@
   .detect-badge.reddit { background: #FF4500; color: white; border: none; }
   .detect-badge.mastodon { background: #6364FF; color: white; border: none; }
   .detect-badge.rss { background: var(--md-primary-container); color: var(--md-on-primary-container); border: 1px solid var(--md-primary); }
+  .detect-badge.none { background: #555; opacity: 0.5; }
 
   .field input { width: 100%; background: var(--md-surface); border: 1px solid var(--md-outline); padding: 16px 20px; border-radius: var(--radius-full); color: var(--md-on-surface); font: var(--m3-body-large); outline: none; transition: all 0.2s; }
   .field input:focus { border-color: var(--md-primary); box-shadow: 0 0 0 2px var(--md-primary-container); }
