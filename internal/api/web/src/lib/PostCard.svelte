@@ -126,11 +126,11 @@
 
   /* Modes */
   .mode-compact { padding: 12px 16px 8px 16px; border-radius: 16px; margin-bottom: 4px; }
-  .mode-compact .title { font-size: 15px; -webkit-line-clamp: 2 !important; line-clamp: 2 !important; }
-  .mode-compact .summary { font-size: 12px; -webkit-line-clamp: 1 !important; line-clamp: 1 !important; margin-top: 2px; }
+  .mode-compact .title { font-size: 15px; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; }
+  .mode-compact .summary { font-size: 12px; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; margin-top: 2px; }
   
   .mode-minimal { padding: 10px 14px; border-radius: 12px; margin-bottom: 4px; }
-  .mode-minimal .title { font-size: 14px; font-weight: 500; -webkit-line-clamp: 2 !important; line-clamp: 2 !important; margin-bottom: 2px; }
+  .mode-minimal .title { font-size: 14px; font-weight: 500; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; margin-bottom: 2px; }
   .mode-minimal .footer-row { margin-top: 2px; }
   .mode-minimal .action-btn { padding: 2px; }
 
@@ -153,7 +153,6 @@
     color: var(--md-on-surface-variant);
     display: -webkit-box;
     -webkit-line-clamp: 3;
-    line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     transition: all 0.2s;
@@ -182,7 +181,6 @@
     margin: 0;
     display: -webkit-box;
     -webkit-line-clamp: 2;
-    line-clamp: 2;
     -webkit-box-orient: vertical;
     overflow: hidden;
     line-height: 1.5;

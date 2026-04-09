@@ -12,6 +12,7 @@
   export let username = '';
   export let scrollRead = false;
   export let cardStyle = 'default';
+  export let isMobile = false;
 
   import { updateFeed, deleteFeed } from './api.js';
 
@@ -389,10 +390,12 @@
 
 <div class="view-container">
   <header class="header-bar">
-    <div class="header-left">
-      <SettingsIcon size={20} />
-      <h1 class="title">{$t('settings')}</h1>
-    </div>
+    {#if !isMobile}
+      <div class="header-left">
+        <SettingsIcon size={20} />
+        <h1 class="title">{$t('settings')}</h1>
+      </div>
+    {/if}
     <div class="tabs">
       <button class="tab {activeTab === 'general' ? 'active' : ''}" on:click={() => activeTab = 'general'}>General</button>
       <button class="tab {activeTab === 'sources' ? 'active' : ''}" on:click={() => activeTab = 'sources'}>{$t('sources')}</button>

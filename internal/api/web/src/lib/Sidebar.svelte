@@ -11,7 +11,8 @@
     ChevronDown,
     ChevronRight,
     Globe,
-    RefreshCw
+    RefreshCw,
+    X
   } from 'lucide-svelte';
   import { locale, t } from './i18n.js';
   import { fly } from 'svelte/transition';
@@ -95,53 +96,66 @@
 </script>
 
 <aside class="sidebar">
-  <header class="sidebar-header header-bar">
-    <div class="logo">
-      <span class="full-logo">GO<span class="rss-logo-part-sidebar">RSS</span>ON</span>
-      <span class="mini-logo">G</span>
-    </div>
-  </header>
+  {#if !isMobile}
+    <header class="sidebar-header header-bar">
+      <div class="logo">
+        <span class="full-logo">GO<span class="rss-logo-part-sidebar">RSS</span>ON</span>
+        <span class="mini-logo">G</span>
+      </div>
+    </header>
+  {/if}
   
   <div class="sidebar-content">
-    <nav class="nav-group">
-      {#each navItems as item}
-        <button 
-          class="nav-item {activeView === item.id ? 'active' : ''}"
-          on:click={() => handleNavClick(item.id)}
-        >
-          <div class="item-left">
-            <svelte:component this={item.icon} size={18} strokeWidth={2} />
-            <span>{$t(item.id)}</span>
-          </div>
-          {#if item.badge}
-            <span class="badge">{item.badge}</span>
-          {/if}
-        </button>
-      {/each}
-    </nav>
+    {#if !isMobile}
+      <nav class="nav-group">
+        {#each navItems as item}
+          <button 
+            class="nav-item {activeView === item.id ? 'active' : ''}"
+            on:click={() => handleNavClick(item.id)}
+          >
+            <div class="item-left">
+              <svelte:component this={item.icon} size={18} strokeWidth={2} />
+              <span>{$t(item.id)}</span>
+            </div>
+            {#if item.badge}
+              <span class="badge">{item.badge}</span>
+            {/if}
+          </button>
+        {/each}
+      </nav>
 
-    <div class="divider"></div>
+      <div class="divider"></div>
+    {/if}
 
     <!-- CATEGORIES SECTION -->
     <div class="section-wrapper">
-      <div 
-        class="section-header" 
-        on:click={(e) => (isMobile || isMini) ? togglePopover('categories', e) : (catsExpanded = !catsExpanded)} 
-        role="button" 
-        tabindex="0" 
-        on:keydown={(e) => e.key === 'Enter' && (catsExpanded = !catsExpanded)}
-      >
-        <div class="header-left">
-          {#if !isMobile && !isMini}
-            {#if catsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
-          {/if}
-          <span class="mobile-only-icon"><Hash size={18} /></span>
-          <span class="section-title-text">{$t('categories')}</span>
+      {#if isMobile}
+        <button class="mobile-toggle-btn" on:click={() => catsExpanded = !catsExpanded}>
+          <span class="toggle-title">{$t('categories')}</span>
+          <div class="toggle-icon">
+            {#if catsExpanded}<ChevronDown size={18} />{:else}<ChevronRight size={18} />{/if}
+          </div>
+        </button>
+      {:else}
+        <div 
+          class="section-header" 
+          on:click={(e) => isMini ? togglePopover('categories', e) : (catsExpanded = !catsExpanded)} 
+          role="button" 
+          tabindex="0" 
+          on:keydown={(e) => e.key === 'Enter' && (catsExpanded = !catsExpanded)}
+        >
+          <div class="header-left">
+            {#if !isMini}
+              {#if catsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+            {/if}
+            <span class="mobile-only-icon"><Hash size={18} /></span>
+            <span class="section-title-text">{$t('categories')}</span>
+          </div>
         </div>
-      </div>
+      {/if}
       
-      {#if catsExpanded && !isMobile && !isMini}
-        <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
+      {#if (catsExpanded && !isMini && !isMobile) || (isMobile && catsExpanded)}
+        <nav class="categories-group {isMobile ? 'mobile-expanded' : ''}" transition:fly={{ y: -10, duration: 200 }}>
           {#each categories as cat}
             <button 
               class="cat-item {activeView === 'cat:'+cat.id ? 'active' : ''}"
@@ -156,44 +170,51 @@
           {/each}
         </nav>
       {/if}
-
-      {#if isMobile && activePopover === 'categories'}
-        <!-- Popover moved out for overflow reasons -->
-      {/if}
     </div>
     
-    <div class="divider"></div>
+    {#if !isMobile}
+      <div class="divider"></div>
+    {/if}
 
     <!-- SOURCES SECTION -->
     <div class="section-wrapper">
-      <div class="section-header">
-        <div 
-          class="header-left" 
-          on:click={(e) => (isMobile || isMini) ? togglePopover('sources', e) : (feedsExpanded = !feedsExpanded)} 
-          role="button" 
-          tabindex="0" 
-          on:keydown={(e) => e.key === 'Enter' && (feedsExpanded = !feedsExpanded)}
-        >
-          {#if !isMobile && !isMini}
-            {#if feedsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
-          {/if}
-          <span class="mobile-only-icon"><Globe size={18} /></span>
-          <span class="section-title-text">{$t('sources') || 'Sources'}</span>
-        </div>
-        <div class="header-actions">
-          <button class="refresh-btn-inline" on:click|stopPropagation={handleAddClick} title={$t('add_feed')}>
-            <Plus size={14} strokeWidth={2.5} />
-          </button>
-          {#if !isMobile && !isMini}
-            <button class="refresh-btn-inline" on:click|stopPropagation={onRefresh} title="Sync All">
-              <RefreshCw size={14} />
+      {#if isMobile}
+        <button class="mobile-toggle-btn" on:click={() => feedsExpanded = !feedsExpanded}>
+          <span class="toggle-title">{$t('sources') || 'Sources'}</span>
+          <div class="toggle-icon">
+            {#if feedsExpanded}<ChevronDown size={18} />{:else}<ChevronRight size={18} />{/if}
+          </div>
+        </button>
+      {:else}
+        <div class="section-header">
+          <div 
+            class="header-left" 
+            on:click={(e) => isMini ? togglePopover('sources', e) : (feedsExpanded = !feedsExpanded)} 
+            role="button" 
+            tabindex="0" 
+            on:keydown={(e) => e.key === 'Enter' && (feedsExpanded = !feedsExpanded)}
+          >
+            {#if !isMini}
+              {#if feedsExpanded}<ChevronDown size={14} />{:else}<ChevronRight size={14} />{/if}
+            {/if}
+            <span class="mobile-only-icon"><Globe size={18} /></span>
+            <span class="section-title-text">{$t('sources') || 'Sources'}</span>
+          </div>
+          <div class="header-actions">
+            <button class="refresh-btn-inline" on:click|stopPropagation={handleAddClick} title={$t('add_feed')}>
+              <Plus size={14} strokeWidth={2.5} />
             </button>
-          {/if}
+            {#if !isMini}
+              <button class="refresh-btn-inline" on:click|stopPropagation={onRefresh} title="Sync All">
+                <RefreshCw size={14} />
+              </button>
+            {/if}
+          </div>
         </div>
-      </div>
+      {/if}
 
-      {#if feedsExpanded && !isMobile && !isMini}
-        <nav class="categories-group" transition:fly={{ y: -10, duration: 200 }}>
+      {#if (feedsExpanded && !isMini && !isMobile) || (isMobile && feedsExpanded)}
+        <nav class="categories-group {isMobile ? 'mobile-expanded' : ''}" transition:fly={{ y: -10, duration: 200 }}>
           {#each feeds as feed}
             <button 
               class="cat-item {activeView === 'src:'+feed.id ? 'active' : ''}"
@@ -205,110 +226,50 @@
               </div>
               {#if feed.unread_count > 0}
                 <span class="count">{feed.unread_count}</span>
+              {:else}
+                <span class="count">0</span>
               {/if}
             </button>
           {/each}
         </nav>
       {/if}
-
-      {#if isMobile && activePopover === 'sources'}
-        <!-- Popover moved out for overflow reasons -->
-      {/if}
     </div>
   </div>
 
-  <div class="bottom-actions">
-    <div class="user-profile-container">
-      {#if showUserMenu}
-        <div class="user-popup" transition:fly={{ y: 20, duration: 200 }}>
-          <button class="popup-item {activeView === 'settings' ? 'active' : ''}" on:click={() => handleNavClick('settings')}>
-            <Settings size={16} />
-            <span>{$t('settings') || 'Settings'}</span>
-          </button>
-          <button class="popup-item" on:click={() => { toggleLanguage(); showUserMenu = false; }}>
-            <Globe size={16} />
-            <span>{$t('language') || 'Language'}: { $locale.toUpperCase() }</span>
-          </button>
-          <div class="divider"></div>
-          <button class="popup-item logout-item" on:click={handleLogout}>
-            <LogOut size={16} />
-            <span>{$t('logout') || 'Log Out'}</span>
-          </button>
-        </div>
-      {/if}
-
-      <div class="user-profile {showUserMenu ? 'menu-open' : ''}">
-        <button class="profile-main" on:click={toggleUserMenu} title="User menu">
-          <div class="avatar">{username[0]?.toUpperCase() || 'U'}</div>
-          <div class="user-info">
-            <div class="username">{username}</div>
-            <div class="status">{$t('synced')} {lastSync}</div>
+  {#if !isMobile}
+    <div class="bottom-actions">
+      <div class="user-profile-container">
+        {#if showUserMenu}
+          <div class="user-popup" transition:fly={{ y: 20, duration: 200 }}>
+            <button class="popup-item {activeView === 'settings' ? 'active' : ''}" on:click={() => handleNavClick('settings')}>
+              <Settings size={16} />
+              <span>{$t('settings') || 'Settings'}</span>
+            </button>
+            <button class="popup-item" on:click={() => { toggleLanguage(); showUserMenu = false; }}>
+              <Globe size={16} />
+              <span>{$t('language') || 'Language'}: { $locale.toUpperCase() }</span>
+            </button>
+            <div class="divider"></div>
+            <button class="popup-item logout-item" on:click={handleLogout}>
+              <LogOut size={16} />
+              <span>{$t('logout') || 'Log Out'}</span>
+            </button>
           </div>
-        </button>
-      </div>
-    </div>
-  </div>
+        {/if}
 
-  <!-- FLOATING POPOVERS (OUTSIDE SCROLL AREA) -->
-  {#if isMobile && activePopover === 'categories'}
-    <div 
-      class="mobile-popover" 
-      style="top: {popoverY}px; max-height: {popoverMaxHeight}px;" 
-      transition:fly={{ x: -20, duration: 250 }}
-    >
-      <header class="popover-header">{$t('categories')}</header>
-      <div class="popover-content">
-        {#each categories as cat}
-          <button 
-            class="cat-item {activeView === 'cat:'+cat.id ? 'active' : ''}"
-            on:click={() => handleNavClick('cat:'+cat.id)}
-          >
-            <div class="item-left">
-              <Hash size={14} />
-              <span>{cat.name}</span>
+        <div class="user-profile {showUserMenu ? 'menu-open' : ''}">
+          <button class="profile-main" on:click={toggleUserMenu} title="User menu">
+            <div class="avatar">{username[0]?.toUpperCase() || 'U'}</div>
+            <div class="user-info">
+              <div class="username">{username}</div>
+              <div class="status">{$t('synced')} {lastSync}</div>
             </div>
-            <span class="count">{cat.count}</span>
-          </button>
-        {/each}
-      </div>
-    </div>
-  {/if}
-
-  {#if isMobile && activePopover === 'sources'}
-    <div 
-      class="mobile-popover" 
-      style="top: {popoverY}px; max-height: {popoverMaxHeight}px;" 
-      transition:fly={{ x: -20, duration: 250 }}
-    >
-      <header class="popover-header">
-        <span>{$t('sources') || 'Sources'}</span>
-        <div class="header-actions-group">
-          <button class="refresh-btn-inline" on:click|stopPropagation={handleAddClick} title={$t('add_feed')}>
-            <Plus size={14} strokeWidth={2.5} />
-          </button>
-          <button class="refresh-btn-inline" on:click|stopPropagation={onRefresh}>
-            <RefreshCw size={12} />
           </button>
         </div>
-      </header>
-      <div class="popover-content">
-        {#each feeds as feed}
-          <button 
-            class="cat-item {activeView === 'src:'+feed.id ? 'active' : ''}"
-            on:click={() => handleNavClick('src:'+feed.id)}
-          >
-            <div class="item-left">
-              <Globe size={14} />
-              <span class="truncate">{feed.title}</span>
-            </div>
-            {#if feed.unread_count > 0}
-              <span class="count">{feed.unread_count}</span>
-            {/if}
-          </button>
-        {/each}
       </div>
     </div>
   {/if}
+
 </aside>
 
 <style>
@@ -648,77 +609,6 @@
     display: none;
   }
 
-  .section-wrapper {
-    position: relative;
-  }
-
-  .mobile-popover {
-    position: fixed; /* Fixed to avoid scroll-parent issues */
-    left: 72px;      /* Tighter to the rail */
-    width: 260px;    /* Slightly wider for better text flow */
-    background: var(--md-surface);
-    border: 1px solid var(--md-outline);
-    border-radius: var(--radius-xl);
-    box-shadow: 12px 4px 40px rgba(0,0,0,0.25);
-    z-index: 9999;
-    display: flex;
-    flex-direction: column;
-    animation: popIn 0.2s cubic-bezier(0, 0, 0.2, 1);
-  }
-
-  @keyframes popIn {
-    from { opacity: 0; transform: translateX(-10px); }
-    to { opacity: 1; transform: translateX(0); }
-  }
-
-  .popover-header {
-    padding: 16px 20px;
-    font: var(--m3-label-large);
-    font-weight: 800;
-    color: var(--md-primary);
-    border-bottom: 1px solid var(--md-outline);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .popover-content {
-    padding: 8px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .popover-content .cat-item {
-    padding: 0 12px;
-    opacity: 1;
-    height: 44px;
-  }
-
-  .mobile-popover .cat-item span,
-  .mobile-popover .count,
-  .mobile-popover .truncate {
-    display: block !important;
-  }
-
-  .mobile-popover .item-left {
-    gap: 12px;
-    justify-content: flex-start !important;
-  }
-
-  .mobile-popover .cat-item {
-    justify-content: space-between !important;
-    padding: 0 16px !important;
-    border-radius: var(--radius-m);
-  }
-
-  .header-actions-group {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
   /* Compact Mode (Tablet & Mobile) */
   @media (max-width: 1000px) {
     .sidebar {
@@ -855,6 +745,62 @@
       border-radius: var(--radius-full);
       box-shadow: 0 0 0 2px var(--md-outline);
     }
+  }
+
+
+  .mobile-expanded {
+    display: flex !important;
+    flex-direction: column;
+    padding: 0 12px !important;
+    gap: 4px !important;
+  }
+
+  .mobile-expanded .cat-item {
+    height: 48px !important;
+    border-radius: 12px !important;
+    padding: 0 16px !important;
+    width: 100% !important;
+  }
+
+  .mobile-expanded .cat-item span {
+    display: block !important;
+    font-size: 15px !important;
+    font-weight: 500;
+  }
+
+  .mobile-toggle-btn {
+    width: 100%;
+    background: transparent;
+    border: none;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    cursor: pointer;
+    color: var(--md-on-surface);
+    transition: background 0.2s;
+    border-radius: 16px;
+    margin-bottom: 4px;
+  }
+
+  .mobile-toggle-btn:active {
+    background: var(--md-surface-variant);
+  }
+
+  .toggle-title {
+    font: var(--m3-title-small);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--md-primary);
+    opacity: 0.8;
+  }
+
+  .toggle-icon {
+    color: var(--md-primary);
+    opacity: 0.7;
+    display: flex;
+    align-items: center;
   }
 </style>
 

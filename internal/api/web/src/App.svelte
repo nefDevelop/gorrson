@@ -18,7 +18,8 @@
 
   let selectedId = null;
   let searchQuery = "";
-  let isMobile = false;
+  let isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
+  let isSidebarMini = typeof window !== 'undefined' ? window.innerWidth <= 1000 : false;
   
   let offset = 0;
   const LIMIT = 50;
@@ -34,7 +35,6 @@
 
   const STOP_WORDS = new Set(['de', 'a', 'el', 'la', 'en', 'y', 'que', 'os', 'un', 'una', 'con', 'para', 'por', 'lo', 'las', 'los', 'su', 'al', 'se', 'del', 'the', 'and', 'with', 'that', 'this', 'from']);
 
-  let isSidebarMini = false;
   const updateMobile = () => {
     isMobile = window.innerWidth <= 768;
     isSidebarMini = window.innerWidth <= 1000;
@@ -114,7 +114,7 @@
       offset += newArticles.length;
       feeds = feedsData || [];
       
-      if (articles.length > 0 && !selectedId && !append) {
+      if (articles.length > 0 && !selectedId && !append && !isMobile) {
         selectedId = articles[0].id;
       }
       lastSyncDate = new Date();
@@ -276,6 +276,9 @@
   });
 
   function handleViewChange(viewId) {
+    selectedId = null;
+    let shouldLoad = true;
+
     if (viewId.startsWith('cat:')) {
       activeCategory = viewId.replace('cat:', '');
       activeSource = null;
@@ -288,10 +291,17 @@
       activeCategory = null;
       activeSource = null;
       currentView = viewId;
+      if (viewId === 'settings' || viewId === 'add-feed') {
+        shouldLoad = false;
+        loading = false;
+      }
     }
-    articles = []; // Reset list
+    
     isSourcesDrawerOpen = false;
-    loadData();
+    if (shouldLoad) {
+      articles = []; // Reset list only for news views
+      loadData();
+    }
   }
 
   // Real-time search - disabled network trigger to use client-side filtering
@@ -466,62 +476,61 @@
         </div>
       {/if}
       
-      {#if currentView === 'inbox' || currentView === 'favorites'}
-        {#if !isMobile || (isMobile && !selectedId)}
-          <FeedList 
-            bind:searchQuery
-            articles={filteredArticles} 
-            selectedId={selectedId} 
-            isExpanded={isFeedExpanded}
-            onToggleExpand={toggleFeedExpand}
-            onSelect={handleSelect} 
-            onMarkAsRead={handleMarkAsRead}
-            onToggleFavorite={handleToggleFavorite}
-            onShare={handleShare}
-            onMarkAllRead={handleMarkAllRead}
-            onLoadMore={handleLoadMore}
-            {loadingMore}
-            {allLoaded}
-            {scrollRead}
-            {cardStyle}
-            bind:unreadOnly
-            bind:sortMode
+      {#if loading && articles.length === 0}
+        <div class="loading-overlay">
+          <div class="spinner"></div>
+          <p>Loading Gorrson...</p>
+        </div>
+      {:else if error}
+        <div class="error-view">
+          <p>{error}</p>
+          <button on:click={() => loadData()}>Retry</button>
+        </div>
+      {:else}
+        {#if currentView === 'inbox' || currentView === 'favorites'}
+          {#if !isMobile || (isMobile && !selectedId)}
+            <FeedList 
+              bind:searchQuery
+              articles={filteredArticles} 
+              selectedId={selectedId} 
+              isExpanded={isFeedExpanded}
+              onToggleExpand={toggleFeedExpand}
+              onSelect={handleSelect} 
+              onMarkAsRead={handleMarkAsRead}
+              onToggleFavorite={handleToggleFavorite}
+              onShare={handleShare}
+              onMarkAllRead={handleMarkAllRead}
+              onLoadMore={handleLoadMore}
+              {loadingMore}
+              {allLoaded}
+              {scrollRead}
+              {cardStyle}
+              bind:unreadOnly
+              bind:sortMode
+            />
+          {/if}
+        {:else if currentView === 'filters'}
+          <Filters />
+        {:else if currentView === 'settings'}
+          <Settings 
+            {feeds} 
+            {isMobile}
+            onLogout={handleLogout} 
+            username={localStorage.getItem('username')}
+            bind:scrollRead
+            bind:cardStyle
           />
         {/if}
       {/if}
     </div>
-    
-    {#if loading && articles.length === 0}
-      <div class="loading-overlay">
-        <div class="spinner"></div>
-        <p>Loading Gorrson...</p>
-      </div>
-    {:else if error}
-      <div class="error-view">
-        <p>{error}</p>
-        <button on:click={() => loadData()}>Retry</button>
-      </div>
-    {:else}
-      {#if currentView === 'inbox' || currentView === 'favorites'}
-        {#if filteredArticles.length > 0 && (!isMobile || (isMobile && selectedId))}
-          <PostViewer 
-            article={selectedArticle} 
-            onBack={() => selectedId = null}
-            isFullscreen={fullscreenReader}
-            onToggleFullscreen={toggleFullscreen}
-          />
-        {/if}
-      {:else if currentView === 'filters'}
-        <Filters />
-      {:else if currentView === 'settings'}
-        <Settings 
-          {feeds} 
-          onLogout={handleLogout} 
-          username={localStorage.getItem('username')}
-          bind:scrollRead
-          bind:cardStyle
-        />
-      {/if}
+
+    {#if (currentView === 'inbox' || currentView === 'favorites') && filteredArticles.length > 0 && (!isMobile || (isMobile && selectedId))}
+      <PostViewer 
+        article={selectedArticle} 
+        onBack={() => selectedId = null}
+        isFullscreen={fullscreenReader}
+        onToggleFullscreen={toggleFullscreen}
+      />
     {/if}
 
     {#if showAddFeed}
@@ -567,14 +576,19 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.5); /* Backdrop */
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.4); /* Subtle Backdrop */
+    backdrop-filter: blur(4px);
     z-index: 2000;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.3s ease;
-    display: block;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
   }
 
   .mobile-mode .sidebar-wrapper.mobile-drawer.open {
@@ -583,15 +597,21 @@
   }
 
   .mobile-mode .sidebar-wrapper.mobile-drawer :global(.sidebar) {
-    width: 280px !important;
-    height: 100%;
-    transform: translateX(-100%);
-    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 10px 0 30px rgba(0,0,0,0.3);
+    width: 100% !important;
+    max-width: 340px;
+    height: 70vh !important;
+    max-height: 500px;
+    transform: scale(0.9) translateY(20px);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    border-radius: 28px !important;
+    border: 1px solid var(--md-outline);
+    overflow: hidden;
+    background: var(--md-surface);
   }
 
   .mobile-mode .sidebar-wrapper.mobile-drawer.open :global(.sidebar) {
-    transform: translateX(0);
+    transform: scale(1) translateY(0);
   }
 
   /* Ensure content has padding for bottom nav */
