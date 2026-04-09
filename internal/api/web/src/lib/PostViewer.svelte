@@ -3,7 +3,7 @@
   import { cubicOut } from 'svelte/easing';
   import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal, Maximize2, Minimize2 } from 'lucide-svelte';
   import { t } from './i18n.js';
-  import { toggleFavorite } from './api.js';
+  import { toggleFavorite, fetchFullContent } from './api.js';
   import { success as toastSuccess } from './toast.js';
   import { onMount } from 'svelte';
   
@@ -97,17 +97,14 @@
     if (!article || loadingFull) return;
     loadingFull = true;
     try {
-      const response = await fetch(`/news/${article.id}/content`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      if (response.ok) {
-        const text = await response.text();
-        article = { ...article, content: text, is_full_content: true };
-      }
+      const text = await fetchFullContent(article.id);
+      article = { ...article, content: text, is_full_content: true };
     } catch (e) {
       console.error(e);
+      if (e.message === 'Unauthorized') {
+        // We might want to notify the parent app or show a clear error
+        article = { ...article, content: `<div class="error-inline">${$t('unauthorized_content') || 'Unauthorized to load full content. Please check your session.'}</div>`, is_full_content: false };
+      }
     } finally {
       loadingFull = false;
     }

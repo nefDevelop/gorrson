@@ -146,3 +146,13 @@ export async function deleteFeed(id) {
   });
   if (!res.ok) throw new Error('Failed to delete feed');
 }
+export async function fetchFullContent(id) {
+  const res = await fetch(`/news/${id}/content`, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  if (res.status === 401) throw new Error('Unauthorized');
+  if (!res.ok) throw new Error('Failed to fetch full content');
+  return res.text();
+}

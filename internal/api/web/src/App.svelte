@@ -8,6 +8,7 @@
   import Settings from './lib/Settings.svelte';
   import AddFeed from './lib/AddFeed.svelte';
   import Toaster from './lib/Toaster.svelte';
+  import MobileNav from './lib/MobileNav.svelte';
   import { success as toastSuccess, error as toastError } from './lib/toast.js';
   import { formatTimeAgo } from './lib/utils.js';
   import { Inbox, Star, Bookmark, Archive, Shield } from 'lucide-svelte';
@@ -47,6 +48,19 @@
   let activeCategory = null;
   let activeSource = null;
   let showAddFeed = false;
+  let isSourcesDrawerOpen = false;
+  let lastSyncDate = new Date();
+  let now = new Date();
+
+  // Update relative times every 30 seconds
+  onMount(() => {
+    const interval = setInterval(() => {
+      now = new Date();
+    }, 30000);
+    return () => clearInterval(interval);
+  });
+
+  $: lastSyncFormatted = formatTimeAgo(lastSyncDate);
 
   $: totalUnread = (feeds || []).reduce((acc, f) => acc + (f.unread_count || 0), 0);
   
@@ -103,6 +117,7 @@
       if (articles.length > 0 && !selectedId && !append) {
         selectedId = articles[0].id;
       }
+      lastSyncDate = new Date();
     } catch (e) {
       error = e.message;
       if (e.message === 'Unauthorized') isAuthenticated = false;
@@ -275,6 +290,7 @@
       currentView = viewId;
     }
     articles = []; // Reset list
+    isSourcesDrawerOpen = false;
     loadData();
   }
 
@@ -422,20 +438,32 @@
 {#if !isAuthenticated}
   <Login onLoginSuccess={handleLoginSuccess} />
 {:else}
-  <main class="app-container {selectedId ? 'has-selection' : ''}">
+  <main class="app-container {selectedId ? 'has-selection' : ''} {isMobile ? 'mobile-mode' : ''}">
     <div class="nav-panels" class:collapsed={fullscreenReader}>
-      {#if !isMobile || (isMobile && !selectedId)}
-        <Sidebar 
-          {navItems} 
-          {categories} 
-          {feeds}
-          {isMobile}
-          isMini={isSidebarMini}
-          activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
-          onViewChange={handleViewChange} 
-          onAddFeed={handleAddFeed}
-          onRefresh={loadData}
-        />
+      {#if !isMobile || isSourcesDrawerOpen}
+        <div 
+          class="sidebar-wrapper" 
+          class:mobile-drawer={isMobile} 
+          class:open={isSourcesDrawerOpen} 
+          on:click|self={() => isSourcesDrawerOpen = false}
+          on:keydown={(e) => e.key === 'Escape' && (isSourcesDrawerOpen = false)}
+          role="button"
+          tabindex={isSourcesDrawerOpen ? 0 : -1}
+          aria-label="Close menu"
+        >
+          <Sidebar 
+            {navItems} 
+            {categories} 
+            {feeds}
+            {isMobile}
+            lastSync={lastSyncFormatted}
+            isMini={isSidebarMini}
+            activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
+            onViewChange={handleViewChange} 
+            onAddFeed={handleAddFeed}
+            onRefresh={loadData}
+          />
+        </div>
       {/if}
       
       {#if currentView === 'inbox' || currentView === 'favorites'}
@@ -499,6 +527,15 @@
     {#if showAddFeed}
       <AddFeed onSave={handleAddFeedSave} onCancel={handleAddFeedCancel} />
     {/if}
+
+    {#if isMobile}
+      <MobileNav 
+        activeView={currentView} 
+        totalUnread={totalUnread}
+        onNavClick={handleViewChange}
+        onToggleSources={() => isSourcesDrawerOpen = !isSourcesDrawerOpen}
+      />
+    {/if}
   </main>
   <Toaster />
 {/if}
@@ -510,6 +547,7 @@
     overflow: hidden;
     background: var(--md-background);
   }
+
   .nav-panels {
     display: flex;
     height: 100%;
@@ -519,6 +557,50 @@
     max-width: 100%;
     min-width: 0;
   }
+
+  /* Mobile Mode Adjustments */
+  .mobile-mode .nav-panels {
+    width: 100%;
+  }
+
+  .mobile-mode .sidebar-wrapper.mobile-drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.5); /* Backdrop */
+    z-index: 2000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+    display: block;
+  }
+
+  .mobile-mode .sidebar-wrapper.mobile-drawer.open {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .mobile-mode .sidebar-wrapper.mobile-drawer :global(.sidebar) {
+    width: 280px !important;
+    height: 100%;
+    transform: translateX(-100%);
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 10px 0 30px rgba(0,0,0,0.3);
+  }
+
+  .mobile-mode .sidebar-wrapper.mobile-drawer.open :global(.sidebar) {
+    transform: translateX(0);
+  }
+
+  /* Ensure content has padding for bottom nav */
+  .mobile-mode :global(.feed-list),
+  .mobile-mode .error-view,
+  .mobile-mode .loading-overlay {
+    padding-bottom: 72px;
+  }
+
   .nav-panels.collapsed {
     max-width: 0 !important;
     opacity: 0;

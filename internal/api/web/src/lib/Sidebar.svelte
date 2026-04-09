@@ -38,6 +38,7 @@
   export let activeView = 'inbox';
   export let isMobile = false;
   export let isMini = false;
+  export let lastSync = "";
 
   let catsExpanded = true;
   let feedsExpanded = true;
@@ -241,7 +242,7 @@
           <div class="avatar">{username[0]?.toUpperCase() || 'U'}</div>
           <div class="user-info">
             <div class="username">{username}</div>
-            <div class="status">{$t('membership_gold')}</div>
+            <div class="status">{$t('synced')} {lastSync}</div>
           </div>
         </button>
       </div>
