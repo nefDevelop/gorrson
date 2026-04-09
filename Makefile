@@ -19,6 +19,7 @@ help:
 	@echo "  make load-test   - Run external load generator"
 	@echo "  make clean       - Delete binary and data"
 	@echo "  make test        - Run tests"
+	@echo "  make db-recreate - Clean data and re-seed database"
 
 all: install build
 
@@ -90,3 +91,5 @@ reset-db:
 	@echo "Resetting and seeding database for user 'user'..."
 	@mkdir -p $(DATA_DIR)
 	go run scripts/seed/main.go
+
+db-recreate: clean reset-db
