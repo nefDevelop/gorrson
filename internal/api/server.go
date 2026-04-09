@@ -174,8 +174,15 @@ func (s *Server) GetRouter() http.Handler {
 
 func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Allow OPTIONS requests for preflight
+		if r.Method == "OPTIONS" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" {
+			slog.Warn("Auth failed: missing Authorization header", "path", r.URL.Path, "method", r.Method)
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -183,6 +190,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		token := strings.TrimPrefix(authHeader, "Bearer ")
 		username, err := auth.ValidateToken(token)
 		if err != nil {
+			slog.Warn("Auth failed: token validation error", "path", r.URL.Path, "err", err)
 			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
@@ -198,7 +206,7 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: http: https:;")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http: https:;")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -360,7 +368,7 @@ func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 	fullContent, err := rss.ScrapeFullContent(r.Context(), entry.URL, entry.Title, entry.ImageURL)
 	if err != nil {
 		slog.Error("Failed to scrape full content", "url", entry.URL, "id", id, "err", err)
-		http.Error(w, "Scraping failed: "+err.Error(), http.StatusInternalServerError)
+		http.Error(w, "Content extraction failed (the site might be blocking us or require a subscription)", http.StatusServiceUnavailable)
 		return
 	}
 
