@@ -29,6 +29,7 @@ type Entry struct {
 	IsRead        bool      `json:"is_read"`
 	IsFavorite    bool      `json:"is_favorite"`
 	IsFullContent bool      `json:"is_full_content"`
+	IsPriority    bool      `json:"is_priority"`
 	MatchedAction string    `json:"matched_action,omitempty"`
 	Source        string    `json:"source,omitempty"`
 	Category      string    `json:"category,omitempty"`
@@ -42,4 +43,22 @@ type Filter struct {
 	Action      string `json:"action"`           // BLOCK, ALLOW, REPLACE
 	Target      string `json:"target"`           // title, content, both
 	Replacement string `json:"replacement,omitempty"`
+}
+
+type Stats struct {
+	TotalEntries  int            `json:"total_entries"`
+	UnreadEntries int            `json:"unread_entries"`
+	TotalFeeds    int            `json:"total_feeds"`
+	CategoryStats []CategoryStat `json:"category_stats"`
+	FeedStats     []FeedStat     `json:"feed_stats"`
+}
+
+type CategoryStat struct {
+	Name  string `json:"name"`
+	Count int    `json:"count"`
+}
+
+type FeedStat struct {
+	Title string `json:"title"`
+	Count int    `json:"count"`
 }

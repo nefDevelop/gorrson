@@ -57,6 +57,36 @@ func (s *Store) GetUsername() string {
 	return s.username
 }
 
+// VerifySQLiteFile checks if a file is a valid SQLite database and passes a quick integrity check.
+func VerifySQLiteFile(path string) error {
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	// Set a short timeout for the check
+	_, _ = db.Exec("PRAGMA busy_timeout=2000")
+
+	var result string
+	err = db.QueryRow("PRAGMA quick_check").Scan(&result)
+	if err != nil {
+		return fmt.Errorf("not a valid sqlite file or corrupted: %w", err)
+	}
+	if result != "ok" {
+		return fmt.Errorf("sqlite integrity check failed: %s", result)
+	}
+
+	// Double check it has the expected tables
+	var name string
+	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='feeds'").Scan(&name)
+	if err != nil {
+		return fmt.Errorf("database schema looks incorrect: missing 'feeds' table")
+	}
+
+	return nil
+}
+
 func (s *Store) migrate() error {
 	queries := []string{
 		`PRAGMA journal_mode=WAL;`,
@@ -94,6 +124,7 @@ func (s *Store) migrate() error {
 			is_favorite BOOLEAN DEFAULT 0,
 			was_ever_favorite BOOLEAN DEFAULT 0,
 			is_full_content BOOLEAN DEFAULT 0,
+			is_priority BOOLEAN DEFAULT 0,
 			matched_action TEXT,
 			FOREIGN KEY(feed_id) REFERENCES feeds(id) ON DELETE CASCADE
 		);`,
@@ -112,6 +143,12 @@ func (s *Store) migrate() error {
 			username TEXT NOT NULL,
 			refresh_token TEXT UNIQUE NOT NULL,
 			expires_at DATETIME NOT NULL
+		);`,
+		`CREATE TABLE IF NOT EXISTS api_keys (
+			id TEXT PRIMARY KEY,
+			name TEXT NOT NULL,
+			key_hash TEXT UNIQUE NOT NULL,
+			created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 		);`,
 		`CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(
 			title, content, content='entries', content_rowid='rowid'
@@ -136,6 +173,7 @@ func (s *Store) migrate() error {
 
 	// Hot-fix for existing databases
 	_, _ = s.db.Exec("ALTER TABLE entries ADD COLUMN matched_action TEXT")
+	_, _ = s.db.Exec("ALTER TABLE entries ADD COLUMN is_priority BOOLEAN DEFAULT 0")
 	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN user_agent TEXT")
 	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN username TEXT")
 	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN password TEXT")
@@ -156,8 +194,8 @@ func (s *Store) AddFeed(f *models.Feed) error {
 }
 
 func (s *Store) AddEntry(e *models.Entry) error {
-	_, err := s.db.Exec(`INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.MatchedAction)
+	_, err := s.db.Exec(`INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
 
@@ -187,7 +225,7 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 }
 
 func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int, category, feedID string) ([]models.Entry, error) {
-	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.is_priority, e.matched_action, f.title, f.category 
 	FROM entries e 
 	JOIN feeds f ON e.feed_id = f.id`
 	var args []interface{}
@@ -216,9 +254,9 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	}
 
 	if sortMode == "oldest" {
-		query += " ORDER BY e.published_at ASC"
+		query += " ORDER BY e.is_priority DESC, e.published_at ASC"
 	} else {
-		query += " ORDER BY e.published_at DESC"
+		query += " ORDER BY e.is_priority DESC, e.published_at DESC"
 	}
 
 	if limit > 0 {
@@ -236,7 +274,7 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	for rows.Next() {
 		var e models.Entry
 		var summary, content, imageURL, matchedAction, category sql.NullString
-		if err := rows.Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
+		if err := rows.Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &e.IsPriority, &matchedAction, &e.Source, &category); err != nil {
 			return nil, err
 		}
 		e.Summary = summary.String
@@ -253,11 +291,11 @@ func (s *Store) GetEntryByID(id string) (*models.Entry, error) {
 	var e models.Entry
 	var summary, content, imageURL, matchedAction, category sql.NullString
 	err := s.db.QueryRow(`
-		SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+		SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.is_priority, e.matched_action, f.title, f.category 
 		FROM entries e
 		JOIN feeds f ON e.feed_id = f.id
 		WHERE e.id = ?`, id).
-		Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category)
+		Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &e.IsPriority, &matchedAction, &e.Source, &category)
 	if err != nil {
 		return nil, err
 	}
@@ -359,7 +397,7 @@ func (s *Store) CleanupOldEntries() (int64, error) {
 }
 
 func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
-	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.matched_action, f.title, f.category 
+	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.is_priority, e.matched_action, f.title, f.category 
               FROM entries e
               JOIN feeds f ON e.feed_id = f.id
               JOIN entries_fts ON e.rowid = entries_fts.rowid 
@@ -375,7 +413,7 @@ func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
 	for rows.Next() {
 		var e models.Entry
 		var summary, content, imageURL, matchedAction, category sql.NullString
-		if err := rows.Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &matchedAction, &e.Source, &category); err != nil {
+		if err := rows.Scan(&e.ID, &e.FeverID, &e.FeedID, &e.Title, &summary, &content, &e.URL, &imageURL, &e.PublishedAt, &e.IsRead, &e.IsFavorite, &e.IsFullContent, &e.IsPriority, &matchedAction, &e.Source, &category); err != nil {
 			return nil, err
 		}
 		e.Summary = summary.String
@@ -538,4 +576,86 @@ func (s *Store) DeleteSession(token string) error {
 func (s *Store) DeleteExpiredSessions() error {
 	_, err := s.db.Exec("DELETE FROM sessions WHERE expires_at < ?", time.Now())
 	return err
+}
+
+func (s *Store) AddAPIKey(id, name, hash string) error {
+	_, err := s.db.Exec("INSERT INTO api_keys (id, name, key_hash) VALUES (?, ?, ?)", id, name, hash)
+	return err
+}
+
+func (s *Store) ListAPIKeys() ([]map[string]interface{}, error) {
+	rows, err := s.db.Query("SELECT id, name, created_at FROM api_keys ORDER BY created_at DESC")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var keys []map[string]interface{}
+	for rows.Next() {
+		var id, name string
+		var createdAt time.Time
+		if err := rows.Scan(&id, &name, &createdAt); err != nil {
+			return nil, err
+		}
+		keys = append(keys, map[string]interface{}{
+			"id":         id,
+			"name":       name,
+			"created_at": createdAt,
+		})
+	}
+	return keys, nil
+}
+
+func (s *Store) DeleteAPIKey(id string) error {
+	_, err := s.db.Exec("DELETE FROM api_keys WHERE id = ?", id)
+	return err
+}
+
+func (s *Store) ValidateAPIKey(hash string) bool {
+	var count int
+	err := s.db.QueryRow("SELECT COUNT(*) FROM api_keys WHERE key_hash = ?", hash).Scan(&count)
+	return err == nil && count > 0
+}
+
+func (s *Store) GetStats() (*models.Stats, error) {
+	var stats models.Stats
+
+	// Total Entries
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM entries").Scan(&stats.TotalEntries)
+	// Unread Entries
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM entries WHERE is_read = 0").Scan(&stats.UnreadEntries)
+	// Total Feeds
+	_ = s.db.QueryRow("SELECT COUNT(*) FROM feeds").Scan(&stats.TotalFeeds)
+
+	// Category Stats
+	rows, err := s.db.Query("SELECT f.category, COUNT(e.id) FROM feeds f JOIN entries e ON f.id = e.feed_id GROUP BY f.category")
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var cat sql.NullString
+			var count int
+			if err := rows.Scan(&cat, &count); err == nil {
+				name := "Uncategorized"
+				if cat.Valid && cat.String != "" {
+					name = cat.String
+				}
+				stats.CategoryStats = append(stats.CategoryStats, models.CategoryStat{Name: name, Count: count})
+			}
+		}
+	}
+
+	// Top 10 Feeds by volume
+	rows, err = s.db.Query("SELECT f.title, COUNT(e.id) as c FROM feeds f JOIN entries e ON f.id = e.feed_id GROUP BY f.id ORDER BY c DESC LIMIT 10")
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var title string
+			var count int
+			if err := rows.Scan(&title, &count); err == nil {
+				stats.FeedStats = append(stats.FeedStats, models.FeedStat{Title: title, Count: count})
+			}
+		}
+	}
+
+	return &stats, nil
 }

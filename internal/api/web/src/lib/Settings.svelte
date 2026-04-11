@@ -3,7 +3,7 @@
   import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon } from 'lucide-svelte';
   import Filters from './Filters.svelte';
   import { onMount } from 'svelte';
-  import { Share2, Plus, Trash2, ExternalLink as ExtIcon, Download, Upload, FileJson, FileCode } from 'lucide-svelte';
+  import { Share2, Plus, Trash2, ExternalLink as ExtIcon, Download, Upload, FileJson, FileCode, Database } from 'lucide-svelte';
   import { fly, fade } from 'svelte/transition';
 
   export let onLogout = () => {};
@@ -14,7 +14,16 @@
   export let cardStyle = 'default';
   export let isMobile = false;
 
-  import { updateFeed, deleteFeed } from './api.js';
+  import { updateFeed, deleteFeed, fetchAPIKeys, createAPIKey, deleteAPIKey } from './api.js';
+  import { success, error as toastError } from './toast.js';
+  import Modal from './Modal.svelte';
+
+  /** @type {{show: boolean, title: string, message: string, type: 'info'|'warning'|'danger', confirmText: string, cancelText: string, onConfirm: (() => void) | null}} */
+  let dialog = { show: false, title: '', message: '', type: 'info', confirmText: '', cancelText: '', onConfirm: null };
+  const openDialog = (title, message, type = 'info', onConfirm = null, confirmText = '', cancelText = '') => {
+    // @ts-ignore
+    dialog = { show: true, title, message, type, onConfirm, confirmText, cancelText };
+  };
 
   async function handleUpdateFeed(id, title, category) {
     try {
@@ -31,12 +40,15 @@
     if (!feedToDelete) return;
     try {
       const idToDelete = feedToDelete.id;
+      const title = feedToDelete.title;
       await deleteFeed(idToDelete);
       feeds = feeds.filter(f => f.id !== idToDelete);
       feedToDelete = null;
+      success(`Feed "${title}" deleted successfully`);
       onRefresh();
     } catch (e) {
       console.error(e);
+      toastError("Failed to delete feed");
     }
   }
 
@@ -52,6 +64,7 @@
   let currentTheme = localStorage.getItem('gorrson-theme') || 'lavender';
   let currentMode = localStorage.getItem('gorrson-mode') || 'dark';
   let customColor = localStorage.getItem('gorrson-custom-color') || '#6750A4';
+  let mastodonInstance = localStorage.getItem('gorrson-mastodon-instance') || 'mastodon.social';
 
 
   const modes = [
@@ -204,6 +217,7 @@
 
   $: if (typeof document !== 'undefined') {
      applyAppearance('custom', currentMode, customColor);
+     localStorage.setItem('gorrson-mastodon-instance', mastodonInstance);
   }
 
   const toggleLanguage = () => {
@@ -280,7 +294,8 @@
           color: localStorage.getItem('gorrson-custom-color'),
           services: exportServices,
           locale: localStorage.getItem('gorrson-locale'),
-          scrollRead: scrollRead
+          scrollRead: scrollRead,
+          mastodonInstance: mastodonInstance
         },
         exportedAt: new Date().toISOString()
       };
@@ -293,7 +308,7 @@
       a.click();
     } catch (e) {
       console.error(e);
-      alert('Export failed');
+      toastError('Export failed');
     }
   }
 
@@ -319,6 +334,7 @@
           }
           if (l.locale) locale.set(l.locale);
           if (l.scrollRead !== undefined) scrollRead = l.scrollRead;
+          if (l.mastodonInstance) mastodonInstance = l.mastodonInstance;
         }
 
         // Upload to backend
@@ -332,12 +348,11 @@
         });
 
         if (res.ok) {
-           alert('Configuration imported. Page will refresh.');
-           window.location.reload();
+           openDialog('Import Success', 'Configuration imported successfully. The page will refresh now.', 'info', () => window.location.reload());
         }
       } catch (err) {
         console.error(err);
-        alert('Invalid config file');
+        toastError('Invalid config file');
       }
     };
     reader.readAsText(file);
@@ -371,13 +386,65 @@
         body: formData
       });
       if (res.ok) {
-        alert('OPML Import started. Feeds will appear shortly.');
+        success('OPML Import started. Feeds will appear shortly.');
         onRefresh();
       }
     } catch (e) {
       console.error(e);
-      alert('OPML import failed');
+      toastError('OPML import failed');
     }
+  }
+
+  async function exportBackup() {
+    try {
+      const res = await fetch('/backup/export', {
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+      });
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      document.body.appendChild(a);
+      a.download = `gorrson-${username}-backup-${new Date().toISOString().split('T')[0]}.db`;
+      a.click();
+      document.body.removeChild(a);
+    } catch (e) {
+      console.error(e);
+      toastError('Backup failed');
+    }
+  }
+
+  async function importBackup(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    openDialog(
+      "Confirm Database Restore",
+      "WARNING: This will replace your entire database (all feeds, articles, and read status) with the provided file. This cannot be undone. Continue?",
+      "danger",
+      async () => {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        try {
+          const res = await fetch('/backup/import', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+            body: formData
+          });
+          if (res.ok) {
+            openDialog('Restore Success', 'Database restored successfully. The page will now refresh.', 'info', () => window.location.reload());
+          } else {
+            const err = await res.text();
+            toastError('Restore failed: ' + err);
+          }
+        } catch (e) {
+          console.error(e);
+          toastError('Restore failed');
+        }
+      },
+      "Proceed with Restore"
+    );
   }
 
   const examples = [
@@ -386,7 +453,64 @@
     { name: 'WhatsApp', template: 'https://wa.me/?text={title}%20{url}' },
     { name: 'Telegram', template: 'https://t.me/share/url?url={url}&text={title}' }
   ];
+
+  // API Keys state
+  let apiKeys = [];
+  let newKeyName = "";
+  let generatedKey = null;
+
+  async function loadAPIKeys() {
+    try {
+      apiKeys = await fetchAPIKeys();
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  $: if (activeTab === 'keys') {
+    loadAPIKeys();
+  }
+
+  async function handleCreateKey() {
+    if (!newKeyName) return;
+    try {
+      const data = await createAPIKey(newKeyName);
+      generatedKey = data.api_key;
+      newKeyName = "";
+      loadAPIKeys();
+    } catch (e) {
+      toastError(e.message);
+    }
+  }
+
+  async function handleDeleteKey(id) {
+    openDialog(
+      "Revoke API Key",
+      "Are you sure you want to revoke this API key? Devices using it will lose access.",
+      "warning",
+      async () => {
+        try {
+          await deleteAPIKey(id);
+          success("API Key successfully revoked");
+          loadAPIKeys();
+        } catch (e) {
+          toastError(e.message);
+        }
+      },
+      "Revoke Key"
+    );
+  }
 </script>
+
+<Modal 
+  bind:show={dialog.show}
+  title={dialog.title}
+  message={dialog.message}
+  type={dialog.type}
+  confirmText={dialog.confirmText}
+  cancelText={dialog.cancelText}
+  onConfirm={dialog.onConfirm}
+/>
 
 <div class="view-container">
   <header class="header-bar">
@@ -401,6 +525,7 @@
       <button class="tab {activeTab === 'sources' ? 'active' : ''}" on:click={() => activeTab = 'sources'}>{$t('sources')}</button>
       <button class="tab {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
       <button class="tab {activeTab === 'sharing' ? 'active' : ''}" on:click={() => activeTab = 'sharing'}>{$t('sharing')}</button>
+      <button class="tab {activeTab === 'keys' ? 'active' : ''}" on:click={() => activeTab = 'keys'}>API Keys</button>
       <button class="tab {activeTab === 'data' ? 'active' : ''}" on:click={() => activeTab = 'data'}>Data</button>
     </div>
   </header>
@@ -490,6 +615,25 @@
               <span>Minimal</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <div class="section-header">
+          <Globe size={18} />
+          <span>Integrations</span>
+        </div>
+        <div class="setting-item">
+          <div class="text">
+            <div class="label">Mastodon Instance</div>
+            <div class="desc">Default instance used for hashtags (#tag) and @user searches.</div>
+          </div>
+          <input 
+            class="modern-input" 
+            style="max-width: 200px" 
+            bind:value={mastodonInstance} 
+            placeholder="mastodon.social"
+          />
         </div>
       </div>
 
@@ -704,43 +848,99 @@
            </div>
         </div>
       </div>
+
+      <div class="settings-section">
+        <div class="section-header">
+          <Database size={18} />
+          <span>Full Database (SQLite)</span>
+        </div>
+        <div class="data-actions">
+           <div class="data-card">
+              <div class="icon-box"><Database size={24} /></div>
+              <div class="card-text">
+                 <strong>Native Backup</strong>
+                 <p>Download your entire database file (.db). This includes all articles, categories, and settings.</p>
+              </div>
+              <div class="actions">
+                 <button class="btn-secondary" on:click={exportBackup}>
+                    <Download size={16} />
+                    <span>Download</span>
+                 </button>
+                 <label class="btn-primary file-label">
+                    <Upload size={16} />
+                    <span>Restore</span>
+                    <input type="file" accept=".db" on:change={importBackup} style="display:none" />
+                 </label>
+              </div>
+           </div>
+        </div>
+      </div>
+    {:else if activeTab === 'keys'}
+      <div class="settings-section">
+        <div class="section-header">
+          <Shield size={18} />
+          <span>Device API Keys</span>
+        </div>
+        <p class="section-hint">Use these keys to authenticate devices (mobile apps, terminal clients) without using your main password. Format for header: <code>X-API-Key: user:key</code></p>
+        
+        <div class="key-form">
+          <input 
+            bind:value={newKeyName} 
+            placeholder="Key name (e.g. My iPhone)" 
+            class="modern-input"
+            on:keydown={e => e.key === 'Enter' && handleCreateKey()}
+          />
+          <button class="btn-primary" on:click={handleCreateKey} disabled={!newKeyName}>
+            <Plus size={18} />
+            <span>Create Key</span>
+          </button>
+        </div>
+
+        <div class="keys-list">
+          {#each apiKeys as key}
+            <div class="key-card" in:fly={{ y: 10, duration: 200 }}>
+              <div class="key-info">
+                <span class="key-name">{key.name}</span>
+                <span class="key-date">Created on {new Date(key.created_at).toLocaleDateString()}</span>
+              </div>
+              <button class="btn-icon-danger" on:click={() => handleDeleteKey(key.id)} title="Revoke Key">
+                <Trash2 size={18} />
+              </button>
+            </div>
+          {:else}
+            <div class="empty-list">No API keys created yet.</div>
+          {/each}
+        </div>
+      </div>
     {/if}
   </div>
 
-  {#if feedToDelete}
-    <div 
-      class="modal-overlay" 
-      role="button" 
-      tabindex="0"
-      transition:fade={{ duration: 200 }} 
-      on:click={() => feedToDelete = null}
-      on:keydown={(e) => e.key === 'Escape' && (feedToDelete = null)}
-    >
-      <div 
-        class="modal-card" 
-        role="dialog"
-        aria-modal="true"
-        tabindex="-1"
-        transition:fly={{ y: 20, duration: 300 }} 
-        on:click|stopPropagation
-        on:keydown|stopPropagation
-      >
-        <div class="modal-icon-header">
-           <div class="warning-circle">
-              <Trash2 size={24} />
-           </div>
-        </div>
-        <div class="modal-body">
-          <h2>Delete Feed?</h2>
-          <p>Are you sure you want to remove <strong>{feedToDelete.title}</strong>? This will delete all its articles from your database. This action cannot be undone.</p>
-        </div>
-        <div class="modal-footer">
-          <button class="btn-secondary" on:click={() => feedToDelete = null}>Cancel</button>
-          <button class="btn-danger" on:click={confirmDeleteFeed}>Delete Feed</button>
-        </div>
-      </div>
+  <Modal 
+    show={!!generatedKey} 
+    title="New API Key Created" 
+    type="info"
+    confirmText="I've saved it"
+    onConfirm={() => generatedKey = null}
+  >
+    <p>Copy this key now. For security reasons, <strong>it will not be shown again</strong>.</p>
+    <div class="key-display">
+      <code>{generatedKey}</code>
+      <button class="btn-ghost-small" on:click={() => { navigator.clipboard.writeText(generatedKey); success('Copied!'); }}>Copy</button>
     </div>
-  {/if}
+  </Modal>
+
+  <Modal 
+    show={!!feedToDelete} 
+    title="Delete Feed?" 
+    type="danger"
+    confirmText="Delete Feed"
+    onConfirm={confirmDeleteFeed}
+    onCancel={() => feedToDelete = null}
+  >
+    {#if feedToDelete}
+      <p>Are you sure you want to remove <strong>{feedToDelete.title}</strong>? This will delete all its articles from your database. This action cannot be undone.</p>
+    {/if}
+  </Modal>
 </div>
 
 <style>
@@ -1228,7 +1428,7 @@
     width: 100vw;
     height: 100vh;
     background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(2px);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -1426,4 +1626,47 @@
   .style-preview.com::before { content: ""; position: absolute; top: 16px; left: 8px; right: 8px; height: 4px; background: var(--md-on-surface-variant); opacity: 0.15; border-radius: 2px; }
   
   .style-preview.min::after { content: ""; position: absolute; top: 10px; left: 10px; right: 10px; height: 5px; background: var(--md-primary); opacity: 0.4; border-radius: 2px; }
+
+  /* API Keys Styles */
+  .section-hint { font: var(--m3-label-medium); color: var(--md-on-surface-variant); margin-bottom: 24px; opacity: 0.8; }
+  .key-form { display: flex; gap: 12px; margin-bottom: 32px; max-width: 600px; }
+  .keys-list { display: flex; flex-direction: column; gap: 12px; max-width: 600px; }
+  .key-card { 
+    background: var(--md-surface-variant); 
+    border: 1px solid var(--md-outline); 
+    padding: 16px 20px; 
+    border-radius: 16px; 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between;
+    transition: all 0.2s;
+  }
+  .key-card:hover { border-color: var(--md-primary); background: var(--md-secondary-container); }
+  .key-info { display: flex; flex-direction: column; gap: 4px; }
+  .key-name { font: var(--m3-title-medium); color: var(--md-on-surface); font-weight: 700; }
+  .key-date { font: var(--m3-label-small); color: var(--md-on-surface-variant); opacity: 0.7; }
+  
+  .success-circle { 
+    width: 64px; 
+    height: 64px; 
+    background: #4CAF50; 
+    border-radius: 50%; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    margin: 0 auto 16px; 
+    box-shadow: 0 8px 16px rgba(76, 175, 80, 0.3);
+  }
+  .key-display { 
+    background: var(--md-surface); 
+    padding: 16px; 
+    border-radius: 12px; 
+    border: 1px solid var(--md-outline); 
+    display: flex; 
+    align-items: center; 
+    justify-content: space-between; 
+    margin-top: 16px;
+    word-break: break-all;
+  }
+  .key-display code { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--md-primary); flex: 1; margin-right: 12px; }
 </style>

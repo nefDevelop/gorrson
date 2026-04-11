@@ -13,12 +13,14 @@ help:
 	@echo "  make run        - Build and start the production server"
 	@echo "  make dev-ui     - Start Svelte/Vite dev server"
 	@echo "  make dev-go     - Start Go backend in dev mode"
+	@echo "  make dev        - Start frontend & backend in parallel dev mode"
 	@echo "  make bench           - Run basic performance benchmarks"
 	@echo "  make bench-extensive - Run exhaustive multi-CPU benchmarks"
 	@echo "  make stress          - Run internal concurrency stress tests"
 	@echo "  make load-test   - Run external load generator"
 	@echo "  make clean       - Delete binary and data"
 	@echo "  make test        - Run tests"
+	@echo "  make db-recreate - Clean data and re-seed database"
 
 all: install build
 
@@ -55,6 +57,11 @@ dev-ui:
 dev-go:
 	go run main.go serve --port $(PORT) --data-dir $(DATA_DIR)
 
+# Run both in parallel
+dev:
+	@echo "Starting Gorrson & Vite in parallel..."
+	@trap 'kill 0' INT; make dev-go & make dev-ui & wait
+
 # Clean binaries and data
 clean:
 	@echo "Cleaning up..."
@@ -90,3 +97,5 @@ reset-db:
 	@echo "Resetting and seeding database for user 'user'..."
 	@mkdir -p $(DATA_DIR)
 	go run scripts/seed/main.go
+
+db-recreate: clean reset-db
