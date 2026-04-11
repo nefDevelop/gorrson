@@ -47,6 +47,35 @@ func ScrapeFullContent(ctx context.Context, targetURL string, originalTitle stri
 			}
 		})
 
+		// Clean common "noise" elements that readability might miss
+		noiseSelectors := []string{
+			".byline", ".author", ".date", ".published-at",
+			".social-share", ".social-buttons", ".share-links",
+			".ad-unit", ".advertisement", ".sponsored",
+			".photo-credit", ".credit", ".caption", ".p-caption",
+			".newsletter-signup", ".login-bundle", ".login-promo",
+			".registration-promo", ".subscribe-promo",
+			"aside", "nav", "footer",
+			".c-byline", ".c-entry-header__labels", ".c-entry-stat-list", // Vox Media (Polygon, etc.)
+		}
+		for _, selector := range noiseSelectors {
+			doc.Find(selector).Remove()
+		}
+
+		// Text-based cleaning for specific phrases (case-insensitive)
+		noisePhrases := []string{
+			"Sign in to your", "Subscribe to", "Photo:", "Image:",
+		}
+		doc.Find("p, div, span").Each(func(i int, s *goquery.Selection) {
+			text := strings.ToLower(s.Text())
+			for _, phrase := range noisePhrases {
+				if strings.Contains(text, strings.ToLower(phrase)) && len(s.Text()) < 100 {
+					s.Remove()
+					break
+				}
+			}
+		})
+
 		// Clean duplicate hero image
 		if originalImage != "" {
 			doc.Find("img").Each(func(i int, s *goquery.Selection) {

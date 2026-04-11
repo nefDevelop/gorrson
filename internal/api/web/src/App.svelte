@@ -7,11 +7,12 @@
   import Filters from './lib/Filters.svelte';
   import Settings from './lib/Settings.svelte';
   import AddFeed from './lib/AddFeed.svelte';
+  import Insights from './lib/Insights.svelte';
   import Toaster from './lib/Toaster.svelte';
   import MobileNav from './lib/MobileNav.svelte';
   import { success as toastSuccess, error as toastError } from './lib/toast.js';
   import { formatTimeAgo } from './lib/utils.js';
-  import { Inbox, Star, Bookmark, Archive, Shield } from 'lucide-svelte';
+  import { Inbox, Star, Bookmark, Archive, Shield, BarChart2 } from 'lucide-svelte';
   import { t } from './lib/i18n.js';
   import { onMount } from 'svelte';
   import { fetchNews, markAsRead, markAllRead, fetchFeeds, toggleFavorite } from './lib/api.js';
@@ -57,7 +58,18 @@
     const interval = setInterval(() => {
       now = new Date();
     }, 30000);
-    return () => clearInterval(interval);
+
+    // Background polling every 5 minutes for new articles (and notifications)
+    const pollInterval = setInterval(() => {
+      if (isAuthenticated && !loading && !loadingMore && !searchQuery) {
+        loadData();
+      }
+    }, 5 * 60 * 1000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(pollInterval);
+    };
   });
 
   $: lastSyncFormatted = formatTimeAgo(lastSyncDate);
@@ -67,6 +79,7 @@
   $: navItems = [
     { id: "inbox", name: "Inbox", badge: totalUnread, icon: Inbox },
     { id: "favorites", name: "Favorites", icon: Star },
+    { id: "insights", name: "Insights", icon: BarChart2 },
   ];
 
   async function loadData(append = false) {
@@ -101,6 +114,11 @@
         category: (feedsData || []).find(f => f.id === a.feed_id)?.category || 'General'
       }));
 
+      // Notification logic
+      if (!append) {
+        checkNotifications(newArticles);
+      }
+
       if (append) {
         articles = [...articles, ...newArticles];
       } else {
@@ -124,6 +142,43 @@
     } finally {
       loading = false;
       loadingMore = false;
+    }
+  }
+
+  let notifiedIds = new Set();
+  async function checkNotifications(newEntries) {
+    if (typeof window === 'undefined' || !("Notification" in window)) return;
+    
+    if (Notification.permission === "default") {
+      await Notification.requestPermission();
+    }
+
+    if (Notification.permission !== "granted") return;
+
+    const toNotify = (newEntries || []).filter(e => 
+      e.matched_action === 'NOTIFY' && 
+      !e.is_read && 
+      !notifiedIds.has(e.id)
+    );
+
+    if (toNotify.length === 0) return;
+
+    // Mark as notified to avoid repetitions in this session
+    toNotify.forEach(e => notifiedIds.add(e.id));
+
+    if (toNotify.length > 3) {
+      new Notification(`Gorrson: ${toNotify.length} news items`, {
+        body: $t('inbox') + ": " + toNotify.map(e => e.title).slice(0, 3).join(", ") + "...",
+        icon: "/favicon.png"
+      });
+    } else {
+      toNotify.forEach(item => {
+        new Notification(item.title, {
+          body: `${item.source} (${item.category})`,
+          icon: "/favicon.png",
+          tag: item.id // Tag prevents duplicate notifications for the same ID
+        });
+      });
     }
   }
 
@@ -291,7 +346,7 @@
       activeCategory = null;
       activeSource = null;
       currentView = viewId;
-      if (viewId === 'settings' || viewId === 'add-feed') {
+      if (viewId === 'settings' || viewId === 'add-feed' || viewId === 'insights') {
         shouldLoad = false;
         loading = false;
       }
@@ -449,7 +504,7 @@
   <Login onLoginSuccess={handleLoginSuccess} />
 {:else}
   <main class="app-container {selectedId ? 'has-selection' : ''} {isMobile ? 'mobile-mode' : ''}">
-    <div class="nav-panels" class:collapsed={fullscreenReader}>
+    <div class="nav-panels" class:collapsed={fullscreenReader} class:full-width={currentView === 'settings' || currentView === 'filters' || currentView === 'add-feed' || currentView === 'insights'}>
       {#if !isMobile || isSourcesDrawerOpen}
         <div 
           class="sidebar-wrapper" 
@@ -511,6 +566,8 @@
           {/if}
         {:else if currentView === 'filters'}
           <Filters />
+        {:else if currentView === 'insights'}
+          <Insights />
         {:else if currentView === 'settings'}
           <Settings 
             {feeds} 
@@ -563,8 +620,11 @@
     transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
     transform-origin: left center;
     flex-shrink: 0;
-    max-width: 100%;
     min-width: 0;
+  }
+
+  .nav-panels.full-width {
+    flex: 1;
   }
 
   /* Mobile Mode Adjustments */

@@ -156,3 +156,48 @@ export async function fetchFullContent(id) {
   if (!res.ok) throw new Error('Failed to fetch full content');
   return res.text();
 }
+
+export async function fetchAPIKeys() {
+  const res = await fetch('/api-keys', {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  if (res.status === 401) throw new Error('Unauthorized');
+  if (!res.ok) throw new Error('Failed to fetch API keys');
+  return res.json();
+}
+
+export async function createAPIKey(name) {
+  const res = await fetch('/api-keys', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('Failed to create API key');
+  return res.json();
+}
+
+export async function deleteAPIKey(id) {
+  const res = await fetch(`/api-keys/${id}`, {
+    method: 'DELETE',
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  if (!res.ok) throw new Error('Failed to delete API key');
+}
+
+export async function fetchStats() {
+  const res = await fetch('/stats', {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('token')}`
+    }
+  });
+  if (res.status === 401) throw new Error('Unauthorized');
+  if (!res.ok) throw new Error('Failed to fetch stats');
+  return res.json();
+}

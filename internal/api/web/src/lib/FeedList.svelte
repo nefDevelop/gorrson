@@ -1,29 +1,39 @@
 <script>
-  import { fly } from 'svelte/transition';
-  import { cubicOut } from 'svelte/easing';
-  import PostCard from './PostCard.svelte';
-  import { Search, CheckCheck, PanelRightClose, PanelRightOpen, Inbox, X, ListFilter, Clock, CheckCircle2 } from 'lucide-svelte';
-  import { t } from './i18n.js';
-  import { fade, slide } from 'svelte/transition';
-  import { onMount } from 'svelte';
-  
+  import { fly } from "svelte/transition";
+  import { cubicOut } from "svelte/easing";
+  import PostCard from "./PostCard.svelte";
+  import {
+    Search,
+    CheckCheck,
+    PanelRightClose,
+    PanelRightOpen,
+    Inbox,
+    X,
+    ListFilter,
+    Clock,
+    CheckCircle2,
+  } from "lucide-svelte";
+  import { t } from "./i18n.js";
+  import { fade, slide } from "svelte/transition";
+  import { onMount } from "svelte";
+
   /** @type {Array<any>} */
   export let articles = [];
-  
+
   /** @type {number} */
   export let selectedId;
-  
+
   export let isExpanded = false;
-  
+
   /** @type {() => void} */
   export let onToggleExpand = () => {};
-  
+
   /** @type {() => void} */
   export let onLoadMore = () => {};
-  
+
   /** @type {boolean} */
   export let loadingMore = false;
-  
+
   /** @type {boolean} */
   export let allLoaded = false;
 
@@ -43,10 +53,10 @@
   export let unreadOnly = false;
 
   /** @type {string} */
-  export let sortMode = 'newest';
+  export let sortMode = "newest";
 
   /** @type {string} */
-  export let cardStyle = 'default';
+  export let cardStyle = "default";
 
   export let searchQuery = "";
   let showSearch = false;
@@ -62,7 +72,7 @@
   }
 
   function handleKeydown(e) {
-    if (e.key === 'Escape' && showSearch) toggleSearch();
+    if (e.key === "Escape" && showSearch) toggleSearch();
   }
 
   /** @type {() => void} */
@@ -70,37 +80,47 @@
 
   /** @type {boolean} */
   export let scrollRead = false;
- 
+
   let statusObserver;
   let scrollObserver;
- 
+
   onMount(() => {
     // Observer for marking articles as read (top 20% of screen)
-    statusObserver = new IntersectionObserver((entries) => {
-      if (scrollRead) {
-        entries.forEach(entry => {
-          if (entry.isIntersecting && entry.target.classList.contains('post-card') && !entry.target.classList.contains('read')) {
-            const id = entry.target.getAttribute('data-id');
-            if (id) onMarkAsRead(id);
-          }
-        });
-      }
-    }, { 
-      root: document.querySelector('.articles-container'),
-      rootMargin: '0px 0px -80% 0px',
-      threshold: 0.1
-    });
+    statusObserver = new IntersectionObserver(
+      (entries) => {
+        if (scrollRead) {
+          entries.forEach((entry) => {
+            if (
+              entry.isIntersecting &&
+              entry.target.classList.contains("post-card") &&
+              !entry.target.classList.contains("read")
+            ) {
+              const id = entry.target.getAttribute("data-id");
+              if (id) onMarkAsRead(id);
+            }
+          });
+        }
+      },
+      {
+        root: document.querySelector(".articles-container"),
+        rootMargin: "0px 0px -80% 0px",
+        threshold: 0.1,
+      },
+    );
 
     // Observer for infinite scroll (bottom of the list)
-    scrollObserver = new IntersectionObserver((entries) => {
-      const sentinel = entries[0];
-      if (sentinel.isIntersecting && !loadingMore && !allLoaded) {
-        onLoadMore();
-      }
-    }, { 
-      root: document.querySelector('.articles-container'),
-      threshold: 0.1 
-    });
+    scrollObserver = new IntersectionObserver(
+      (entries) => {
+        const sentinel = entries[0];
+        if (sentinel.isIntersecting && !loadingMore && !allLoaded) {
+          onLoadMore();
+        }
+      },
+      {
+        root: document.querySelector(".articles-container"),
+        threshold: 0.1,
+      },
+    );
 
     return () => {
       if (statusObserver) statusObserver.disconnect();
@@ -113,8 +133,8 @@
   $: if (statusObserver && (articles || scrollRead !== undefined)) {
     statusObserver.disconnect();
     setTimeout(() => {
-      const cards = document.querySelectorAll('.post-card:not(.read)');
-      cards.forEach(card => statusObserver.observe(card));
+      const cards = document.querySelectorAll(".post-card:not(.read)");
+      cards.forEach((card) => statusObserver.observe(card));
     }, 100);
   }
 
@@ -124,11 +144,21 @@
   }
 </script>
 
-<section class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0 ? 'is-empty' : ''} style-{cardStyle}" transition:fly={{ x: -20, duration: 400, easing: cubicOut }}>
+<section
+  class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0
+    ? 'is-empty'
+    : ''} style-{cardStyle}"
+  transition:fly={{ x: -20, duration: 400, easing: cubicOut }}
+>
   <header class="header-bar">
-    <div></div> <!-- Empty spacer to keep actions aligned -->
+    <div></div>
+    <!-- Empty spacer to keep actions aligned -->
     <div class="actions">
-      <button class="action-btn {showSearch ? 'active' : ''}" on:click={toggleSearch} title="Search feeds">
+      <button
+        class="action-btn {showSearch ? 'active' : ''}"
+        on:click={toggleSearch}
+        title="Search feeds"
+      >
         {#if showSearch}
           <X size={18} />
         {:else}
@@ -136,14 +166,27 @@
         {/if}
       </button>
       <div class="filter-wrapper">
-        <button class="action-btn {unreadOnly || sortMode !== 'newest' ? 'active' : ''}" on:click={() => showFilters = !showFilters} title="Filter and Sort">
+        <button
+          class="action-btn {unreadOnly || sortMode !== 'newest'
+            ? 'active'
+            : ''}"
+          on:click={() => (showFilters = !showFilters)}
+          title="Filter and Sort"
+        >
           <ListFilter size={18} />
         </button>
         {#if showFilters}
-          <div class="filter-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
+          <div
+            class="filter-menu"
+            in:fly={{ y: 10, duration: 200 }}
+            out:fade={{ duration: 100 }}
+          >
             <div class="menu-section">
               <span class="section-title">Filter</span>
-              <button class="menu-item {unreadOnly ? 'selected' : ''}" on:click={() => unreadOnly = !unreadOnly}>
+              <button
+                class="menu-item {unreadOnly ? 'selected' : ''}"
+                on:click={() => (unreadOnly = !unreadOnly)}
+              >
                 <CheckCircle2 size={16} />
                 <span>Unread Only</span>
               </button>
@@ -151,11 +194,17 @@
             <div class="menu-divider"></div>
             <div class="menu-section">
               <span class="section-title">Sort</span>
-              <button class="menu-item {sortMode === 'newest' ? 'selected' : ''}" on:click={() => sortMode = 'newest'}>
+              <button
+                class="menu-item {sortMode === 'newest' ? 'selected' : ''}"
+                on:click={() => (sortMode = "newest")}
+              >
                 <Clock size={16} />
                 <span>Newest</span>
               </button>
-              <button class="menu-item {sortMode === 'oldest' ? 'selected' : ''}" on:click={() => sortMode = 'oldest'}>
+              <button
+                class="menu-item {sortMode === 'oldest' ? 'selected' : ''}"
+                on:click={() => (sortMode = "oldest")}
+              >
                 <Clock size={16} style="transform: rotate(180deg)" />
                 <span>Oldest</span>
               </button>
@@ -163,10 +212,18 @@
           </div>
         {/if}
       </div>
-      <button class="action-btn" on:click={onMarkAllRead} title="Mark all as read">
+      <button
+        class="action-btn"
+        on:click={onMarkAllRead}
+        title="Mark all as read"
+      >
         <CheckCheck size={18} />
       </button>
-      <button class="action-btn expand-btn" on:click={onToggleExpand} title={isExpanded ? 'Show reader panel' : 'Expand feed list'}>
+      <button
+        class="action-btn expand-btn"
+        on:click={onToggleExpand}
+        title={isExpanded ? "Show reader panel" : "Expand feed list"}
+      >
         {#if isExpanded}
           <PanelRightOpen size={18} />
         {:else}
@@ -177,19 +234,23 @@
   </header>
 
   {#if showSearch}
-    <div class="floating-search" in:fly={{ y: -10, duration: 300 }} out:fly={{ y: -10, duration: 200 }}>
+    <div
+      class="floating-search"
+      in:fly={{ y: -10, duration: 300 }}
+      out:fly={{ y: -10, duration: 200 }}
+    >
       <span class="search-icon-inner">
         <Search size={16} />
       </span>
-      <input 
-        bind:value={searchQuery} 
+      <input
+        bind:value={searchQuery}
         bind:this={searchInput}
-        placeholder={$t('search') || 'Search...'} 
+        placeholder={$t("search") || "Search..."}
         on:keydown={handleKeydown}
         class="search-input"
       />
       {#if searchQuery}
-        <button class="clear-btn" on:click={() => searchQuery = ""}>
+        <button class="clear-btn" on:click={() => (searchQuery = "")}>
           <X size={14} />
         </button>
       {/if}
@@ -198,22 +259,25 @@
 
   <!-- Solid surface background for the gap -->
   <div class="corner-bg"></div>
-  
+
   <!-- Overlay to draw the perfectly curved sharp line -->
   <div class="corner-arc"></div>
 
   <div class="feed-content">
     <div class="articles-container scroll-area" class:search-open={showSearch}>
       {#each articles as item (item.id)}
-          <div data-id={item.id} class="card-wrapper {item.is_read ? 'read' : ''}">
-            <PostCard 
-              article={{...item, selected: selectedId === item.id}} 
-              viewMode={cardStyle}
-              onClick={onSelect} 
-              {onToggleFavorite}
-              onShare={() => onShare(item)}
-            />
-          </div>
+        <div
+          data-id={item.id}
+          class="card-wrapper {item.is_read ? 'read' : ''}"
+        >
+          <PostCard
+            article={{ ...item, selected: selectedId === item.id }}
+            viewMode={cardStyle}
+            onClick={onSelect}
+            {onToggleFavorite}
+            onShare={() => onShare(item)}
+          />
+        </div>
       {:else}
         <div class="empty-state" transition:fly={{ y: 20, duration: 400 }}>
           <div class="empty-icon">
@@ -221,8 +285,11 @@
               <Inbox size={48} strokeWidth={1.5} />
             </div>
           </div>
-          <h3>{$t('all_caught_up') || 'All Caught Up'}</h3>
-          <p>{$t('no_articles_desc') || 'There are no articles to display in this view right now.'}</p>
+          <h3>{$t("all_caught_up") || "All Caught Up"}</h3>
+          <p>
+            {$t("no_articles_desc") ||
+              "There are no articles to display in this view right now."}
+          </p>
         </div>
       {/each}
 
@@ -265,18 +332,18 @@
     width: auto;
   }
 
-  .header-bar { 
-    display: flex; 
-    justify-content: space-between; 
-    align-items: center; 
-    padding: 0 24px; 
-    border-bottom: 1px solid var(--md-outline); 
+  .header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 24px;
+    border-bottom: 1px solid var(--md-outline);
     background: var(--md-surface);
-    box-sizing: border-box; 
-    height: var(--header-height); 
-    min-height: var(--header-height); 
+    box-sizing: border-box;
+    height: var(--header-height);
+    min-height: var(--header-height);
     max-height: var(--header-height);
-    border-bottom-right-radius: 32px; 
+    border-bottom-right-radius: 32px;
     position: relative;
     z-index: 20;
     width: 100%;
@@ -287,9 +354,9 @@
   .header-bar::before {
     content: "";
     position: absolute;
-    left: 0px; 
-    bottom: -1px; 
-    width: 32px; 
+    left: 0px;
+    bottom: -1px;
+    width: 32px;
     height: 2px;
     background: var(--md-surface);
     z-index: 15;
@@ -332,7 +399,6 @@
     z-index: 10;
   }
 
-
   .actions {
     display: flex;
     gap: 4px;
@@ -353,8 +419,10 @@
     transition: all 0.2s;
     flex-shrink: 0;
   }
-  .action-btn:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
-
+  .action-btn:hover {
+    background: var(--md-surface-variant);
+    color: var(--md-on-surface);
+  }
 
   .articles-container {
     flex: 1;
@@ -441,7 +509,7 @@
     border-radius: var(--radius-full);
     padding: 0 16px;
     height: 44px;
-    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
     gap: 12px;
   }
 
@@ -592,6 +660,8 @@
   }
 
   @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+      transform: rotate(360deg);
+    }
   }
 </style>

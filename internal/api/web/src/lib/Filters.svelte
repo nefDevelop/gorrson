@@ -3,6 +3,15 @@
   import { fetchFilters, addFilter, deleteFilter } from './api.js';
   import { t } from './i18n.js';
   import { Trash2, Plus, Shield, Search, Globe } from 'lucide-svelte';
+  import { success, error as toastError } from './toast.js';
+  import Modal from './Modal.svelte';
+
+  /** @type {{show: boolean, title: string, message: string, type: 'info'|'warning'|'danger', confirmText: string, onConfirm: (() => void) | null}} */
+  let dialog = { show: false, title: '', message: '', type: 'info', confirmText: '', onConfirm: null };
+  const openDialog = (title, message, type = 'info', onConfirm = null, confirmText = '') => {
+    // @ts-ignore
+    dialog = { show: true, title, message, type, onConfirm, confirmText };
+  };
 
   /** @type {Array<any>} */
   export let feeds = [];
@@ -42,10 +51,21 @@
   }
 
   async function handleDelete(id) {
-    if (confirm('Delete this filter?')) {
-      const ok = await deleteFilter(id);
-      if (ok) loadFilters();
-    }
+    openDialog(
+      "Delete Filter",
+      "Are you sure you want to delete this filter? It will stop affecting new articles.",
+      "warning",
+      async () => {
+        const ok = await deleteFilter(id);
+        if (ok) {
+          success("Filter deleted");
+          loadFilters();
+        } else {
+          toastError("Failed to delete filter");
+        }
+      },
+      "Delete Filter"
+    );
   }
 
   onMount(loadFilters);
@@ -74,6 +94,8 @@
           <option value="HIDE">Hide (No sale)</option>
           <option value="SILENT">Silent (Desactivada)</option>
           <option value="HIGHLIGHT">Highlight (Destacar)</option>
+          <option value="IMPORTANT">Important (Prioridad)</option>
+          <option value="NOTIFY">Notify (Campana)</option>
           <option value="REPLACE">{$t('replace')}</option>
         </select>
 
@@ -134,6 +156,16 @@
       </div>
     {/if}
   </div>
+{#if !headless}
+  <Modal 
+    bind:show={dialog.show}
+    title={dialog.title}
+    message={dialog.message}
+    type={dialog.type}
+    confirmText={dialog.confirmText}
+    onConfirm={dialog.onConfirm}
+  />
+{/if}
 </div>
 
 <style>
@@ -284,6 +316,8 @@
   .tag.action-replace { background: #4caf5022; color: #4caf50; border-color: #4caf5044; }
   .tag.action-silent { background: var(--md-outline); color: var(--md-on-surface-variant); opacity: 0.6; }
   .tag.action-highlight { background: var(--md-secondary-container); color: var(--md-secondary); border-color: var(--md-secondary); }
+  .tag.action-important { background: #ffd70033; color: #b8860b; border-color: #ffd70066; font-weight: 900; }
+  .tag.action-notify { background: #e91e6322; color: #e91e63; border-color: #e91e6344; }
 
   .delete-btn { background: transparent; border: none; color: var(--md-on-surface-variant); cursor: pointer; padding: 10px; border-radius: var(--radius-full); transition: all 0.2s; display: flex; align-items: center; justify-content: center; }
   .delete-btn:hover { background: #ff525222; color: #ff5252; }

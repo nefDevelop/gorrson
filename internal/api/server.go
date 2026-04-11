@@ -2,10 +2,12 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"hash/fnv"
 	"io"
 	"io/fs"
@@ -139,6 +141,15 @@ func (s *Server) routes() {
 		r.Get("/filters", s.handleListFilters)
 		r.Post("/filters", s.handleAddFilter)
 		r.Delete("/filters/{id}", s.handleDeleteFilter)
+
+		r.Get("/api-keys", s.handleListAPIKeys)
+		r.Post("/api-keys", s.handleCreateAPIKey)
+		r.Delete("/api-keys/{id}", s.handleDeleteAPIKey)
+
+		r.Get("/stats", s.handleGetStats)
+
+		r.Get("/backup/export", s.handleExportBackup)
+		r.Post("/backup/import", s.handleImportBackup)
 	})
 
 	// Serve Svelte Frontend
@@ -180,18 +191,39 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		var username string
+
+		// 1. Try JWT Bearer Token
 		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			slog.Warn("Auth failed: missing Authorization header", "path", r.URL.Path, "method", r.Method)
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
-			return
+		if strings.HasPrefix(authHeader, "Bearer ") {
+			token := strings.TrimPrefix(authHeader, "Bearer ")
+			username, _ = auth.ValidateToken(token)
+		} else {
+			// 2. Try X-API-Key (format: "user:key")
+			apiKey := r.Header.Get("X-API-Key")
+			if apiKey != "" {
+				parts := strings.SplitN(apiKey, ":", 2)
+				if len(parts) == 2 {
+					u := parts[0]
+					rawKey := parts[1]
+
+					// Check if user exists (by attempting to open store)
+					store, serr := db.NewStore(s.dataDir, u)
+					if serr == nil {
+						defer store.Close()
+						hash := sha256.Sum256([]byte(rawKey))
+						hashHex := hex.EncodeToString(hash[:])
+						if store.ValidateAPIKey(hashHex) {
+							username = u
+						}
+					}
+				}
+			}
 		}
 
-		token := strings.TrimPrefix(authHeader, "Bearer ")
-		username, err := auth.ValidateToken(token)
-		if err != nil {
-			slog.Warn("Auth failed: token validation error", "path", r.URL.Path, "err", err)
-			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
+		if username == "" {
+			slog.Warn("Auth failed: invalid token or API key", "path", r.URL.Path, "method", r.Method)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
@@ -206,7 +238,7 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http: https:;")
+		w.Header().Set("Content-Security-Policy", "default-src 'self' https://unpkg.com; script-src 'self' 'unsafe-inline' https://unpkg.com; script-src-elem 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http: https:; connect-src 'self' https://unpkg.com;")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -722,7 +754,29 @@ func (s *Server) handleOpenAPI(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
-	html := `<!doctype html><html><head><meta charset="utf-8"><script type="module" src="https://unpkg.com/rapidoc/dist/rapidoc-min.js"></script><title>Gorrson API</title></head><body><rapi-doc spec-url="/openapi.yaml" theme="dark" show-header="false" allow-authentication="true" render-style="focused"></rapi-doc></body></html>`
+	html := `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gorrson API Documentation</title>
+    <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css" />
+  </head>
+  <body>
+    <div id="swagger-ui"></div>
+    <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js" charset="UTF-8"></script>
+    <script>
+      window.onload = () => {
+        window.ui = SwaggerUIBundle({
+          url: '/openapi.yaml',
+          dom_id: '#swagger-ui',
+          deepLinking: true,
+          presets: [SwaggerUIBundle.presets.apis],
+        });
+      };
+    </script>
+  </body>
+</html>`
 	w.Header().Set("Content-Type", "text/html")
 	w.Write([]byte(html))
 }
@@ -791,6 +845,7 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 		apiKey = r.Form.Get("api_key")
 	}
 
+	// 2. We need a username to open the DB.
 	// 2. We need a username to open the DB.
 	// Fever doesn't send the username directly, it's hashed in the api_key.
 	// Since Gorrson is designed for one user per DB file, we'll look at the data directory
@@ -957,4 +1012,180 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func (s *Server) handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
+	username, ok := r.Context().Value(usernameKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	keys, err := store.ListAPIKeys()
+	if err != nil {
+		http.Error(w, "Query failure", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(keys)
+}
+
+func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		http.Error(w, "Bad Request: name is required", http.StatusBadRequest)
+		return
+	}
+
+	username, ok := r.Context().Value(usernameKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// 1. Generate random key
+	b := make([]byte, 24)
+	if _, err := rand.Read(b); err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	rawKey := hex.EncodeToString(b)
+	fullKey := fmt.Sprintf("%s:%s", username, rawKey)
+
+	// 2. Hash it
+	hash := sha256.Sum256([]byte(rawKey))
+	hashHex := hex.EncodeToString(hash[:])
+
+	// 3. Save to DB
+	id := uuid.New().String()
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	if err := store.AddAPIKey(id, req.Name, hashHex); err != nil {
+		http.Error(w, "Failed to save key", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"id":      id,
+		"name":    req.Name,
+		"api_key": fullKey,
+	})
+}
+
+func (s *Server) handleDeleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	username, ok := r.Context().Value(usernameKey).(string)
+	if !ok {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Internal error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	if err := store.DeleteAPIKey(id); err != nil {
+		http.Error(w, "Delete failed", http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s *Server) handleExportBackup(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value(usernameKey).(string)
+	dbPath := filepath.Join(s.dataDir, username+".db")
+
+	if _, err := os.Stat(dbPath); err != nil {
+		http.Error(w, "Database file not found", http.StatusNotFound)
+		return
+	}
+
+	slog.Info("Backup exported", "user", username, "ip", r.RemoteAddr)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=gorrson-%s-backup-%s.db", username, time.Now().Format("2006-01-02")))
+	http.ServeFile(w, r, dbPath)
+}
+
+func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value(usernameKey).(string)
+
+	// Security: Limit size to 100MB to avoid disk filling DOS
+	r.Body = http.MaxBytesReader(w, r.Body, 100<<20)
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		http.Error(w, "Missing file in multipart form or file too large", http.StatusBadRequest)
+		return
+	}
+	defer file.Close()
+
+	dbPath := filepath.Join(s.dataDir, username+".db")
+	tmpPath := dbPath + ".tmp"
+
+	out, err := os.Create(tmpPath)
+	if err != nil {
+		http.Error(w, "Failed to create temp file", http.StatusInternalServerError)
+		return
+	}
+
+	if _, err := io.Copy(out, file); err != nil {
+		out.Close()
+		os.Remove(tmpPath)
+		http.Error(w, "Failed to save file. Check size limits.", http.StatusInternalServerError)
+		return
+	}
+	out.Close()
+
+	// Security: Verify the uploaded file is a valid SQLite DB before replacing
+	if err := db.VerifySQLiteFile(tmpPath); err != nil {
+		os.Remove(tmpPath)
+		slog.Warn("Attempted to upload invalid backup file", "user", username, "err", err)
+		http.Error(w, "Invalid backup file: "+err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	// Atomic rename. On Linux this overwrites the existing file.
+	if err := os.Rename(tmpPath, dbPath); err != nil {
+		http.Error(w, "Failed to overwrite database. Is it being used?", http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("Backup restored successfully", "user", username, "ip", r.RemoteAddr)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "Database restored and verified. Page refresh recommended."})
+}
+
+func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
+	username := r.Context().Value(usernameKey).(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, "Server error", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	stats, err := store.GetStats()
+	if err != nil {
+		http.Error(w, "Failed to retrieve stats", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(stats)
 }
