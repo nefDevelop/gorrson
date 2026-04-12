@@ -132,7 +132,8 @@
       offset += newArticles.length;
       feeds = feedsData || [];
       
-      if (articles.length > 0 && !selectedId && !append && !isMobile) {
+      // Auto-selection only for full desktop
+      if (articles.length > 0 && !selectedId && !append && !isMobile && !isSidebarMini) {
         selectedId = articles[0].id;
       }
       lastSyncDate = new Date();
@@ -543,7 +544,7 @@
         </div>
       {:else}
         {#if currentView === 'inbox' || currentView === 'favorites'}
-          {#if !isMobile || (isMobile && !selectedId)}
+          {#if (!isSidebarMini && !isMobile) || (isSidebarMini && !selectedId) || (isMobile && !selectedId)}
             <FeedList 
               bind:searchQuery
               articles={filteredArticles} 
@@ -621,6 +622,14 @@
     transform-origin: left center;
     flex-shrink: 0;
     min-width: 0;
+    max-width: 100%;
+  }
+
+  @media (max-width: 1000px) {
+    .nav-panels {
+      flex-shrink: 0;
+      width: auto !important; /* Adapt to Rail or Rail+List */
+    }
   }
 
   .nav-panels.full-width {
