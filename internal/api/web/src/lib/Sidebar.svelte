@@ -71,7 +71,7 @@
     }
   };
 
-  $: if (!isMobile) activePopover = null;
+  $: if (!isMini && !isMobile) activePopover = null;
 
   const handleNavClick = (id) => {
     activePopover = null;
@@ -271,6 +271,53 @@
   {/if}
 
 </aside>
+
+{#if isMini && activePopover}
+  <div 
+    class="sidebar-popover" 
+    style="top: {popoverY}px; max-height: {popoverMaxHeight}px;"
+    transition:fly={{ x: -20, duration: 200 }}
+  >
+    <div class="popover-header">
+      <span class="popover-title">{$t(activePopover)}</span>
+      <button class="close-popover" on:click={() => activePopover = null}>
+        <X size={16} />
+      </button>
+    </div>
+    
+    <div class="popover-scroll scroll-area">
+      {#if activePopover === 'categories'}
+        {#each categories as cat}
+          <button 
+            class="cat-item {activeView === 'cat:'+cat.id ? 'active' : ''}"
+            on:click={() => handleNavClick('cat:'+cat.id)}
+          >
+            <div class="item-left">
+              <Hash size={14} opacity={0.5} />
+              <span>{cat.name}</span>
+            </div>
+            <span class="count">{cat.count}</span>
+          </button>
+        {/each}
+      {:else if activePopover === 'sources'}
+        {#each feeds as feed}
+          <button 
+            class="cat-item {activeView === 'src:'+feed.id ? 'active' : ''}"
+            on:click={() => handleNavClick('src:'+feed.id)}
+          >
+            <div class="item-left">
+              <Globe size={14} opacity={0.5} />
+              <span class="truncate">{feed.title}</span>
+            </div>
+            <span class="count">{feed.unread_count || 0}</span>
+          </button>
+        {/each}
+      {/if}
+    </div>
+  </div>
+  
+  <div class="popover-backdrop" on:click={() => activePopover = null}></div>
+{/if}
 
 <style>
   .sidebar {
@@ -496,6 +543,61 @@
     overflow: hidden;
   }
 
+  /* Popover for Mini Sidebar */
+  .sidebar-popover {
+    position: fixed;
+    left: 76px;
+    width: 240px;
+    background: var(--md-surface);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-xl);
+    box-shadow: 8px 0 32px rgba(0,0,0,0.3);
+    z-index: 3000;
+    display: flex;
+    flex-direction: column;
+    padding: 8px;
+    overflow: hidden;
+  }
+
+  .popover-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--md-outline);
+    margin-bottom: 8px;
+  }
+
+  .popover-title {
+    font: var(--m3-label-large);
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--md-primary);
+  }
+
+  .close-popover {
+    background: transparent;
+    border: none;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    padding: 4px;
+    border-radius: var(--radius-full);
+  }
+  .close-popover:hover { background: var(--md-surface-variant); }
+
+  .popover-scroll {
+    overflow-y: auto;
+    padding-right: 4px;
+  }
+
+  .popover-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2999;
+    background: transparent;
+  }
+
   .sidebar-content {
     flex: 1;
     display: flex;
@@ -615,7 +717,7 @@
       padding: 16px 0;
       width: 72px !important;
       z-index: 1000;
-      border-right: 1px solid var(--md-outline);
+      border-right: none !important;
       display: flex !important;
       flex-direction: column !important;
       align-items: center !important;
@@ -744,6 +846,17 @@
       font-size: 14px;
       border-radius: var(--radius-full);
       box-shadow: 0 0 0 2px var(--md-outline);
+    }
+
+    /* Force visibility in popovers even if general rule hides it */
+    .sidebar-popover .cat-item span,
+    .sidebar-popover .count {
+      display: block !important;
+    }
+    .sidebar-popover .item-left {
+      width: auto !important;
+      justify-content: flex-start !important;
+      gap: 12px !important;
     }
   }
 

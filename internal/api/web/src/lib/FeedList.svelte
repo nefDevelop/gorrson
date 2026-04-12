@@ -446,6 +446,13 @@
     padding: 48px 24px;
     text-align: center;
     color: var(--md-on-surface-variant);
+    min-height: 300px;
+  }
+
+  @media (max-width: 768px) {
+    .empty-state {
+      padding-bottom: 120px; /* Extra space for mobile nav */
+    }
   }
 
   .empty-icon {
@@ -484,7 +491,9 @@
       padding-right: 12px;
     }
     .feed-list {
-      width: 100% !important;
+      flex: 1 !important;
+      width: auto !important;
+      min-width: 0;
       border-right: none;
     }
     .expand-btn {

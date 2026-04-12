@@ -1008,7 +1008,21 @@
   .header-left :global(svg) { color: var(--md-primary); }
   .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-primary); }
 
-  .tabs { display: flex; gap: 8px; height: 100%; align-items: center; padding-left: 24px; }
+  .tabs { 
+    display: flex; 
+    gap: 8px; 
+    height: 100%; 
+    align-items: center; 
+    padding-left: 24px; 
+    overflow-x: auto;
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs::-webkit-scrollbar {
+    display: none; /* Chrome/Safari */
+  }
   .tab { 
     background: transparent; 
     border: none; 
@@ -1022,6 +1036,8 @@
     border-radius: var(--radius-full);
     transition: all 0.2s;
     opacity: 0.8;
+    white-space: nowrap; /* Prevent text wrapping */
+    flex-shrink: 0;
   }
   .tab:hover { 
     background: var(--md-surface-variant);
