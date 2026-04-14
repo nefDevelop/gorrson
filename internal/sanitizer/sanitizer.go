@@ -10,6 +10,12 @@ func Clean(content string) string {
 	return p.Sanitize(content)
 }
 
+// StripHTML removes all HTML tags from a string.
+func StripHTML(content string) string {
+	p := bluemonday.StrictPolicy()
+	return p.Sanitize(content)
+}
+
 // IsValidUsername checks if a username is safe (alphanumeric, underscores, hyphens).
 func IsValidUsername(username string) bool {
 	if username == "" || len(username) > 50 {

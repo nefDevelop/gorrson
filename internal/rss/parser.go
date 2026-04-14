@@ -6,10 +6,12 @@ import (
 	"hash/fnv"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 
+	"github.com/PuerkitoBio/goquery"
 	"github.com/google/uuid"
 	"github.com/mmcdole/gofeed"
 	"github.com/nef734/gorrson/internal/db"
@@ -156,6 +158,36 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 		cleanContent := sanitizer.Clean(content)
 		title := item.Title
+
+		// Identify social media feeds
+		isBluesky := strings.Contains(url, "bsky.app")
+		isMastodon := strings.Contains(url, "/@") || strings.Contains(feed.Generator, "Mastodon")
+
+		// Improve titles for social media if they are generic or missing
+		if isBluesky || isMastodon || title == "" {
+			// Check if title is generic or just a handle
+			isGeneric := strings.HasPrefix(title, "Post by ") || 
+			             strings.HasPrefix(title, "A post from ") || 
+			             strings.HasPrefix(title, "@") ||
+			             len(title) < 3
+			
+			if title == "" || isGeneric {
+				// Use a snippet of the content as a better title
+				textOnly := sanitizer.StripHTML(cleanContent)
+				if textOnly != "" {
+					lines := strings.Split(strings.TrimSpace(textOnly), "\n")
+					firstLine := lines[0]
+					if len(firstLine) > 100 {
+						firstLine = firstLine[:97] + "..."
+					}
+					title = firstLine
+				} else if title == "" {
+					// Hard fallback if everything is empty
+					title = "Post from " + feed.Title
+				}
+			}
+		}
+
 		if cleanContent == "" && title != "" {
 			slog.Debug("Entry content is empty, only title available", "title", title, "link", item.Link)
 		}
@@ -221,6 +253,25 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			}
 		}
 
+		// Try media:content extension (Media RSS)
+		if imageURL == "" {
+			if media, ok := item.Extensions["media"]; ok {
+				if contents, ok := media["content"]; ok && len(contents) > 0 {
+					// Take the first image content
+					for _, c := range contents {
+						if strings.Contains(c.Attrs["type"], "image") || c.Attrs["medium"] == "image" {
+							imageURL = c.Attrs["url"]
+							break
+						}
+					}
+					// Fallback to first one if no type specified
+					if imageURL == "" && len(contents) > 0 {
+						imageURL = contents[0].Attrs["url"]
+					}
+				}
+			}
+		}
+
 		// Special handling for Reddit: extract clean link and image from HTML content
 		isReddit := strings.Contains(url, "reddit.com")
 		if isReddit {
@@ -228,19 +279,22 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			if matches := reLink.FindStringSubmatch(content); len(matches) > 1 {
 				item.Link = matches[1]
 			}
-			
-			// Extract image if missing
-			if imageURL == "" {
-				reImg := regexp.MustCompile(`<img src="([^"]+)"`)
-				if matches := reImg.FindStringSubmatch(content); len(matches) > 1 {
-					imageURL = matches[1]
-				}
-			}
+		}
+
+		// Extract image from content if still missing
+		if imageURL == "" {
+			imageURL = extractFirstImageFromHTML(content)
 		}
 
 		// Special handling for Mastodon & Bluesky
-		isMastodon := strings.Contains(url, "/@") || strings.Contains(feed.Generator, "Mastodon")
-		isBluesky := strings.Contains(url, "bsky.app")
+		
+		// If STILL no image and it's a social feed, try to fetch OG image from the page
+		// because official feeds often have limited media in RSS.
+		if (isBluesky || isMastodon) && imageURL == "" && item.Link != "" {
+			imageURL = fetchOGImage(ctx, item.Link)
+		}
+
+		// Last resort: fallback to feed image (avatar) for social platforms
 		if (isMastodon || isBluesky) && imageURL == "" && feed.Image != nil {
 			imageURL = feed.Image.URL
 		}
@@ -271,4 +325,62 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 	slog.Info("SyncFeed complete", "feed", feed.Title, "total_items", len(feed.Items), "saved_entries", saved)
 	return nil
+}
+
+func extractFirstImageFromHTML(html string) string {
+	if html == "" {
+		return ""
+	}
+	// Simple regex for speed, checking for common image extensions
+	re := regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+\.(jpg|jpeg|png|webp|gif|svg)[^"']*)["']`)
+	matches := re.FindStringSubmatch(html)
+	if len(matches) > 1 {
+		src := matches[1]
+		// Filter out common tracking pixels or icons
+		lower := strings.ToLower(src)
+		if strings.Contains(lower, "pixel") || strings.Contains(lower, "spacer") || strings.Contains(lower, "1x1") || strings.Contains(lower, "tracking") {
+			return ""
+		}
+		return src
+	}
+	return ""
+}
+
+func fetchOGImage(ctx context.Context, pageURL string) string {
+	// Don't spend too much time on this
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+
+	sc := NewSecureClient()
+	body, err := sc.Fetch(ctx, pageURL)
+	if err != nil {
+		return ""
+	}
+	defer body.Close()
+
+	doc, err := goquery.NewDocumentFromReader(body)
+	if err != nil {
+		return ""
+	}
+
+	var img string
+	// Try various OG and Twitter tags
+	doc.Find("meta[property='og:image'], meta[name='twitter:image'], meta[property='og:image:url']").Each(func(i int, s *goquery.Selection) {
+		if content, ok := s.Attr("content"); ok && img == "" {
+			img = content
+		}
+	})
+
+	// Resolve relative URLs
+	if img != "" && !strings.HasPrefix(img, "http") {
+		base, err := url.Parse(pageURL)
+		if err == nil {
+			ref, err := url.Parse(img)
+			if err == nil {
+				img = base.ResolveReference(ref).String()
+			}
+		}
+	}
+
+	return img
 }
