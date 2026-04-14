@@ -1,7 +1,7 @@
 <script>
   import { stripHtml, extractFirstImage } from './utils.js';
   import { Star, Share2, Image as ImageIcon } from 'lucide-svelte';
-  /** @type {{id: string, title: string, source: string, time: string, category: string, is_read?: boolean, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean, matched_action?: string}} */
+  /** @type {{id: string, title: string, source: string, time: string, category: string, is_read?: boolean, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean, matched_action?: string, image_url?: string}} */
   export let article;
   
   /** @type {(id: string | number) => void} */
@@ -17,7 +17,8 @@
   export let viewMode = 'default'; // 'default', 'compact', 'minimal', 'image'
  
   $: summary = stripHtml(article.content || article.summary || "");
-  $: imageUrl = (viewMode === 'image') ? extractFirstImage(article.content) : null;
+  $: imageUrl = article.image_url || extractFirstImage(article.content);
+  $: showThumbnail = (viewMode === 'image' || viewMode === 'default') && imageUrl;
 </script>
 
 <div 
@@ -73,7 +74,7 @@
       </div>
     </div>
 
-    {#if viewMode === 'image' && imageUrl}
+    {#if showThumbnail}
       <div class="image-side">
         <img src={imageUrl} alt="Article thumbnail" loading="lazy" />
       </div>
