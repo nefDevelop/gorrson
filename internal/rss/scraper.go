@@ -2,17 +2,26 @@ package rss
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"strings"
 
 	"net/url"
 
 	"github.com/PuerkitoBio/goquery"
+	"github.com/antchfx/htmlquery"
 	"github.com/go-shiori/go-readability"
 	"github.com/nef734/gorrson/internal/sanitizer"
 	"golang.org/x/net/html/charset"
 )
 
+const DebugMode = false
+
+func debugLog(format string, a ...interface{}) {
+	if DebugMode {
+		fmt.Printf(format, a...)
+	}
+}
 // ScrapeFullContent attempts to extract the main article text from a URL.
 func ScrapeFullContent(ctx context.Context, targetURL string, originalTitle string, originalImage string) (string, error) {
 	sc := NewSecureClient()
@@ -28,70 +37,105 @@ func ScrapeFullContent(ctx context.Context, targetURL string, originalTitle stri
 		return "", err
 	}
 
-	// Parse URL for readability
+	// Parse URL for recipes/readability
 	parsedURL, _ := url.Parse(targetURL)
 
-	// Use go-readability (Mozilla's algorithm) for high-performance extraction
-	article, err := readability.FromReader(utf8Body, parsedURL)
+	// Capture the raw HTML tree
+	root, err := htmlquery.Parse(utf8Body)
 	if err != nil {
 		return "", err
 	}
 
-	// Remove duplicate titles and hero images already shown in UI
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(article.Content))
+	var htmlStr string
+	var content string
+	var extractErr error
+
+	// Capture Raw HTML size before extraction
+	htmlStr = htmlquery.OutputHTML(root, true)
+
+	// 1. Try Site-specific Recipe
+	recipe, err := FindRecipe(targetURL)
 	if err == nil {
-		// Clean duplicate titles (checks h1, h2, h3)
-		doc.Find("h1, h2, h3").Each(func(i int, s *goquery.Selection) {
-			if strings.TrimSpace(s.Text()) == strings.TrimSpace(originalTitle) {
+		content, extractErr = ApplyRecipe(root, recipe)
+	}
+
+	// 2. Fallback: Use go-readability if recipe failed or didn't exist
+	if content == "" {
+		if err == nil && recipe != nil {
+			debugLog("DEBUG: Recipe failed to extract content from %s. Error: %v\n", targetURL, extractErr)
+		}
+		
+		article, err := readability.FromReader(strings.NewReader(htmlStr), parsedURL)
+		if err != nil {
+			fmt.Printf("✘ Extraction Failed: %s | Error: %v\n", targetURL, err)
+			return "", err
+		}
+
+		// Remove duplicate titles and hero images already shown in UI
+		doc, err := goquery.NewDocumentFromReader(strings.NewReader(article.Content))
+		if err == nil {
+			// [Clean noise etc remains here...]
+			cleanNoise(doc, originalTitle, originalImage)
+			content, _ = doc.Html()
+		} else {
+			content = article.Content
+		}
+	}
+
+	// 3. New: Smart Global Deduplication (Removed as it was causing issues with parent/child clones)
+	finalContent := content
+
+	// Final Summary Log (Informative)
+	ruleInfo := "None (Auto)"
+	if recipe != nil {
+		sourceName := "System"
+		if recipe.Source == "custom" {
+			sourceName = "Custom"
+		}
+		ruleInfo = fmt.Sprintf("%s Recipe: %d body, %d strip rules", 
+			sourceName, len(recipe.Body), len(recipe.Strip))
+	}
+	fmt.Printf("➜ Extraction [%s]: %s | Raw: %dB | Extracted: %dB | Final: %dB\n", 
+		ruleInfo, targetURL, len(htmlStr), len(content), len(finalContent))
+
+	// Final clean with our sanitizer (which uses bluemonday)
+	return sanitizer.Clean(finalContent), nil
+}
+
+func cleanNoise(doc *goquery.Document, originalTitle string, originalImage string) {
+	// Clean duplicate titles (checks h1, h2, h3)
+	doc.Find("h1, h2, h3").Each(func(i int, s *goquery.Selection) {
+		if strings.TrimSpace(s.Text()) == strings.TrimSpace(originalTitle) {
+			s.Remove()
+		}
+	})
+
+	// Clean common "noise" elements that readability might miss
+	noiseSelectors := []string{
+		".byline", ".author", ".date", ".published-at",
+		".social-share", ".social-buttons", ".share-links",
+		".ad-unit", ".advertisement", ".sponsored",
+		".photo-credit", ".credit", ".caption", ".p-caption",
+		".newsletter-signup", ".login-bundle", ".login-promo",
+		".registration-promo", ".subscribe-promo",
+		"aside", "nav", "footer",
+		".c-byline", ".c-entry-header__labels", ".c-entry-stat-list", 
+	}
+	for _, selector := range noiseSelectors {
+		doc.Find(selector).Remove()
+	}
+
+	// Clean duplicate hero image
+	if originalImage != "" {
+		doc.Find("img").Each(func(i int, s *goquery.Selection) {
+			src, _ := s.Attr("src")
+			if src == originalImage {
 				s.Remove()
 			}
 		})
-
-		// Clean common "noise" elements that readability might miss
-		noiseSelectors := []string{
-			".byline", ".author", ".date", ".published-at",
-			".social-share", ".social-buttons", ".share-links",
-			".ad-unit", ".advertisement", ".sponsored",
-			".photo-credit", ".credit", ".caption", ".p-caption",
-			".newsletter-signup", ".login-bundle", ".login-promo",
-			".registration-promo", ".subscribe-promo",
-			"aside", "nav", "footer",
-			".c-byline", ".c-entry-header__labels", ".c-entry-stat-list", // Vox Media (Polygon, etc.)
-		}
-		for _, selector := range noiseSelectors {
-			doc.Find(selector).Remove()
-		}
-
-		// Text-based cleaning for specific phrases (case-insensitive)
-		noisePhrases := []string{
-			"Sign in to your", "Subscribe to", "Photo:", "Image:",
-		}
-		doc.Find("p, div, span").Each(func(i int, s *goquery.Selection) {
-			text := strings.ToLower(s.Text())
-			for _, phrase := range noisePhrases {
-				if strings.Contains(text, strings.ToLower(phrase)) && len(s.Text()) < 100 {
-					s.Remove()
-					break
-				}
-			}
-		})
-
-		// Clean duplicate hero image
-		if originalImage != "" {
-			doc.Find("img").Each(func(i int, s *goquery.Selection) {
-				src, _ := s.Attr("src")
-				if src == originalImage {
-					s.Remove()
-				}
-			})
-		}
-		
-		article.Content, _ = doc.Html()
 	}
-
-	// Final clean with our sanitizer (which uses bluemonday)
-	return sanitizer.Clean(article.Content), nil
 }
+
 
 // decodeToUTF8 detects the encoding and converts the reader to UTF-8 if necessary.
 func decodeToUTF8(r io.Reader) (io.Reader, error) {

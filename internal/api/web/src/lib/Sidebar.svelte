@@ -316,7 +316,7 @@
     </div>
   </div>
   
-  <div class="popover-backdrop" on:click={() => activePopover = null}></div>
+  <button type="button" class="popover-backdrop" on:click={() => activePopover = null} aria-label="Close"></button>
 {/if}
 
 <style>
@@ -596,6 +596,9 @@
     inset: 0;
     z-index: 2999;
     background: transparent;
+    border: none;
+    padding: 0;
+    cursor: default;
   }
 
   .sidebar-content {

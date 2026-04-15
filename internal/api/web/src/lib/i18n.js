@@ -53,7 +53,9 @@ const translations = {
     "copy_link": "Copy Link",
     "link_copied": "Link copied to clipboard ✓",
     "send_to": "Send To...",
-    "login_subtitle": "Your RSS, without algorithms. Your freedom."
+    "login_subtitle": "Your RSS, without algorithms. Your freedom.",
+    "hide_read": "Hide Read News",
+    "generate_recipe": "Generate Recipe"
   },
   es: {
     "add_feed": "Añadir Feed",
@@ -105,7 +107,9 @@ const translations = {
     "copy_link": "Copiar Enlace",
     "link_copied": "Enlace copiado al portapapeles ✓",
     "send_to": "Enviar a...",
-    "login_subtitle": "Tu RSS, sin algoritmos. Tu libertad."
+    "login_subtitle": "Tu RSS, sin algoritmos. Tu libertad.",
+    "hide_read": "Ocultar noticias leídas",
+    "generate_recipe": "Generar Receta"
   }
 };
 

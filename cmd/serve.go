@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -25,6 +26,7 @@ var serveCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetString("port")
 		logFormat, _ := cmd.Flags().GetString("log-format")
+		silent, _ := cmd.Flags().GetBool("silent")
 		
 		if port == "" {
 			port = os.Getenv("GORRSON_PORT")
@@ -49,8 +51,13 @@ var serveCmd = &cobra.Command{
 			fmt.Printf("Could not open log file %s: %v\n", logPath, err)
 		}
 
+		level := slog.LevelInfo
+		if silent {
+			level = slog.LevelError
+		}
+
 		var handler slog.Handler
-		opts := &slog.HandlerOptions{Level: slog.LevelInfo}
+		opts := &slog.HandlerOptions{Level: level}
 		if logFormat == "json" {
 			handler = slog.NewJSONHandler(mw, opts)
 		} else {
@@ -58,6 +65,10 @@ var serveCmd = &cobra.Command{
 		}
 		
 		slog.SetDefault(slog.New(handler))
+
+		if silent {
+			log.SetOutput(io.Discard)
+		}
 
 		slog.Info("gorrson server starting", slog.String("port", port), slog.String("format", logFormat))
 
@@ -86,7 +97,7 @@ var serveCmd = &cobra.Command{
 			}
 		}
 
-		server := api.NewServer(dataDir)
+		server := api.NewServer(dataDir, silent)
 		addr := ":" + port
 		srv := &http.Server{
 			Addr:    addr,
@@ -127,4 +138,5 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().StringP("port", "p", "7077", "Port to listen on")
 	serveCmd.Flags().StringP("log-format", "f", "text", "Log format (text or json)")
+	serveCmd.Flags().BoolP("silent", "s", false, "Only show error logs")
 }
