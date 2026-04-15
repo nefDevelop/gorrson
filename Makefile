@@ -4,6 +4,7 @@
 BINARY_NAME=rss-cli
 PORT?=7077
 DATA_DIR?=./data
+SILENT?=true
 
 # Default target: Show help
 help:
@@ -47,7 +48,7 @@ build: build-ui build-go
 # Build and run the server immediately
 run: build
 	@echo "Starting Gorrson on http://localhost:$(PORT)"
-	./$(BINARY_NAME) serve --port $(PORT) --data-dir $(DATA_DIR)
+	./$(BINARY_NAME) serve --port $(PORT) --data-dir $(DATA_DIR) $(if $(filter true,$(SILENT)),--silent,)
 
 # Run development mode (Frontend)
 dev-ui:
@@ -55,7 +56,7 @@ dev-ui:
 
 # Run development mode (Backend - needs existing UI build in web/dist)
 dev-go:
-	go run main.go serve --port $(PORT) --data-dir $(DATA_DIR)
+	go run main.go serve --port $(PORT) --data-dir $(DATA_DIR) $(if $(filter true,$(SILENT)),--silent,)
 
 # Run both in parallel
 dev:

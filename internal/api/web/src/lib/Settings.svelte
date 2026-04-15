@@ -1,6 +1,6 @@
 <script>
   import { t, locale } from './i18n.js';
-  import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon } from 'lucide-svelte';
+  import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon, Wand2 } from 'lucide-svelte';
   import Filters from './Filters.svelte';
   import { onMount } from 'svelte';
   import { Share2, Plus, Trash2, ExternalLink as ExtIcon, Download, Upload, FileJson, FileCode, Database } from 'lucide-svelte';
@@ -11,8 +11,10 @@
   export let feeds = [];
   export let username = '';
   export let scrollRead = false;
+  export let unreadOnly = false;
   export let cardStyle = 'default';
   export let isMobile = false;
+  export let onGenerateRecipe = (feed) => {};
 
   import { updateFeed, deleteFeed, fetchAPIKeys, createAPIKey, deleteAPIKey } from './api.js';
   import { success, error as toastError } from './toast.js';
@@ -592,6 +594,16 @@
           </button>
         </div>
 
+        <div class="setting-item">
+          <div class="text">
+            <div class="label">{$t('hide_read')}</div>
+            <div class="desc">Hide articles that have already been read.</div>
+          </div>
+          <button class="btn-toggle" on:click={() => unreadOnly = !unreadOnly}>
+            {unreadOnly ? 'ON' : 'OFF'}
+          </button>
+        </div>
+
         <div class="setting-item vertical">
           <div class="text">
             <div class="label">News Card Style</div>
@@ -770,13 +782,27 @@
                     />
                  </div>
               </div>
-              <button class="btn-icon-danger" on:click={() => handleDeleteFeed(feed)} title="Delete Feed">
-                 <Trash2 size={18} />
-              </button>
+              <div class="row-actions">
+                <button class="btn-icon {feed.has_recipe ? 'active' : ''}" on:click={() => onGenerateRecipe(feed)} title={$t('generate_recipe')}>
+                  <Wand2 size={18} />
+                </button>
+                <button class="btn-icon-danger" on:click={() => handleDeleteFeed(feed)} title="Delete Feed">
+                  <Trash2 size={18} />
+                </button>
+              </div>
             </div>
-          {:else}
-            <div class="empty-list">No feeds found. Add some from the sidebar.</div>
           {/each}
+        </div>
+
+        <div class="sources-legend">
+          <div class="legend-item">
+            <div class="legend-dot active"><Wand2 size={14} /></div>
+            <span>Recipe exists (High quality)</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-dot"><Wand2 size={14} /></div>
+            <span>Generic Cleanup (Standard)</span>
+          </div>
         </div>
       </div>
       <datalist id="category-suggestions">
@@ -1685,4 +1711,66 @@
     word-break: break-all;
   }
   .key-display code { font-family: 'JetBrains Mono', monospace; font-size: 14px; color: var(--md-primary); flex: 1; margin-right: 12px; }
+
+  .row-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .btn-icon {
+    background: var(--md-surface-variant);
+    border: none;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    transition: all 0.2s;
+  }
+  .btn-icon:hover {
+    background: var(--md-primary-container);
+    color: var(--md-primary);
+  }
+
+  .btn-icon.active {
+    color: #00d2ff;
+    background: rgba(0, 210, 255, 0.15);
+    border: 1px solid rgba(0, 210, 255, 0.3);
+  }
+
+  .sources-legend {
+    display: flex;
+    gap: 24px;
+    margin-top: 24px;
+    padding: 16px 24px;
+    background: var(--md-surface-variant);
+    border-radius: var(--radius-xl);
+    width: fit-content;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font: var(--m3-label-medium);
+    color: var(--md-on-surface-variant);
+  }
+
+  .legend-dot {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--md-surface);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--md-on-surface-variant);
+    opacity: 0.6;
+  }
+
+  .legend-dot.active {
+    background: rgba(0, 210, 255, 0.15);
+    color: #00d2ff;
+    opacity: 1;
+    border: 1px solid rgba(0, 210, 255, 0.3);
+  }
 </style>

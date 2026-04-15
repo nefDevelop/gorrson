@@ -9,6 +9,7 @@
   import AddFeed from './lib/AddFeed.svelte';
   import Insights from './lib/Insights.svelte';
   import Toaster from './lib/Toaster.svelte';
+  import RecipeBuilder from './lib/RecipeBuilder.svelte';
   import MobileNav from './lib/MobileNav.svelte';
   import { success as toastSuccess, error as toastError } from './lib/toast.js';
   import { formatTimeAgo } from './lib/utils.js';
@@ -27,11 +28,12 @@
   let allLoaded = false;
   let loadingMore = false;
   let scrollRead = localStorage.getItem('gorrson-scroll-read') === 'true';
-  let unreadOnly = false;
+  let unreadOnly = localStorage.getItem('gorrson-unread-only') === 'true';
   let sortMode = "newest"; // "newest", "oldest"
   let cardStyle = localStorage.getItem('gorrson-card-style') || 'default';
 
   $: localStorage.setItem('gorrson-scroll-read', scrollRead.toString());
+  $: localStorage.setItem('gorrson-unread-only', unreadOnly.toString());
   $: localStorage.setItem('gorrson-card-style', cardStyle);
 
   const STOP_WORDS = new Set(['de', 'a', 'el', 'la', 'en', 'y', 'que', 'os', 'un', 'una', 'con', 'para', 'por', 'lo', 'las', 'los', 'su', 'al', 'se', 'del', 'the', 'and', 'with', 'that', 'this', 'from']);
@@ -49,6 +51,7 @@
   let activeCategory = null;
   let activeSource = null;
   let showAddFeed = false;
+  let recipeBuilderFeed = null;
   let isSourcesDrawerOpen = false;
   let lastSyncDate = new Date();
   let now = new Date();
@@ -572,11 +575,20 @@
         {:else if currentView === 'settings'}
           <Settings 
             {feeds} 
-            {isMobile}
+            username={localStorage.getItem('username')} 
             onLogout={handleLogout} 
-            username={localStorage.getItem('username')}
+            onRefresh={loadData}
             bind:scrollRead
+            bind:unreadOnly
             bind:cardStyle
+            {isMobile}
+            onGenerateRecipe={(feed) => {
+              const latest = articles.find(a => a.feed_id === feed.id);
+              recipeBuilderFeed = { 
+                ...feed, 
+                sample_url: latest ? latest.url : feed.site_url 
+              };
+            }}
           />
         {/if}
       {/if}
@@ -603,8 +615,17 @@
         onToggleSources={() => isSourcesDrawerOpen = !isSourcesDrawerOpen}
       />
     {/if}
+
+    {#if recipeBuilderFeed}
+      <RecipeBuilder 
+        show={!!recipeBuilderFeed} 
+        feed={recipeBuilderFeed} 
+        onClose={() => recipeBuilderFeed = null} 
+      />
+    {/if}
+
+    <Toaster />
   </main>
-  <Toaster />
 {/if}
 
 <style>

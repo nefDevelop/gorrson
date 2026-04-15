@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -13,6 +14,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -29,6 +31,7 @@ import (
 	"github.com/nef734/gorrson/internal/models"
 	"github.com/nef734/gorrson/internal/opml"
 	"github.com/nef734/gorrson/internal/rss"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -83,20 +86,24 @@ type Server struct {
 	router  *chi.Mux
 	dataDir string
 	parser  *rss.Parser
+	silent  bool
 }
 
-func NewServer(dataDir string) *Server {
+func NewServer(dataDir string, silent bool) *Server {
 	s := &Server{
 		router:  chi.NewRouter(),
 		dataDir: dataDir,
 		parser:  rss.NewParser(),
+		silent:  silent,
 	}
 	s.routes()
 	return s
 }
 
 func (s *Server) routes() {
-	s.router.Use(middleware.Logger)
+	if !s.silent {
+		s.router.Use(middleware.Logger)
+	}
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(middleware.Compress(5))
 	s.router.Use(s.securityHeaders)
@@ -112,6 +119,7 @@ func (s *Server) routes() {
 	s.router.Post("/refresh", s.handleRefresh)
 	s.router.Post("/logout", s.handleLogout)
 	s.router.Get("/proxy", s.handleImageProxy)
+	s.router.Get("/proxy/page", s.handlePageProxy)
 
 	// Fever API endpoint (authentication is handled inside the handler via api_key)
 	s.router.With(s.loginRateLimit).Post("/api/fever", s.handleFeverAPI)
@@ -132,6 +140,7 @@ func (s *Server) routes() {
 		r.Get("/feeds/export", s.handleExportOPML)
 		r.Patch("/feeds/{id}", s.handleUpdateFeed)
 		r.Delete("/feeds/{id}", s.handleDeleteFeed)
+		r.Post("/recipes/save", s.handleSaveRecipe)
 
 		r.Put("/categories/{name}", s.handleRenameCategory)
 
@@ -234,11 +243,19 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Skip strict security headers for the page proxy to allow it to render correctly
+		if strings.HasPrefix(r.URL.Path, "/proxy/page") {
+			w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+			w.Header().Set("Content-Security-Policy", "default-src * 'unsafe-inline' 'unsafe-eval'; frame-ancestors 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline';")
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		w.Header().Set("X-Content-Type-Options", "nosniff")
-		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self' https://unpkg.com; script-src 'self' 'unsafe-inline' https://unpkg.com; script-src-elem 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http: https:; connect-src 'self' https://unpkg.com;")
+		w.Header().Set("Content-Security-Policy", "default-src 'self' https://unpkg.com; frame-ancestors 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; script-src-elem 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http: https:; connect-src 'self' https://unpkg.com;")
 		next.ServeHTTP(w, r)
 	})
 }
@@ -470,8 +487,30 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Query failure", http.StatusInternalServerError)
 		return
 	}
+
+	// Flatten into a map to ensure all fields are at top level in JSON
+	var enriched []map[string]interface{}
+	for _, f := range feeds {
+		hasRecipe := false
+		target := f.SiteURL
+		if target == "" { target = f.FeedURL }
+		if r, ferr := rss.FindRecipe(target); ferr == nil && r != nil {
+			hasRecipe = true
+		}
+		
+		enriched = append(enriched, map[string]interface{}{
+			"id":           f.ID,
+			"title":        f.Title,
+			"site_url":     f.SiteURL,
+			"feed_url":     f.FeedURL,
+			"category":     f.Category,
+			"unread_count": f.UnreadCount,
+			"has_recipe":   hasRecipe,
+		})
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(feeds)
+	json.NewEncoder(w).Encode(enriched)
 }
 
 func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
@@ -1188,4 +1227,243 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(stats)
+}
+
+func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
+	targetURL := r.URL.Query().Get("url")
+	slog.Info("Page proxy request START", "url", targetURL)
+	
+	// Ensure this specific endpoint is allowed to be framed by our own app
+	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	
+	if targetURL == "" {
+		slog.Warn("Page proxy request: MISSING URL")
+		http.Error(w, "Missing url parameter", http.StatusBadRequest)
+		return
+	}
+
+	sc := rss.NewSecureClient()
+	body, err := sc.Fetch(r.Context(), targetURL)
+	if err != nil {
+		slog.Error("Failed to fetch proxy page", "url", targetURL, "error", err)
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadGateway)
+		fmt.Fprintf(w, "<body style='font-family:sans-serif;padding:40px;text-align:center;background:#fff5f5;color:#c53030'>")
+		fmt.Fprintf(w, "<h2>Proxy Error</h2>")
+		fmt.Fprintf(w, "<p>Could not load the page. Check your internet connection or if the site blocks Gorrson.</p>")
+		fmt.Fprintf(w, "<pre style='background:#fff;padding:10px;border-radius:8px;display:inline-block'>%s</pre>", err.Error())
+		fmt.Fprintf(w, "</body>")
+		return
+	}
+	defer body.Close()
+
+	// Parse HTML
+	doc, err := html.Parse(body)
+	if err != nil {
+		http.Error(w, "Failed to parse HTML", http.StatusInternalServerError)
+		return
+	}
+
+	// Rewrite URLs (href, src) to be absolute and disable scripts
+	u, _ := url.Parse(targetURL)
+	var rewrite func(*html.Node)
+	rewrite = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			// Disable scripts by changing type
+			if n.Data == "script" {
+				for i, attr := range n.Attr {
+					if attr.Key == "src" {
+						n.Attr[i].Val = "#disabled-by-gorrson"
+					}
+				}
+				n.Attr = append(n.Attr, html.Attribute{Key: "type", Val: "text/plain"})
+			}
+
+			// Disable iframes to avoid frame busting
+			if n.Data == "iframe" {
+				for i, attr := range n.Attr {
+					if attr.Key == "src" {
+						n.Attr[i].Val = "about:blank"
+					}
+				}
+			}
+
+			for i, attr := range n.Attr {
+				if attr.Key == "href" || attr.Key == "src" {
+					absURL := resolveURL(u, attr.Val)
+					n.Attr[i].Val = absURL
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			rewrite(c)
+		}
+	}
+	rewrite(doc)
+
+	// Inject selection script
+	// Add <base> and <viewport> tags to head
+	baseNode := &html.Node{
+		Type: html.ElementNode,
+		Data: "base",
+		Attr: []html.Attribute{{Key: "href", Val: targetURL}},
+	}
+	injectAtStart(doc, "head", baseNode)
+
+	viewportNode := &html.Node{
+		Type: html.ElementNode,
+		Data: "meta",
+		Attr: []html.Attribute{
+			{Key: "name", Val: "viewport"},
+			{Key: "content", Val: "width=device-width, initial-scale=1"},
+		},
+	}
+	injectAtStart(doc, "head", viewportNode)
+
+	// Inject selection script to body
+	scriptNode := &html.Node{
+		Type: html.ElementNode,
+		Data: "script",
+	}
+	scriptNode.AppendChild(&html.Node{
+		Type: html.TextNode,
+		Data: `
+(function() {
+    let style = document.createElement('style');
+    style.innerHTML = '.gorrson-highlight { outline: 2px solid #ff5252 !important; cursor: pointer !important; opacity: 0.8 !important; } ' +
+                      '* { visibility: visible !important; opacity: 1 !important; max-width: 100% !important; box-sizing: border-box !important; } ' +
+                      'body { display: block !important; background: white !important; color: black !important; overflow-x: hidden !important; width: 100% !important; }';
+    document.head.appendChild(style);
+
+    document.addEventListener('mouseover', e => {
+        if (e.target.tagName === 'BODY') return;
+        e.target.classList.add('gorrson-highlight');
+    }, true);
+    document.addEventListener('mouseout', e => {
+        e.target.classList.remove('gorrson-highlight');
+    }, true);
+    document.addEventListener('click', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        let xpath = getXPath(e.target);
+        window.parent.postMessage({ type: 'gorrson-select', xpath: xpath }, '*');
+    }, true);
+
+    function getXPath(node) {
+        if (node.nodeType !== 1) return '';
+        if (node.id) return 'id("' + node.id + '")';
+        if (node === document.body) return 'body';
+        let s = getXPath(node.parentNode);
+        let tag = node.tagName.toLowerCase();
+        let ix = 1;
+        for (let sib = node.previousSibling; sib; sib = sib.previousSibling) {
+            if (sib.nodeType === 1 && sib.tagName === node.tagName) ix++;
+        }
+        return s + '/' + tag + '[' + ix + ']';
+    }
+})();
+`,
+	})
+	injectAtStart(doc, "body", scriptNode)
+
+	w.Header().Set("Content-Type", "text/html")
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
+		slog.Error("Failed to render proxy doc", "error", err)
+		http.Error(w, "Render error", http.StatusInternalServerError)
+		return
+	}
+
+	slog.Info("Proxy rendered doc complete", "url", targetURL, "size", buf.Len())
+	w.Write(buf.Bytes())
+}
+
+func (s *Server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		FeedID   string   `json:"feed_id"`
+		BodyList []string `json:"body_list"`
+		Title    string   `json:"title"`
+		Strip    []string `json:"strip"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	username := r.Context().Value(usernameKey).(string)
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
+
+	feed, err := store.GetFeedByID(req.FeedID)
+	if err != nil {
+		http.Error(w, "Feed not found", http.StatusNotFound)
+		return
+	}
+
+	target := feed.SiteURL
+	if target == "" { target = feed.FeedURL }
+	u, _ := url.Parse(target)
+	domain := strings.TrimPrefix(u.Hostname(), "www.")
+	
+	customDir := filepath.Join(s.dataDir, "site-config", "custom")
+	os.MkdirAll(customDir, 0755)
+	
+	path := filepath.Join(customDir, domain+".txt")
+	content := fmt.Sprintf("# Custom Recipe for %s\n", domain)
+	if req.Title != "" {
+		content += fmt.Sprintf("title: %s\n", req.Title)
+	}
+	for _, b := range req.BodyList {
+		content += fmt.Sprintf("body: %s\n", b)
+	}
+	for _, s := range req.Strip {
+		content += fmt.Sprintf("strip: %s\n", s)
+	}
+
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		http.Error(w, "Failed to save file", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func resolveURL(base *url.URL, rel string) string {
+	if strings.HasPrefix(rel, "data:") || strings.HasPrefix(rel, "javascript:") {
+		return rel
+	}
+	u, err := url.Parse(rel)
+	if err != nil {
+		return rel
+	}
+	return base.ResolveReference(u).String()
+}
+
+func injectAtStart(n *html.Node, tag string, child *html.Node) {
+	var target *html.Node
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == tag {
+			target = n
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+			if target != nil { return }
+		}
+	}
+	walk(n)
+
+	if target != nil {
+		if target.FirstChild != nil {
+			target.InsertBefore(child, target.FirstChild)
+		} else {
+			target.AppendChild(child)
+		}
+	}
 }
