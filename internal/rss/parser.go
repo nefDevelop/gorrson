@@ -59,8 +59,9 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 	// Get feed settings if it exists
 	existing, _ := store.GetFeedByURL(url)
-	
-	ua := "Gorrson/1.2 (+https://github.com/nef734/gorrson)"
+
+	// Default to a common browser user-agent to avoid blocking.
+	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 	user := ""
 	pass := ""
 
@@ -70,12 +71,6 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 		user = existing.Username
 		pass = existing.Password
-	}
-
-	// Automatic User-Agent for known social domains to avoid blocking
-	if (existing == nil || existing.UserAgent == "") && 
-	   (strings.Contains(url, "reddit.com") || strings.Contains(url, "mastodon") || strings.Contains(url, "bsky.app")) {
-		ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
 	}
 
 	// Create a local parser to be thread-safe with custom client
@@ -92,17 +87,22 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 	feed, err := fp.ParseURLWithContext(url, ctx)
 	if err != nil {
-		// Try discovery if initial parse fails
-		slog.Info("Direct parse failed, trying discovery", "url", url, "err", err)
-		discoveredURL, discErr := DiscoverFeed(ctx, url)
-		if discErr == nil && discoveredURL != url {
-			url = discoveredURL
-			feed, err = fp.ParseURLWithContext(url, ctx)
+		// If the URL doesn't obviously look like a feed, try discovery.
+		isFeedURL := strings.HasSuffix(url, ".rss") || strings.HasSuffix(url, ".xml") || strings.HasSuffix(url, ".atom") || strings.HasSuffix(url, "/feed")
+
+		if !isFeedURL {
+			slog.Info("Direct parse failed, trying discovery as URL is not a typical feed endpoint", "url", url, "err", err)
+			discoveredURL, discErr := DiscoverFeed(ctx, url)
+			if discErr == nil && discoveredURL != url {
+				slog.Info("Discovered new feed URL", "original", url, "discovered", discoveredURL)
+				url = discoveredURL // Update the URL we are working with
+				feed, err = fp.ParseURLWithContext(url, ctx)
+			}
 		}
-		
+
 		if err != nil {
 			slog.Error("SyncFeed failed", "url", url, "err", err)
-			return fmt.Errorf("could not parse feed at %s (tried discovery): %w", url, err)
+			return fmt.Errorf("could not parse feed at %s: %w", url, err)
 		}
 	}
 
@@ -166,11 +166,11 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		// Improve titles for social media if they are generic or missing
 		if isBluesky || isMastodon || title == "" {
 			// Check if title is generic or just a handle
-			isGeneric := strings.HasPrefix(title, "Post by ") || 
-			             strings.HasPrefix(title, "A post from ") || 
-			             strings.HasPrefix(title, "@") ||
-			             len(title) < 3
-			
+			isGeneric := strings.HasPrefix(title, "Post by ") ||
+				strings.HasPrefix(title, "A post from ") ||
+				strings.HasPrefix(title, "@") ||
+				len(title) < 3
+
 			if title == "" || isGeneric {
 				// Use a snippet of the content as a better title
 				textOnly := sanitizer.StripHTML(cleanContent)
@@ -287,7 +287,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 
 		// Special handling for Mastodon & Bluesky
-		
+
 		// If STILL no image and it's a social feed, try to fetch OG image from the page
 		// because official feeds often have limited media in RSS.
 		if (isBluesky || isMastodon) && imageURL == "" && item.Link != "" {
@@ -299,20 +299,23 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			imageURL = feed.Image.URL
 		}
 
+		// Normalize URL to prevent duplicates (remove UTM and tracking params)
+		normalizedURL := normalizeURL(item.Link)
+
 		entry := &models.Entry{
-			ID:             uuid.New().String(),
-			FeedID:         feedID,
-			Title:          title,
-			Summary:        summary,
-			Content:        cleanContent,
-			URL:            item.Link,
-			ImageURL:       imageURL,
-			PublishedAt:    pubDate,
-			IsRead:         false,
-			IsFavorite:     false,
-			IsFullContent:  false,
-			IsPriority:     matchedAction == "IMPORTANT",
-			MatchedAction:  matchedAction,
+			ID:            uuid.New().String(),
+			FeedID:        feedID,
+			Title:         title,
+			Summary:       summary,
+			Content:       cleanContent,
+			URL:           normalizedURL,
+			ImageURL:      imageURL,
+			PublishedAt:   pubDate,
+			IsRead:        false,
+			IsFavorite:    false,
+			IsFullContent: false,
+			IsPriority:    matchedAction == "IMPORTANT",
+			MatchedAction: matchedAction,
 		}
 		entry.FeverID = generateFeverID(entry.ID)
 
@@ -325,6 +328,43 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 
 	slog.Info("SyncFeed complete", "feed", feed.Title, "total_items", len(feed.Items), "saved_entries", saved)
 	return nil
+}
+
+func normalizeURL(rawURL string) string {
+	if rawURL == "" {
+		return ""
+	}
+
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	// Remove fragment
+	u.Fragment = ""
+
+	// Common tracking parameters to remove
+	q := u.Query()
+	trackingParams := []string{
+		"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
+		"ref", "referrer", "source", "tracker",
+		"fbclid", "gclid", "msclkid",
+		"_hsenc", "_hsmi", "mc_cid", "mc_eid",
+	}
+
+	changed := false
+	for _, p := range trackingParams {
+		if q.Get(p) != "" {
+			q.Del(p)
+			changed = true
+		}
+	}
+
+	if changed {
+		u.RawQuery = q.Encode()
+	}
+
+	return u.String()
 }
 
 func extractFirstImageFromHTML(html string) string {
@@ -351,7 +391,7 @@ func fetchOGImage(ctx context.Context, pageURL string) string {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	sc := NewSecureClient()
+	sc := NewSecureClient("")
 	body, err := sc.Fetch(ctx, pageURL)
 	if err != nil {
 		return ""

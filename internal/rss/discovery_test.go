@@ -8,6 +8,8 @@ import (
 )
 
 func TestDiscoverFeed(t *testing.T) {
+	t.Setenv("GORRSON_TEST", "true")
+
 	// Mock HTML server with feed links
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		html := `<html><head>

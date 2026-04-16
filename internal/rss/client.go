@@ -19,10 +19,11 @@ const (
 
 type SecureClient struct {
 	client *http.Client
+	ua     string
 }
 
 // NewSecureClient returns a client protected against SSRF and OOM.
-func NewSecureClient() *SecureClient {
+func NewSecureClient(customUA string) *SecureClient {
 	// Custom dialer to block private/local IP ranges (SSRF protection)
 	dialer := &net.Dialer{
 		Timeout:   10 * time.Second,
@@ -56,11 +57,17 @@ func NewSecureClient() *SecureClient {
 		ExpectContinueTimeout: 1 * time.Second,
 	}
 
+	ua := UserAgent
+	if customUA != "" {
+		ua = customUA
+	}
+
 	return &SecureClient{
 		client: &http.Client{
 			Transport: transport,
 			Timeout:   DefaultTimeout,
 		},
+		ua: ua,
 	}
 }
 
@@ -74,7 +81,7 @@ func (sc *SecureClient) Fetch(ctx context.Context, url string) (io.ReadCloser, e
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", UserAgent)
+	req.Header.Set("User-Agent", sc.ua)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.5")
 	req.Header.Set("DNT", "1")

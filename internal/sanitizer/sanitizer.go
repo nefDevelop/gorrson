@@ -15,7 +15,6 @@ func Clean(content string) string {
 	p.AllowElements("iframe")
 	p.AllowAttrs("src", "width", "height", "frameborder", "allow", "allowfullscreen", "scrolling").OnElements("iframe")
 	p.AllowURLSchemes("https")
-	p.AllowIFramesTargeting("https://www.youtube.com/", "https://www.youtube-nocookie.com/", "https://player.vimeo.com/", "https://www.dailymotion.com/")
 
 	// Allow data attributes often used for lazy loading or metadata (if we want to process them later)
 	p.AllowAttrs("data-src", "data-srcset", "srcset", "sizes").OnElements("img")

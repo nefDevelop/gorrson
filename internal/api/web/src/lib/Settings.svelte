@@ -16,7 +16,7 @@
   export let isMobile = false;
   export let onGenerateRecipe = (feed) => {};
 
-  import { updateFeed, deleteFeed, fetchAPIKeys, createAPIKey, deleteAPIKey } from './api.js';
+  import { updateFeed, deleteFeed, fetchAPIKeys, createAPIKey, deleteAPIKey, fetchWithAuth, updateRecipes } from './api.js';
   import { success, error as toastError } from './toast.js';
   import Modal from './Modal.svelte';
 
@@ -27,10 +27,15 @@
     dialog = { show: true, title, message, type, onConfirm, confirmText, cancelText };
   };
 
-  async function handleUpdateFeed(id, title, category) {
+  async function handleUpdateFeed(feed) {
     try {
-      await updateFeed(id, { title, category });
-      onRefresh();
+      await updateFeed(feed.id, { 
+        title: feed.title, 
+        category: feed.category,
+        user_agent: feed.user_agent
+      });
+      success(`Feed "${feed.title}" updated.`);
+      // onRefresh(); // Not strictly needed as UI is bound
     } catch (e) {
       console.error(e);
     }
@@ -56,6 +61,21 @@
 
   async function handleDeleteFeed(feed) {
     feedToDelete = feed;
+  }
+
+  async function handleUpdateRecipes() {
+    try {
+      const ok = await updateRecipes();
+      if (ok) {
+        success("Recipe update started. Refreshing feed list in a moment...");
+        // Refresh the feed list after a short delay to allow git to run
+        setTimeout(() => onRefresh(), 5000);
+      } else {
+        toastError("Failed to start recipe update.");
+      }
+    } catch (e) {
+      toastError("Network error during recipe update.");
+    }
   }
 
   $: uniqueCategories = Array.from(new Set(feeds.map(f => f.category).filter(Boolean))).sort();
@@ -238,12 +258,9 @@
        editingCat = null;
        return;
     }
-    const res = await fetch(`/categories/${encodeURIComponent(oldName)}`, {
+    const res = await fetchWithAuth(`/categories/${encodeURIComponent(oldName)}`, {
       method: 'PUT',
-      headers: { 
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${localStorage.getItem('token')}`
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newName })
     });
     if (res.ok) {
@@ -283,9 +300,7 @@
   // Data Import/Export
   async function exportConfig() {
     try {
-      const res = await fetch('/config/export', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
+      const res = await fetchWithAuth('/config/export');
       const serverConfig = await res.json();
       
       const config = {
@@ -340,11 +355,10 @@
         }
 
         // Upload to backend
-        const res = await fetch('/config/import', {
+        const res = await fetchWithAuth('/config/import', {
           method: 'POST',
           headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}` 
+            'Content-Type': 'application/json'
           },
           body: JSON.stringify({ filters: config.filters })
         });
@@ -361,9 +375,7 @@
   }
 
   async function exportOPMLBlob() {
-    const res = await fetch('/feeds/export', {
-      headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-    });
+    const res = await fetchWithAuth('/feeds/export');
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -380,11 +392,8 @@
     formData.append('file', file);
     
     try {
-      const res = await fetch('/feeds/import', {
+      const res = await fetchWithAuth('/feeds/import', {
         method: 'POST',
-        headers: { 
-          'Authorization': `Bearer ${localStorage.getItem('token')}` 
-        },
         body: formData
       });
       if (res.ok) {
@@ -399,9 +408,7 @@
 
   async function exportBackup() {
     try {
-      const res = await fetch('/backup/export', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-      });
+      const res = await fetchWithAuth('/backup/export');
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -429,9 +436,8 @@
         formData.append('file', file);
         
         try {
-          const res = await fetch('/backup/import', {
+          const res = await fetchWithAuth('/backup/import', {
             method: 'POST',
-            headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
             body: formData
           });
           if (res.ok) {
@@ -759,6 +765,9 @@
         <div class="section-header">
           <Globe size={18} />
           <span>{$t('sources')} Management</span>
+          <button class="btn-ghost" on:click={handleUpdateRecipes} style="margin-left: auto; font-size: 12px; padding: 6px 12px;">
+            Update Recipes
+          </button>
         </div>
         <div class="feeds-admin-list">
           {#each feeds as feed}
@@ -768,18 +777,22 @@
                    <span class="tiny-label">Title</span>
                    <input 
                       class="modern-input title-input" 
-                      bind:value={feed.title} 
-                      on:change={() => handleUpdateFeed(feed.id, feed.title, feed.category)} 
+                      bind:value={feed.title}
+                      on:change={() => handleUpdateFeed(feed)}
                     />
                  </div>
                  <div class="input-stack cate-stack">
                    <span class="tiny-label">Category</span>
                    <input 
                       class="modern-input cat-input" 
-                      bind:value={feed.category} 
+                      bind:value={feed.category}
                       list="category-suggestions"
-                      on:change={() => handleUpdateFeed(feed.id, feed.title, feed.category)} 
+                      on:change={() => handleUpdateFeed(feed)}
                     />
+                 </div>
+                 <div class="input-stack ua-stack">
+                   <span class="tiny-label">User-Agent (Optional)</span>
+                   <input class="modern-input" bind:value={feed.user_agent} on:change={() => handleUpdateFeed(feed)} placeholder="e.g. Mozilla/5.0..."/>
                  </div>
               </div>
               <div class="row-actions">
@@ -1321,6 +1334,10 @@
 
   .cate-stack {
     flex: 1;
+  }
+
+  .ua-stack {
+    flex: 3;
   }
 
   .tiny-label {

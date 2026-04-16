@@ -19,7 +19,7 @@ func TestAPIServer(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 	username := "api_tester"
 	password := "api_secret"
 
@@ -234,11 +234,13 @@ func TestAPIServer(t *testing.T) {
 }
 
 func TestImageProxy(t *testing.T) {
+	t.Setenv("GORRSON_TEST", "true")
+
 	dataDir := "./test_proxy_data"
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 
 	// Mock image server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -272,14 +274,14 @@ func TestRenameCategoryAPI(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 	username := "rename_tester"
 	password := "rename_secret"
 
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
 	store.UpsertUser(username, hash, "")
-	
+
 	// Pre-seed a feed with category
 	feedID := "feed-1"
 	store.AddFeed(&models.Feed{

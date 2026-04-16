@@ -9,6 +9,8 @@ import (
 )
 
 func TestScrapeFullContent(t *testing.T) {
+	t.Setenv("GORRSON_TEST", "true")
+
 	// Mock server that returns a complex HTML with noise and charset
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		html := `
@@ -31,7 +33,7 @@ func TestScrapeFullContent(t *testing.T) {
 	defer ts.Close()
 
 	ctx := context.Background()
-	content, err := ScrapeFullContent(ctx, ts.URL, "", "")
+	content, err := ScrapeFullContent(ctx, ts.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("ScrapeFullContent failed: %v", err)
 	}
@@ -54,6 +56,8 @@ func TestScrapeFullContent(t *testing.T) {
 }
 
 func TestScrapeHeuristics(t *testing.T) {
+	t.Setenv("GORRSON_TEST", "true")
+
 	// Mock server without semantic tags, using div with most paragraphs
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		html := `
@@ -73,7 +77,7 @@ func TestScrapeHeuristics(t *testing.T) {
 	defer ts.Close()
 
 	ctx := context.Background()
-	content, err := ScrapeFullContent(ctx, ts.URL, "", "")
+	content, err := ScrapeFullContent(ctx, ts.URL, "", "", "")
 	if err != nil {
 		t.Fatalf("ScrapeFullContent failed: %v", err)
 	}
@@ -88,6 +92,8 @@ func TestScrapeHeuristics(t *testing.T) {
 }
 
 func TestDuplicateRemoval(t *testing.T) {
+	t.Setenv("GORRSON_TEST", "true")
+
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		html := `
 		<html>
@@ -108,7 +114,7 @@ func TestDuplicateRemoval(t *testing.T) {
 	title := "Exclusive title match"
 	hero := "https://example.com/hero.jpg"
 
-	content, err := ScrapeFullContent(ctx, ts.URL, title, hero)
+	content, err := ScrapeFullContent(ctx, ts.URL, title, hero, "")
 	if err != nil {
 		t.Fatalf("ScrapeFullContent failed: %v", err)
 	}

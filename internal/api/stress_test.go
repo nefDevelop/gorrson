@@ -16,7 +16,7 @@ import (
 )
 
 type stats struct {
-	mu       sync.Mutex
+	mu        sync.Mutex
 	latencies []time.Duration
 }
 
@@ -63,7 +63,7 @@ func TestStress_ConcurrentLoginAndList(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 	username := "stress_tester"
 	password := "stress_pass"
 
@@ -93,7 +93,7 @@ func TestStress_ConcurrentLoginAndList(t *testing.T) {
 				})
 				req := httptest.NewRequest("POST", "/login", bytes.NewBuffer(loginBody))
 				rr := httptest.NewRecorder()
-				
+
 				opStart := time.Now()
 				srv.router.ServeHTTP(rr, req)
 				loginStats.record(time.Since(opStart))
@@ -114,7 +114,7 @@ func TestStress_ConcurrentLoginAndList(t *testing.T) {
 				req := httptest.NewRequest("GET", "/news?limit=20", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
 				rr := httptest.NewRecorder()
-				
+
 				opStart := time.Now()
 				srv.router.ServeHTTP(rr, req)
 				listStats.record(time.Since(opStart))
@@ -130,10 +130,10 @@ func TestStress_DiskSearch(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 	username := "search_tester"
 	store, _ := db.NewStore(dataDir, username)
-	
+
 	// Seed 1000 entries
 	for i := 0; i < 1000; i++ {
 		store.AddEntry(&models.Entry{
@@ -151,7 +151,7 @@ func TestStress_DiskSearch(t *testing.T) {
 	const workerCount = 20
 	const iterations = 50
 	var wg sync.WaitGroup
-	
+
 	searchStats := &stats{}
 	start := time.Now()
 
@@ -163,7 +163,7 @@ func TestStress_DiskSearch(t *testing.T) {
 				req := httptest.NewRequest("GET", "/news?search=keyword", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
 				rr := httptest.NewRecorder()
-				
+
 				opStart := time.Now()
 				srv.router.ServeHTTP(rr, req)
 				searchStats.record(time.Since(opStart))

@@ -13,7 +13,7 @@ func TestSecurity_PathTraversal(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 
 	// Try to register/login with suspicious username
 	evilUser := "../../etc/passwd"
@@ -40,7 +40,7 @@ func TestSecurity_Headers(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 	req := httptest.NewRequest("GET", "/login", nil) // Login is public
 	rr := httptest.NewRecorder()
 
@@ -67,8 +67,8 @@ func TestSecurity_SSRF(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
-	
+	srv := NewServer(dataDir, true)
+
 	// We use the proxy endpoint which uses SecureClient
 	// http://localhost:8080/proxy?url=http://127.0.0.1:22
 	req := httptest.NewRequest("GET", "/proxy?url=http://127.0.0.1:22", nil)
@@ -80,7 +80,7 @@ func TestSecurity_SSRF(t *testing.T) {
 	if rr.Code == http.StatusOK {
 		t.Error("SSRF vulnerability: access to 127.0.0.1 should be blocked")
 	}
-	
+
 	if !strings.Contains(rr.Body.String(), "blocked") && rr.Code != http.StatusInternalServerError {
 		t.Logf("Response body: %s", rr.Body.String())
 	}
