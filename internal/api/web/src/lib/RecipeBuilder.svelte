@@ -38,6 +38,15 @@
     return () => window.removeEventListener('message', handleMessage);
   });
 
+  $: if (iframe && !loading) {
+    iframe.contentWindow.postMessage({
+      type: 'gorrson-sync',
+      body: bodyXPaths,
+      title: titleXPath,
+      strip: stripXPaths
+    }, '*');
+  }
+
   function clearSelection() {
     bodyXPaths = [];
     titleXPath = "";
