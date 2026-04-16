@@ -1,121 +1,161 @@
+/** @type {Promise<string> | null} */
+let refreshPromise = null;
+
+/**
+ * @param {string} url
+ * @param {RequestInit & { headers?: Record<string, string> }} [options]
+ */
+export async function fetchWithAuth(url, options = {}) {
+  let token = localStorage.getItem("token");
+  /** @type {Record<string, string>} */
+  let headers = { ...options.headers };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+
+  let res = await fetch(url, { ...options, headers });
+
+  if (res.status === 401) {
+    const refreshToken = localStorage.getItem("refresh_token");
+    const username = localStorage.getItem("username");
+
+    if (refreshToken && username) {
+      if (!refreshPromise) {
+        refreshPromise = fetch("/refresh", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: refreshToken, username }),
+        })
+          .then(async (r) => {
+            if (!r.ok) {
+              localStorage.removeItem("token");
+              localStorage.removeItem("refresh_token");
+              throw new Error("Refresh failed");
+            }
+            const data = await r.json();
+            localStorage.setItem("token", data.access_token);
+            return data.access_token;
+          })
+          .finally(() => {
+            refreshPromise = null;
+          });
+      }
+
+      try {
+        token = await refreshPromise;
+        headers["Authorization"] = `Bearer ${token}`;
+        res = await fetch(url, { ...options, headers });
+      } catch (e) {
+        // Si falla el refresh, dejamos que pase el 401 original
+      }
+    }
+  }
+
+  return res;
+}
+
+/**
+ * @param {Record<string, any>} [params]
+ */
 export async function fetchNews(params = {}) {
   // Remove null/undefined/empty values to avoid spurious filters like category=null
-  const clean = Object.fromEntries(
-    Object.entries(params).filter(([, v]) => v != null && v !== '' && v !== 'null')
-  );
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "" && v !== "null"));
   const query = new URLSearchParams(clean).toString();
-  const res = await fetch(`/news?${query}`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (res.status === 401) throw new Error('Unauthorized');
-  if (!res.ok) throw new Error('Failed to fetch news');
+  const res = await fetchWithAuth(`/news?${query}`);
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) throw new Error("Failed to fetch news");
   return res.json();
 }
 
 export async function fetchFeeds() {
-  const res = await fetch('/feeds', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (res.status === 401) throw new Error('Unauthorized');
-  if (!res.ok) throw new Error('Failed to fetch feeds');
+  const res = await fetchWithAuth("/feeds");
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) throw new Error("Failed to fetch feeds");
   return res.json();
 }
 
+/**
+ * @param {string | number} id
+ */
 export async function markAsRead(id) {
-  const res = await fetch(`/news/${id}/read`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
+  const res = await fetchWithAuth(`/news/${id}/read`, { method: "PUT" });
   return res.ok;
 }
 
+/**
+ * @param {Record<string, any>} [params]
+ */
 export async function markAllRead(params = {}) {
-  const clean = Object.fromEntries(
-    Object.entries(params).filter(([, v]) => v != null && v !== '' && v !== 'null')
-  );
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "" && v !== "null"));
   const query = new URLSearchParams(clean).toString();
-  const res = await fetch(`/news/read-all?${query}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
+  const res = await fetchWithAuth(`/news/read-all?${query}`, { method: "PUT" });
   return res.ok;
 }
 
+/**
+ * @param {string | number} id
+ * @param {boolean} [favorite]
+ */
 export async function toggleFavorite(id, favorite = true) {
-  const res = await fetch(`/news/${id}/favorite?favorite=${favorite}`, {
-    method: 'PUT',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
+  const res = await fetchWithAuth(`/news/${id}/favorite?favorite=${favorite}`, { method: "PUT" });
   return res.ok;
 }
 
 export async function fetchFilters() {
-  const res = await fetch('/filters', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (res.status === 401) throw new Error('Unauthorized');
-  if (!res.ok) throw new Error('Failed to fetch filters');
+  const res = await fetchWithAuth("/filters");
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) throw new Error("Failed to fetch filters");
   return res.json();
 }
 
+/**
+ * @param {any} filter
+ */
 export async function addFilter(filter) {
-  const res = await fetch('/filters', {
-    method: 'POST',
+  const res = await fetchWithAuth("/filters", {
+    method: "POST",
     body: JSON.stringify(filter),
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
+    headers: { "Content-Type": "application/json" },
   });
   return res.ok;
 }
 
+/**
+ * @param {string | number} id
+ */
 export async function deleteFilter(id) {
-  const res = await fetch(`/filters/${id}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
+  const res = await fetchWithAuth(`/filters/${id}`, { method: "DELETE" });
   return res.ok;
 }
 
+/**
+ * @param {string} username
+ * @param {string} password
+ */
 export async function login(username, password) {
-  const res = await fetch('/login', {
-    method: 'POST',
-    body: JSON.stringify({ username, password })
+  const res = await fetch("/login", {
+    method: "POST",
+    body: JSON.stringify({ username, password }),
   });
-  if (!res.ok) throw new Error('Invalid credentials');
+  if (!res.ok) throw new Error("Invalid credentials");
   const data = await res.json();
-  localStorage.setItem('token', data.access_token);
-  localStorage.setItem('refresh_token', data.refresh_token);
-  localStorage.setItem('username', username);
+  localStorage.setItem("token", data.access_token);
+  localStorage.setItem("refresh_token", data.refresh_token);
+  localStorage.setItem("username", username);
   return data;
 }
 
-export async function addFeed(url, category = '') {
-  const res = await fetch('/feeds', {
-    method: 'POST',
+/**
+ * @param {string} url
+ * @param {string} [category]
+ */
+export async function addFeed(url, category = "") {
+  const res = await fetchWithAuth("/feeds", {
+    method: "POST",
     body: JSON.stringify({ url, category }),
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(text || 'Failed to add feed');
+    throw new Error(text || "Failed to add feed");
   }
   try {
     return await res.json();
@@ -124,80 +164,74 @@ export async function addFeed(url, category = '') {
   }
 }
 
+/**
+ * @param {string | number} id
+ * @param {any} data
+ */
 export async function updateFeed(id, data) {
-  const res = await fetch(`/feeds/${id}`, {
-    method: 'PATCH',
+  const res = await fetchWithAuth(`/feeds/${id}`, {
+    method: "PATCH",
     body: JSON.stringify(data),
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { "Content-Type": "application/json" },
   });
-  if (!res.ok) throw new Error('Failed to update feed');
+  if (!res.ok) throw new Error("Failed to update feed");
   return res.json();
 }
 
+/**
+ * @param {string | number} id
+ */
 export async function deleteFeed(id) {
-  const res = await fetch(`/feeds/${id}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (!res.ok) throw new Error('Failed to delete feed');
+  const res = await fetchWithAuth(`/feeds/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete feed");
 }
+
+/**
+ * @param {string | number} id
+ */
 export async function fetchFullContent(id) {
-  const res = await fetch(`/news/${id}/content`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (res.status === 401) throw new Error('Unauthorized');
-  if (!res.ok) throw new Error('Failed to fetch full content');
+  const res = await fetchWithAuth(`/news/${id}/content`);
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) throw new Error("Failed to fetch full content");
   return res.text();
 }
 
 export async function fetchAPIKeys() {
-  const res = await fetch('/api-keys', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (res.status === 401) throw new Error('Unauthorized');
-  if (!res.ok) throw new Error('Failed to fetch API keys');
+  const res = await fetchWithAuth("/api-keys");
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) throw new Error("Failed to fetch API keys");
   return res.json();
 }
 
+/**
+ * @param {string} name
+ */
 export async function createAPIKey(name) {
-  const res = await fetch('/api-keys', {
-    method: 'POST',
+  const res = await fetchWithAuth("/api-keys", {
+    method: "POST",
     body: JSON.stringify({ name }),
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`,
-      'Content-Type': 'application/json'
-    }
+    headers: { "Content-Type": "application/json" },
   });
-  if (!res.ok) throw new Error('Failed to create API key');
+  if (!res.ok) throw new Error("Failed to create API key");
   return res.json();
 }
 
+/**
+ * @param {string | number} id
+ */
 export async function deleteAPIKey(id) {
-  const res = await fetch(`/api-keys/${id}`, {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (!res.ok) throw new Error('Failed to delete API key');
+  const res = await fetchWithAuth(`/api-keys/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error("Failed to delete API key");
 }
 
 export async function fetchStats() {
-  const res = await fetch('/stats', {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('token')}`
-    }
-  });
-  if (res.status === 401) throw new Error('Unauthorized');
-  if (!res.ok) throw new Error('Failed to fetch stats');
+  const res = await fetchWithAuth("/stats");
+  if (res.status === 401) throw new Error("Unauthorized");
+  if (!res.ok) throw new Error("Failed to fetch stats");
   return res.json();
+}
+
+export async function updateRecipes() {
+  const res = await fetchWithAuth('/recipes/update', { method: 'POST' });
+  return res.ok;
 }

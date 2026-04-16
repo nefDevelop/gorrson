@@ -26,6 +26,7 @@ var serveCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetString("port")
 		logFormat, _ := cmd.Flags().GetString("log-format")
+		logLevelStr, _ := cmd.Flags().GetString("log-level")
 		silent, _ := cmd.Flags().GetBool("silent")
 		
 		if port == "" {
@@ -51,7 +52,20 @@ var serveCmd = &cobra.Command{
 			fmt.Printf("Could not open log file %s: %v\n", logPath, err)
 		}
 
-		level := slog.LevelInfo
+		// Determine log level
+		var level slog.Level
+		switch strings.ToUpper(logLevelStr) {
+		case "DEBUG":
+			level = slog.LevelDebug
+		case "WARN":
+			level = slog.LevelWarn
+		case "ERROR":
+			level = slog.LevelError
+		default:
+			level = slog.LevelInfo
+		}
+
+		// Override with silent flag for backward compatibility
 		if silent {
 			level = slog.LevelError
 		}
@@ -66,11 +80,12 @@ var serveCmd = &cobra.Command{
 		
 		slog.SetDefault(slog.New(handler))
 
-		if silent {
+		// If level is ERROR or higher, discard standard log output
+		if level >= slog.LevelError {
 			log.SetOutput(io.Discard)
 		}
 
-		slog.Info("gorrson server starting", slog.String("port", port), slog.String("format", logFormat))
+		slog.Info("gorrson server starting", slog.String("port", port), slog.String("format", logFormat), slog.String("level", level.String()))
 
 		// Context for workers and server shutdown
 		ctx, cancel := context.WithCancel(context.Background())
@@ -101,7 +116,7 @@ var serveCmd = &cobra.Command{
 		addr := ":" + port
 		srv := &http.Server{
 			Addr:    addr,
-			Handler: server.GetRouter(), // Note: Changed to GetRouter() to match common naming
+			Handler: server.GetRouter(),
 		}
 
 		// Channel to listen for signals
@@ -138,5 +153,6 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().StringP("port", "p", "7077", "Port to listen on")
 	serveCmd.Flags().StringP("log-format", "f", "text", "Log format (text or json)")
-	serveCmd.Flags().BoolP("silent", "s", false, "Only show error logs")
+	serveCmd.Flags().StringP("log-level", "l", "debug", "Min log level (debug, info, warn, error)")
+	serveCmd.Flags().BoolP("silent", "s", false, "Deprecated: use --log-level error instead")
 }

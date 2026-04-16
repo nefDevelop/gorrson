@@ -620,7 +620,10 @@
       <RecipeBuilder 
         show={!!recipeBuilderFeed} 
         feed={recipeBuilderFeed} 
-        onClose={() => recipeBuilderFeed = null} 
+      onClose={(saved) => { 
+        recipeBuilderFeed = null; 
+        if (saved === true) loadData(); 
+      }} 
       />
     {/if}
 

@@ -17,20 +17,20 @@ func TestFeverAPI(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 	username := "fever_user"
 	password := "fever_pass"
 
 	// 0. Setup user with Fever Key
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	
+
 	// Fever Key: bcrypt(md5(user:pass))
-	
+
 	// Let's use real hashing for auth.CheckPasswordHash to pass
-	feverApiKey := "fever_md5_secret" 
+	feverApiKey := "fever_md5_secret"
 	feverBcrypt, _ := auth.HashPassword(feverApiKey)
-	
+
 	_ = store.UpsertUser(username, hash, feverBcrypt)
 	_ = store.Close()
 
@@ -63,7 +63,7 @@ func TestConfigAPI(t *testing.T) {
 	os.RemoveAll(dataDir)
 	defer os.RemoveAll(dataDir)
 
-	srv := NewServer(dataDir)
+	srv := NewServer(dataDir, true)
 	username := "config_user"
 	password := "config_pass"
 

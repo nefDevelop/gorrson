@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
 	"github.com/nef734/gorrson/internal/models"
 	"github.com/nef734/gorrson/internal/sanitizer"
+	_ "modernc.org/sqlite"
 )
 
 type Store struct {
@@ -35,7 +35,7 @@ func NewStore(dataDir, username string) (*Store, error) {
 	}
 
 	s := &Store{db: db, username: username}
-	
+
 	// Optimization: SQLite performs best with a single connection in Go to avoid lock contention.
 	// WAL mode handles the concurrency at the database level.
 	db.SetMaxOpenConns(1)
@@ -229,7 +229,7 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	FROM entries e 
 	JOIN feeds f ON e.feed_id = f.id`
 	var args []interface{}
-	
+
 	conditions := []string{}
 	if unreadOnly {
 		conditions = append(conditions, "e.is_read = 0")
@@ -462,8 +462,8 @@ func (s *Store) DeleteFeed(id string) error {
 	return err
 }
 
-func (s *Store) UpdateFeed(id, title, category string) error {
-	_, err := s.db.Exec("UPDATE feeds SET title = ?, category = ? WHERE id = ?", title, category, id)
+func (s *Store) UpdateFeed(id, title, category, userAgent string) error {
+	_, err := s.db.Exec("UPDATE feeds SET title = ?, category = ?, user_agent = ? WHERE id = ?", title, category, userAgent, id)
 	return err
 }
 

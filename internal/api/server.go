@@ -118,8 +118,6 @@ func (s *Server) routes() {
 	s.router.With(s.loginRateLimit).Post("/login", s.handleLogin)
 	s.router.Post("/refresh", s.handleRefresh)
 	s.router.Post("/logout", s.handleLogout)
-	s.router.Get("/proxy", s.handleImageProxy)
-	s.router.Get("/proxy/page", s.handlePageProxy)
 
 	// Fever API endpoint (authentication is handled inside the handler via api_key)
 	s.router.With(s.loginRateLimit).Post("/api/fever", s.handleFeverAPI)
@@ -127,6 +125,9 @@ func (s *Server) routes() {
 
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
+
+		r.Get("/proxy", s.handleImageProxy)
+		r.Get("/proxy/page", s.handlePageProxy)
 
 		r.Get("/news", s.handleListNews)
 		r.Get("/news/{id}/content", s.handleGetFullContent)
@@ -141,6 +142,7 @@ func (s *Server) routes() {
 		r.Patch("/feeds/{id}", s.handleUpdateFeed)
 		r.Delete("/feeds/{id}", s.handleDeleteFeed)
 		r.Post("/recipes/save", s.handleSaveRecipe)
+		r.Post("/recipes/update", s.handleUpdateRecipes)
 
 		r.Put("/categories/{name}", s.handleRenameCategory)
 
@@ -201,14 +203,33 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		}
 
 		var username string
+		var token string
 
-		// 1. Try JWT Bearer Token
-		authHeader := r.Header.Get("Authorization")
-		if strings.HasPrefix(authHeader, "Bearer ") {
-			token := strings.TrimPrefix(authHeader, "Bearer ")
+		// 1. Try Cookie first
+		if cookie, err := r.Cookie("gorrson_auth"); err == nil {
+			token = cookie.Value
 			username, _ = auth.ValidateToken(token)
-		} else {
-			// 2. Try X-API-Key (format: "user:key")
+		}
+
+		// 2. Try Authorization header if no valid user from cookie
+		if username == "" {
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") {
+				token = strings.TrimPrefix(authHeader, "Bearer ")
+				username, _ = auth.ValidateToken(token)
+			}
+		}
+
+		// 3. Try "token" query parameter (essential for iframes/proxies)
+		if username == "" {
+			token = r.URL.Query().Get("token")
+			if token != "" {
+				username, _ = auth.ValidateToken(token)
+			}
+		}
+
+		// 4. Try X-API-Key (format: "user:key") if still no user
+		if username == "" {
 			apiKey := r.Header.Get("X-API-Key")
 			if apiKey != "" {
 				parts := strings.SplitN(apiKey, ":", 2)
@@ -216,7 +237,6 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 					u := parts[0]
 					rawKey := parts[1]
 
-					// Check if user exists (by attempting to open store)
 					store, serr := db.NewStore(s.dataDir, u)
 					if serr == nil {
 						defer store.Close()
@@ -295,6 +315,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = store.CreateSession(session)
 
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gorrson_auth",
+		Value:    accessToken,
+		Expires:  time.Now().Add(24 * time.Hour),
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"access_token":  accessToken,
@@ -328,6 +358,17 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newAccessToken, _ := auth.GenerateToken(session.Username)
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gorrson_auth",
+		Value:    newAccessToken,
+		Expires:  time.Now().Add(24 * time.Hour),
+		HttpOnly: true,
+		Secure:   r.TLS != nil,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+	})
+
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{"access_token": newAccessToken})
 }
@@ -344,6 +385,15 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		defer store.Close()
 		_ = store.DeleteSession(req.RefreshToken)
 	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "gorrson_auth",
+		Value:    "",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Path:     "/",
+		SameSite: http.SameSiteLaxMode,
+	})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -395,6 +445,7 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	username := r.Context().Value(usernameKey).(string)
+	slog.Debug("Full content requested", "id", id, "user", username)
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
@@ -414,7 +465,16 @@ func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fullContent, err := rss.ScrapeFullContent(r.Context(), entry.URL, entry.Title, entry.ImageURL)
+	var customUA string
+	feed, err := store.GetFeedByID(entry.FeedID)
+	if err == nil {
+		customUA = feed.UserAgent
+	}
+
+	// NOTE: This requires changing the signature of rss.ScrapeFullContent
+	// to func ScrapeFullContent(ctx context.Context, pageURL, title, heroImageURL, userAgent string) (string, error)
+	// and using the userAgent when creating the SecureClient.
+	fullContent, err := rss.ScrapeFullContent(r.Context(), entry.URL, entry.Title, entry.ImageURL, customUA)
 	if err != nil {
 		slog.Error("Failed to scrape full content", "url", entry.URL, "id", id, "err", err)
 		http.Error(w, "Content extraction failed (the site might be blocking us or require a subscription)", http.StatusServiceUnavailable)
@@ -493,11 +553,13 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 	for _, f := range feeds {
 		hasRecipe := false
 		target := f.SiteURL
-		if target == "" { target = f.FeedURL }
+		if target == "" {
+			target = f.FeedURL
+		}
 		if r, ferr := rss.FindRecipe(target); ferr == nil && r != nil {
 			hasRecipe = true
 		}
-		
+
 		enriched = append(enriched, map[string]interface{}{
 			"id":           f.ID,
 			"title":        f.Title,
@@ -506,6 +568,7 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 			"category":     f.Category,
 			"unread_count": f.UnreadCount,
 			"has_recipe":   hasRecipe,
+			"user_agent":   f.UserAgent,
 		})
 	}
 
@@ -556,7 +619,7 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 
 	feed, _ := store.GetFeedByURL(req.URL)
 	if feed != nil && req.Category != "" {
-		store.UpdateFeed(feed.ID, feed.Title, req.Category)
+		store.UpdateFeed(feed.ID, feed.Title, req.Category, feed.UserAgent)
 		feed.Category = req.Category
 	}
 
@@ -583,11 +646,17 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	outlines, err := opml.Parse(reader)
 	if err == nil {
 		go func(feeds []opml.Outline, user string) {
-			st, _ := db.NewStore(s.dataDir, user)
+			st, err := db.NewStore(s.dataDir, user)
+			if err != nil {
+				slog.Error("ImportOPML goroutine: failed to open store", "user", user, "err", err)
+				return
+			}
 			defer st.Close()
 			for _, o := range feeds {
 				if o.XMLURL != "" {
-					s.parser.SyncFeed(context.Background(), o.XMLURL, st)
+					if err := s.parser.SyncFeed(context.Background(), o.XMLURL, st); err != nil {
+						slog.Error("ImportOPML goroutine: sync failed", "url", o.XMLURL, "err", err)
+					}
 				}
 			}
 		}(outlines, username)
@@ -620,13 +689,17 @@ func (s *Server) handleExportOPML(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	var req struct{ Title, Category string }
+	var req struct {
+		Title     string `json:"title"`
+		Category  string `json:"category"`
+		UserAgent string `json:"user_agent"`
+	}
 	json.NewDecoder(r.Body).Decode(&req)
 	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
-		store.UpdateFeed(id, req.Title, req.Category)
+		store.UpdateFeed(id, req.Title, req.Category, req.UserAgent)
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -728,7 +801,7 @@ func (s *Server) handleImageProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Not cached, download it using SecureClient
-	sc := rss.NewSecureClient()
+	sc := rss.NewSecureClient("")
 	body, err := sc.Fetch(r.Context(), imageURL)
 	if err != nil {
 		http.Error(w, "Failed to fetch image: "+err.Error(), http.StatusBadGateway)
@@ -1234,19 +1307,33 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 	targetURL := r.URL.Query().Get("url")
-	slog.Info("Page proxy request START", "url", targetURL)
+	feedID := r.URL.Query().Get("feed_id")
+	username := r.Context().Value(usernameKey).(string)
+	slog.Info("Page proxy request START", "url", targetURL, "feed_id", feedID, "user", username)
 	
 	// Ensure this specific endpoint is allowed to be framed by our own app
 	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
-	
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+
 	if targetURL == "" {
 		slog.Warn("Page proxy request: MISSING URL")
 		http.Error(w, "Missing url parameter", http.StatusBadRequest)
 		return
 	}
 
-	sc := rss.NewSecureClient()
+	var customUA string
+	if feedID != "" {
+		store, err := db.NewStore(s.dataDir, username)
+		if err == nil {
+			defer store.Close()
+			feed, err := store.GetFeedByID(feedID)
+			if err == nil && feed.UserAgent != "" {
+				customUA = feed.UserAgent
+			}
+		}
+	}
+	sc := rss.NewSecureClient(customUA)
 	body, err := sc.Fetch(r.Context(), targetURL)
 	if err != nil {
 		slog.Error("Failed to fetch proxy page", "url", targetURL, "error", err)
@@ -1451,13 +1538,15 @@ func (s *Server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	target := feed.SiteURL
-	if target == "" { target = feed.FeedURL }
+	if target == "" {
+		target = feed.FeedURL
+	}
 	u, _ := url.Parse(target)
 	domain := strings.TrimPrefix(u.Hostname(), "www.")
-	
+
 	customDir := filepath.Join(s.dataDir, "site-config", "custom")
 	os.MkdirAll(customDir, 0755)
-	
+
 	path := filepath.Join(customDir, domain+".txt")
 	content := fmt.Sprintf("# Custom Recipe for %s\n", domain)
 	if req.Title != "" {
@@ -1499,7 +1588,9 @@ func injectAtStart(n *html.Node, tag string, child *html.Node) {
 		}
 		for c := n.FirstChild; c != nil; c = c.NextSibling {
 			walk(c)
-			if target != nil { return }
+			if target != nil {
+				return
+			}
 		}
 	}
 	walk(n)
@@ -1511,4 +1602,11 @@ func injectAtStart(n *html.Node, tag string, child *html.Node) {
 			target.AppendChild(child)
 		}
 	}
+}
+
+func (s *Server) handleUpdateRecipes(w http.ResponseWriter, r *http.Request) {
+	go rss.UpdateRecipes() // Run in background
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "Recipe update process started in the background."})
 }

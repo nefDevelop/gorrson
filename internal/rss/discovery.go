@@ -13,7 +13,7 @@ import (
 // DiscoverFeed attempts to find a feed URL in an HTML page.
 func DiscoverFeed(ctx context.Context, pageURL string) (string, error) {
 	slog.Info("DiscoverFeed: fetching page", "url", pageURL)
-	sc := NewSecureClient()
+	sc := NewSecureClient("")
 	body, err := sc.Fetch(ctx, pageURL)
 	if err != nil {
 		slog.Warn("DiscoverFeed: fetch failed", "url", pageURL, "err", err)

@@ -9,17 +9,39 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/antchfx/htmlquery"
 	"golang.org/x/net/html"
 )
 
+var (
+	updateMu       sync.Mutex
+	lastUpdate     time.Time
+	updateInterval = 30 * time.Minute // Don't update more than once every 30 mins
+)
+
 // UpdateRecipes performs a git pull on the ftr-site-config repository to get the latest rules.
 func UpdateRecipes() error {
+	updateMu.Lock()
+	defer updateMu.Unlock()
+
+	if time.Since(lastUpdate) < updateInterval {
+		return nil
+	}
+
 	basePath := "data/site-config/ftr-site-config"
 	// Check if the directory exists and is a git repo
 	if _, err := os.Stat(filepath.Join(basePath, ".git")); os.IsNotExist(err) {
-		slog.Warn("Recipes repository not found or not a git repo, skipping update", "path", basePath)
+		slog.Info("Recipes repository not found, cloning...", "path", basePath)
+		cmd := exec.Command("git", "clone", "https://github.com/fivefilters/ftr-site-config.git", basePath)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			slog.Error("Failed to clone recipes", "error", err, "output", string(output))
+			return err
+		}
+		slog.Info("Extraction recipes cloned successfully")
+		lastUpdate = time.Now()
 		return nil
 	}
 
@@ -31,9 +53,9 @@ func UpdateRecipes() error {
 	}
 
 	slog.Info("Extraction recipes updated successfully")
+	lastUpdate = time.Now()
 	return nil
 }
-
 
 // Recipe defines site-specific extraction rules (FiveFilters compatible).
 type Recipe struct {
@@ -42,7 +64,6 @@ type Recipe struct {
 	Title  string
 	Source string // Path or origin
 }
-
 
 // FindRecipe searches for a config file matching the URL's domain.
 func FindRecipe(targetURL string) (*Recipe, error) {
@@ -64,7 +85,7 @@ func FindRecipe(targetURL string) (*Recipe, error) {
 
 	// Try custom recipes first, then standard repository
 	customPath := filepath.Join(filepath.Dir(basePath), "custom")
-	
+
 	parts := strings.Split(host, ".")
 	// Check custom first
 	for i := 0; i < len(parts)-1; i++ {
@@ -144,7 +165,7 @@ func ApplyRecipe(root *html.Node, recipe *Recipe) (string, error) {
 	}
 
 	debugLog("DEBUG: Applying recipe with %d body rules and %d strip rules\n", len(recipe.Body), len(recipe.Strip))
-	
+
 	// 1. Collect all potential nodes from all body XPaths
 	var allMatchedNodes []*html.Node
 	for _, xpath := range recipe.Body {
@@ -193,54 +214,29 @@ func ApplyRecipe(root *html.Node, recipe *Recipe) (string, error) {
 
 	for _, node := range finalNodes {
 		// Apply Strip rules INSIDE the node
-		for _, stripXpath := range recipe.Strip {
-			toStrip, _ := htmlquery.QueryAll(node, stripXpath)
-			for _, s := range toStrip {
-				if s.Parent != nil {
-					s.Parent.RemoveChild(s)
+		for _, stripXPath := range recipe.Strip {
+			nodesToRemove, err := htmlquery.QueryAll(node, stripXPath)
+			if err == nil {
+				for _, n := range nodesToRemove {
+					if n.Parent != nil {
+						n.Parent.RemoveChild(n)
+					}
 				}
 			}
 		}
 
-		// Convert to HTML
-		htmlContent := htmlquery.OutputHTML(node, true)
-		
-		// Final de-duplication by normalized text content
-		// This handles cases where different XPaths might match different nodes with same text
-		plainText := strings.TrimSpace(nodeText(node))
-		if plainText == "" && !strings.Contains(htmlContent, "<img") && !strings.Contains(htmlContent, "<iframe") {
-			continue // Skip empty blocks that don't have media
+		content := htmlquery.OutputHTML(node, true)
+		if !seenContent[content] {
+			seenContent[content] = true
+			results = append(results, content)
 		}
-
-		if !seenContent[plainText] || plainText == "" {
-			if plainText != "" {
-				seenContent[plainText] = true
-			}
-			results = append(results, htmlContent)
-		}
-	}
-
-	if len(results) == 0 {
-		return "", fmt.Errorf("no content left after cleaning")
 	}
 
 	return strings.Join(results, "\n"), nil
 }
 
-// nodeText extracts all text from a node and its children
-func nodeText(n *html.Node) string {
-	if n.Type == html.TextNode {
-		return n.Data
-	}
-	var buf strings.Builder
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		buf.WriteString(nodeText(c))
-	}
-	return buf.String()
-}
-
-func isAncestor(ancestor, node *html.Node) bool {
-	for n := node.Parent; n != nil; n = n.Parent {
+func isAncestor(ancestor, child *html.Node) bool {
+	for n := child.Parent; n != nil; n = n.Parent {
 		if n == ancestor {
 			return true
 		}

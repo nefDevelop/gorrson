@@ -2,12 +2,13 @@
   import { Shield, Wand2, X, Plus, Trash2, Send, Check } from 'lucide-svelte';
   import { t } from './i18n.js';
   import { success, error as toastError } from './toast.js';
+  import { fetchWithAuth } from './api.js';
   import { fade, fly } from 'svelte/transition';
   import { onMount } from 'svelte';
 
   export let show = false;
   export let feed = null;
-  export let onClose = () => {};
+  export let onClose = (saved = false) => {};
 
   let bodyXPaths = [];
   let titleXPath = "";
@@ -61,11 +62,10 @@
     }
     
     try {
-      const res = await fetch('/recipes/save', {
+      const res = await fetchWithAuth('/recipes/save', {
         method: 'POST',
         headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}` 
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           feed_id: feed.id,
@@ -77,7 +77,7 @@
 
       if (res.ok) {
         success("Recipe saved successfully! Now refresh news to see clean text.");
-        onClose();
+        onClose(true);
       } else {
         const err = await res.text();
         toastError("Failed to save: " + err);
@@ -111,7 +111,7 @@
           <span class="url">{targetUrl || "MISSING URL!"}</span>
         </div>
       </div>
-      <button class="btn-close" on:click={onClose}><X size={24} /></button>
+    <button class="btn-close" on:click={() => onClose(false)}><X size={24} /></button>
     </header>
 
     <div class="builder-main">
@@ -119,7 +119,7 @@
         <iframe 
           bind:this={iframe}
           title="Recipe Preview"
-          src={targetUrl ? `/proxy/page?url=${encodeURIComponent(targetUrl)}` : ''} 
+          src={targetUrl ? `/proxy/page?url=${encodeURIComponent(targetUrl)}&feed_id=${feed.id}&token=${localStorage.getItem('token')}` : ''}
           class="preview-frame"
           on:load={() => loading = false}
         ></iframe>
