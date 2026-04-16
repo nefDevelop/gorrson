@@ -95,11 +95,79 @@ func ScrapeFullContent(ctx context.Context, targetURL string, originalTitle stri
 		ruleInfo = fmt.Sprintf("%s Recipe: %d body, %d strip rules", 
 			sourceName, len(recipe.Body), len(recipe.Strip))
 	}
+
+	// NEW: Resolve relative URLs before final cleaning
+	finalContent = resolveRelativeURLs(finalContent, targetURL)
+
 	fmt.Printf("➜ Extraction [%s]: %s | Raw: %dB | Extracted: %dB | Final: %dB\n", 
 		ruleInfo, targetURL, len(htmlStr), len(content), len(finalContent))
 
 	// Final clean with our sanitizer (which uses bluemonday)
 	return sanitizer.Clean(finalContent), nil
+}
+
+func resolveRelativeURLs(htmlStr string, baseURL string) string {
+	base, err := url.Parse(baseURL)
+	if err != nil {
+		return htmlStr
+	}
+
+	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
+	if err != nil {
+		return htmlStr
+	}
+
+	doc.Find("img, a, source, iframe").Each(func(i int, s *goquery.Selection) {
+		// Handle Lazy Loading: Move data-src to src if src is missing or a placeholder
+		if s.Is("img") {
+			lazyAttrs := []string{"data-src", "data-lazy-src", "data-original", "data-actualsrc"}
+			src, _ := s.Attr("src")
+			isPlaceholder := src == "" || strings.Contains(src, "data:image") || strings.Contains(src, "placeholder") || strings.Contains(src, "transparent")
+			
+			if isPlaceholder {
+				for _, la := range lazyAttrs {
+					if val, ok := s.Attr(la); ok && val != "" {
+						s.SetAttr("src", val)
+						break
+					}
+				}
+			}
+		}
+
+		attrs := []string{"src", "href", "srcset"}
+		for _, attr := range attrs {
+			if val, ok := s.Attr(attr); ok {
+				// Special handling for srcset
+				if attr == "srcset" {
+					parts := strings.Split(val, ",")
+					for j, p := range parts {
+						p = strings.TrimSpace(p)
+						bits := strings.SplitN(p, " ", 2)
+						if len(bits) > 0 {
+							if u, err := url.Parse(bits[0]); err == nil {
+								bits[0] = base.ResolveReference(u).String()
+								parts[j] = strings.Join(bits, " ")
+							}
+						}
+					}
+					s.SetAttr(attr, strings.Join(parts, ", "))
+					continue
+				}
+
+				if u, err := url.Parse(val); err == nil {
+					s.SetAttr(attr, base.ResolveReference(u).String())
+				}
+			}
+		}
+	})
+
+	// Wrap tables for responsiveness
+	doc.Find("table").Each(func(i int, s *goquery.Selection) {
+		s.WrapHtml("<div class=\"table-container\" style=\"overflow-x: auto; max-width: 100%; margin-bottom: 1em;\"></div>")
+	})
+
+	h, _ := doc.Html()
+	return h
 }
 
 func cleanNoise(doc *goquery.Document, originalTitle string, originalImage string) {

@@ -538,6 +538,9 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("handleAddFeed: request", "user", username, "url", req.URL, "category", req.Category)
 
+	// Update recipes in background to catch new site rules
+	go rss.UpdateRecipes()
+
 	store, err := db.NewStore(s.dataDir, username)
 	if err != nil {
 		http.Error(w, "Could not open DB", http.StatusInternalServerError)
@@ -1290,9 +1293,23 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 			}
 
 			for i, attr := range n.Attr {
-				if attr.Key == "href" || attr.Key == "src" {
-					absURL := resolveURL(u, attr.Val)
-					n.Attr[i].Val = absURL
+				if attr.Key == "href" || attr.Key == "src" || attr.Key == "srcset" {
+					if attr.Key == "srcset" {
+						// Simple srcset rewrite (can be improved further)
+						parts := strings.Split(attr.Val, ",")
+						for j, p := range parts {
+							p = strings.TrimSpace(p)
+							bits := strings.SplitN(p, " ", 2)
+							if len(bits) > 0 {
+								bits[0] = resolveURL(u, bits[0])
+								parts[j] = strings.Join(bits, " ")
+							}
+						}
+						n.Attr[i].Val = strings.Join(parts, ", ")
+					} else {
+						absURL := resolveURL(u, attr.Val)
+						n.Attr[i].Val = absURL
+					}
 				}
 			}
 		}
@@ -1331,13 +1348,18 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 		Data: `
 (function() {
     let style = document.createElement('style');
-    style.innerHTML = '.gorrson-highlight { outline: 2px solid #ff5252 !important; cursor: pointer !important; opacity: 0.8 !important; } ' +
-                      '* { visibility: visible !important; opacity: 1 !important; max-width: 100% !important; box-sizing: border-box !important; } ' +
-                      'body { display: block !important; background: white !important; color: black !important; overflow-x: hidden !important; width: 100% !important; }';
+    style.innerHTML = ` + "`" + `
+        .gorrson-highlight { outline: 3px solid #ff5252 !important; cursor: pointer !important; opacity: 0.8 !important; }
+        .gorrson-selected-body { outline: 3px solid #4caf50 !important; background: rgba(76, 175, 80, 0.1) !important; }
+        .gorrson-selected-strip { outline: 3px solid #f44336 !important; background: rgba(244, 67, 54, 0.1) !important; opacity: 0.4 !important; }
+        .gorrson-selected-title { outline: 3px solid #2196f3 !important; background: rgba(33, 150, 243, 0.1) !important; }
+        * { visibility: visible !important; opacity: 1 !important; max-width: 100% !important; box-sizing: border-box !important; }
+        body { display: block !important; background: white !important; color: black !important; overflow-x: hidden !important; width: 100% !important; }
+    ` + "`" + `;
     document.head.appendChild(style);
 
     document.addEventListener('mouseover', e => {
-        if (e.target.tagName === 'BODY') return;
+        if (e.target.tagName === 'BODY' || e.target.tagName === 'HTML') return;
         e.target.classList.add('gorrson-highlight');
     }, true);
     document.addEventListener('mouseout', e => {
@@ -1350,17 +1372,40 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
         window.parent.postMessage({ type: 'gorrson-select', xpath: xpath }, '*');
     }, true);
 
+    window.addEventListener('message', e => {
+        if (e.data.type === 'gorrson-sync') {
+            document.querySelectorAll('.gorrson-selected-body, .gorrson-selected-strip, .gorrson-selected-title')
+                    .forEach(el => el.classList.remove('gorrson-selected-body', 'gorrson-selected-strip', 'gorrson-selected-title'));
+            
+            if (e.data.body) e.data.body.forEach(xpath => highlightByXPath(xpath, 'gorrson-selected-body'));
+            if (e.data.strip) e.data.strip.forEach(xpath => highlightByXPath(xpath, 'gorrson-selected-strip'));
+            if (e.data.title) highlightByXPath(e.data.title, 'gorrson-selected-title');
+        }
+    });
+
+    function highlightByXPath(xpath, className) {
+        try {
+            let result = document.evaluate(xpath, document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null);
+            let node = result.singleNodeValue;
+            if (node && node.classList) node.classList.add(className);
+        } catch(e) {}
+    }
+
     function getXPath(node) {
         if (node.nodeType !== 1) return '';
-        if (node.id) return 'id("' + node.id + '")';
-        if (node === document.body) return 'body';
-        let s = getXPath(node.parentNode);
+        if (node.id) return "//" + node.tagName.toLowerCase() + "[@id='" + node.id + "']";
+        if (node === document.body) return '//body';
+        
         let tag = node.tagName.toLowerCase();
         let ix = 1;
         for (let sib = node.previousSibling; sib; sib = sib.previousSibling) {
             if (sib.nodeType === 1 && sib.tagName === node.tagName) ix++;
         }
-        return s + '/' + tag + '[' + ix + ']';
+
+        if (node.parentNode && node.parentNode.nodeType === 1 && node.parentNode.tagName !== 'HTML') {
+            return getXPath(node.parentNode) + '/' + tag + '[' + ix + ']';
+        }
+        return '//' + tag + '[' + ix + ']';
     }
 })();
 `,

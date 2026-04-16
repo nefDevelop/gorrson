@@ -3,14 +3,36 @@ package rss
 import (
 	"bufio"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/antchfx/htmlquery"
 	"golang.org/x/net/html"
 )
+
+// UpdateRecipes performs a git pull on the ftr-site-config repository to get the latest rules.
+func UpdateRecipes() error {
+	basePath := "data/site-config/ftr-site-config"
+	// Check if the directory exists and is a git repo
+	if _, err := os.Stat(filepath.Join(basePath, ".git")); os.IsNotExist(err) {
+		slog.Warn("Recipes repository not found or not a git repo, skipping update", "path", basePath)
+		return nil
+	}
+
+	slog.Info("Updating extraction recipes from repository...")
+	cmd := exec.Command("git", "-C", basePath, "pull", "origin", "master")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		slog.Error("Failed to update recipes", "error", err, "output", string(output))
+		return err
+	}
+
+	slog.Info("Extraction recipes updated successfully")
+	return nil
+}
 
 
 // Recipe defines site-specific extraction rules (FiveFilters compatible).
@@ -122,71 +144,99 @@ func ApplyRecipe(root *html.Node, recipe *Recipe) (string, error) {
 	}
 
 	debugLog("DEBUG: Applying recipe with %d body rules and %d strip rules\n", len(recipe.Body), len(recipe.Strip))
-	var results []string
-	var processedNodes []*html.Node
+	
+	// 1. Collect all potential nodes from all body XPaths
+	var allMatchedNodes []*html.Node
+	for _, xpath := range recipe.Body {
+		nodes, err := htmlquery.QueryAll(root, xpath)
+		if err != nil {
+			continue
+		}
+		allMatchedNodes = append(allMatchedNodes, nodes...)
+	}
 
-	// 2. Extract Body
-	if len(recipe.Body) > 0 {
-		for i, xpath := range recipe.Body {
-			nodes, err := htmlquery.QueryAll(root, xpath)
-			if err != nil {
-				fmt.Printf("DEBUG: Body XPath [%d] (%s) error: %v\n", i, xpath, err)
+	if len(allMatchedNodes) == 0 {
+		return "", fmt.Errorf("recipe applied but no nodes matched")
+	}
+
+	// 2. Filter out nodes that are descendants of other matched nodes (Hierarchy De-duplication)
+	var finalNodes []*html.Node
+	for i, nodeA := range allMatchedNodes {
+		isChild := false
+		for j, nodeB := range allMatchedNodes {
+			if i == j {
 				continue
 			}
-			
-			debugLog("DEBUG: Body XPath [%d] (%s) found %d nodes\n", i, xpath, len(nodes))
-			for j, node := range nodes {
-				isNested := false
-				for _, p := range processedNodes {
-					if isAncestor(p, node) {
-						isNested = true
-						break
-					}
+			if isAncestor(nodeB, nodeA) {
+				isChild = true
+				break
+			}
+		}
+		if !isChild {
+			// Check if we already have this exact node (same pointer)
+			exists := false
+			for _, fn := range finalNodes {
+				if fn == nodeA {
+					exists = true
+					break
 				}
-				if isNested {
-					debugLog("DEBUG: Node [%d.%d] is nested, skipping\n", i, j)
-					continue
-				}
-
-				// Apply Strip noise INSIDE the body node BEFORE outputting
-				for k, stripXpath := range recipe.Strip {
-					toStrip, _ := htmlquery.QueryAll(node, stripXpath)
-					if len(toStrip) > 0 {
-						debugLog("DEBUG: Strip rule [%d] (%s) removed %d elements from node [%d.%d]\n", k, stripXpath, len(toStrip), i, j)
-					}
-					for _, s := range toStrip {
-						if s.Parent != nil {
-							s.Parent.RemoveChild(s)
-						}
-					}
-				}
-
-				htmlContent := htmlquery.OutputHTML(node, true)
-				// Simple deduplication by content
-				alreadyAdded := false
-				for _, r := range results {
-					if r == htmlContent {
-						alreadyAdded = true
-						break
-					}
-				}
-
-				if !alreadyAdded {
-					results = append(results, htmlContent)
-					processedNodes = append(processedNodes, node)
-					debugLog("DEBUG: Added content from node [%d.%d] (size: %d)\n", i, j, len(htmlContent))
-				} else {
-					debugLog("DEBUG: Node [%d.%d] has identical content to previous, skipping\n", i, j)
-				}
+			}
+			if !exists {
+				finalNodes = append(finalNodes, nodeA)
 			}
 		}
 	}
 
+	// 3. Process and clean each top-level node
+	var results []string
+	seenContent := make(map[string]bool)
+
+	for _, node := range finalNodes {
+		// Apply Strip rules INSIDE the node
+		for _, stripXpath := range recipe.Strip {
+			toStrip, _ := htmlquery.QueryAll(node, stripXpath)
+			for _, s := range toStrip {
+				if s.Parent != nil {
+					s.Parent.RemoveChild(s)
+				}
+			}
+		}
+
+		// Convert to HTML
+		htmlContent := htmlquery.OutputHTML(node, true)
+		
+		// Final de-duplication by normalized text content
+		// This handles cases where different XPaths might match different nodes with same text
+		plainText := strings.TrimSpace(nodeText(node))
+		if plainText == "" && !strings.Contains(htmlContent, "<img") && !strings.Contains(htmlContent, "<iframe") {
+			continue // Skip empty blocks that don't have media
+		}
+
+		if !seenContent[plainText] || plainText == "" {
+			if plainText != "" {
+				seenContent[plainText] = true
+			}
+			results = append(results, htmlContent)
+		}
+	}
+
 	if len(results) == 0 {
-		return "", fmt.Errorf("recipe applied but no content found")
+		return "", fmt.Errorf("no content left after cleaning")
 	}
 
 	return strings.Join(results, "\n"), nil
+}
+
+// nodeText extracts all text from a node and its children
+func nodeText(n *html.Node) string {
+	if n.Type == html.TextNode {
+		return n.Data
+	}
+	var buf strings.Builder
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		buf.WriteString(nodeText(c))
+	}
+	return buf.String()
 }
 
 func isAncestor(ancestor, node *html.Node) bool {
