@@ -27,7 +27,7 @@ COPY . .
 COPY --from=ui-builder /app/internal/api/web/dist ./internal/api/web/dist
 
 # Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o gorrson main.go
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o gorrson main.go
 
 # Stage 3: Final Runtime Image
 FROM alpine:latest
