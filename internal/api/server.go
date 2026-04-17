@@ -249,9 +249,14 @@ type loginRequest struct {
 	Password string `json:"password"`
 }
 
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
+	return json.NewDecoder(r.Body).Decode(dst)
+}
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req loginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -303,7 +308,7 @@ type refreshRequest struct {
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -339,7 +344,7 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	var req refreshRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -512,8 +517,16 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Flatten into a map to ensure all fields are at top level in JSON
-	var enriched []map[string]interface{}
+	type feedResponse struct {
+		ID          string `json:"id"`
+		Title       string `json:"title"`
+		SiteURL     string `json:"site_url"`
+		FeedURL     string `json:"feed_url"`
+		Category    string `json:"category"`
+		UnreadCount int    `json:"unread_count"`
+		HasRecipe   bool   `json:"has_recipe"`
+	}
+	var enriched []feedResponse
 	for _, f := range feeds {
 		hasRecipe := false
 		target := f.SiteURL
@@ -524,14 +537,14 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 			hasRecipe = true
 		}
 
-		enriched = append(enriched, map[string]interface{}{
-			"id":           f.ID,
-			"title":        f.Title,
-			"site_url":     f.SiteURL,
-			"feed_url":     f.FeedURL,
-			"category":     f.Category,
-			"unread_count": f.UnreadCount,
-			"has_recipe":   hasRecipe,
+		enriched = append(enriched, feedResponse{
+			ID:          f.ID,
+			Title:       f.Title,
+			SiteURL:     f.SiteURL,
+			FeedURL:     f.FeedURL,
+			Category:    f.Category,
+			UnreadCount: f.UnreadCount,
+			HasRecipe:   hasRecipe,
 		})
 	}
 
@@ -544,7 +557,7 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 		URL      string `json:"url"`
 		Category string `json:"category"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.URL == "" {
+	if err := decodeJSONBody(w, r, &req); err != nil || req.URL == "" {
 		http.Error(w, "Missing or invalid 'url' field", http.StatusBadRequest)
 		return
 	}
@@ -671,7 +684,7 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 		Title    string `json:"title"`
 		Category string `json:"category"`
 	}
-	json.NewDecoder(r.Body).Decode(&req)
+	decodeJSONBody(w, r, &req)
 	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
@@ -715,7 +728,7 @@ func (s *Server) handleListFilters(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAddFilter(w http.ResponseWriter, r *http.Request) {
 	var f models.Filter
-	if err := json.NewDecoder(r.Body).Decode(&f); err != nil {
+	if err := decodeJSONBody(w, r, &f); err != nil {
 		http.Error(w, "Bad Request", http.StatusBadRequest)
 		return
 	}
@@ -823,7 +836,7 @@ func (s *Server) handleRenameCategory(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		NewName string `json:"name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, "Invalid request", http.StatusBadRequest)
 		return
 	}
@@ -898,7 +911,7 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 	var config struct {
 		Filters []models.Filter `json:"filters"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&config); err != nil {
+	if err := decodeJSONBody(w, r, &config); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
@@ -1135,7 +1148,7 @@ func (s *Server) handleCreateAPIKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Name string `json:"name"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+	if err := decodeJSONBody(w, r, &req); err != nil || req.Name == "" {
 		http.Error(w, "Bad Request: name is required", http.StatusBadRequest)
 		return
 	}
@@ -1285,7 +1298,12 @@ func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(stats)
 }
 
+var proxySemaphore = make(chan struct{}, 10)
+
 func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
+	proxySemaphore <- struct{}{}
+	defer func() { <-proxySemaphore }()
+
 	targetURL := r.URL.Query().Get("url")
 	feedID := r.URL.Query().Get("feed_id")
 	username := r.Context().Value(usernameKey).(string)
@@ -1498,7 +1516,7 @@ func (s *Server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 		Title    string   `json:"title"`
 		Strip    []string `json:"strip"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
