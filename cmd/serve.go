@@ -47,7 +47,9 @@ var serveCmd = &cobra.Command{
 		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 		
 		var mw io.Writer = os.Stdout
-		if err == nil {
+		if silent {
+			mw = io.Discard
+		} else if err == nil {
 			mw = io.MultiWriter(os.Stdout, logFile)
 		} else {
 			fmt.Printf("Could not open log file %s: %v\n", logPath, err)
@@ -162,6 +164,6 @@ func init() {
 	rootCmd.AddCommand(serveCmd)
 	serveCmd.Flags().StringP("port", "p", "7077", "Port to listen on")
 	serveCmd.Flags().StringP("log-format", "f", "text", "Log format (text or json)")
-	serveCmd.Flags().StringP("log-level", "l", "debug", "Min log level (debug, info, warn, error)")
-	serveCmd.Flags().BoolP("silent", "s", false, "Deprecated: use --log-level error instead")
+	serveCmd.Flags().StringP("log-level", "l", "info", "Min log level (debug, info, warn, error)")
+	serveCmd.Flags().BoolP("silent", "s", false, "Disable all non-essential logging")
 }
