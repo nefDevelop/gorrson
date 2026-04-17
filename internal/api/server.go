@@ -20,6 +20,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -47,6 +48,8 @@ type Server struct {
 	dataDir string
 	parser  *rss.Parser
 	silent  bool
+	stores  map[string]*db.Store
+	mu      sync.RWMutex
 }
 
 func NewServer(dataDir string, silent bool) *Server {
@@ -55,6 +58,7 @@ func NewServer(dataDir string, silent bool) *Server {
 		dataDir: dataDir,
 		parser:  rss.NewParser(),
 		silent:  silent,
+		stores:  make(map[string]*db.Store),
 	}
 	s.routes()
 	
@@ -62,6 +66,30 @@ func NewServer(dataDir string, silent bool) *Server {
 	go s.cleanupImageCache(15 * 24 * time.Hour)
 	
 	return s
+}
+
+func (s *Server) getStore(username string) (*db.Store, error) {
+	s.mu.RLock()
+	store, ok := s.stores[username]
+	s.mu.RUnlock()
+	if ok {
+		return store, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check again in case another goroutine created it
+	if store, ok := s.stores[username]; ok {
+		return store, nil
+	}
+
+	store, err := db.NewStore(s.dataDir, username)
+	if err != nil {
+		return nil, err
+	}
+	s.stores[username] = store
+	return store, nil
 }
 
 func (s *Server) routes() {
@@ -201,9 +229,8 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 					u := parts[0]
 					rawKey := parts[1]
 
-					store, serr := db.NewStore(s.dataDir, u)
+					store, serr := s.getStore(u)
 					if serr == nil {
-						defer store.Close()
 						hash := sha256.Sum256([]byte(rawKey))
 						hashHex := hex.EncodeToString(hash[:])
 						if store.ValidateAPIKey(hashHex) {
@@ -261,12 +288,11 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store, err := db.NewStore(s.dataDir, req.Username)
+	store, err := s.getStore(req.Username)
 	if err != nil {
 		http.Error(w, "Could not open user database", http.StatusNotFound)
 		return
 	}
-	defer store.Close()
 
 	hash, err := store.GetUserHash(req.Username)
 	if err != nil || !auth.CheckPasswordHash(req.Password, hash) {
@@ -313,12 +339,11 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store, err := db.NewStore(s.dataDir, req.Username)
+	store, err := s.getStore(req.Username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	session, err := store.GetSession(req.RefreshToken)
 	if err != nil || session.ExpiresAt.Before(time.Now()) {
@@ -349,9 +374,8 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store, err := db.NewStore(s.dataDir, req.Username)
+	store, err := s.getStore(req.Username)
 	if err == nil {
-		defer store.Close()
 		_ = store.DeleteSession(req.RefreshToken)
 	}
 
@@ -368,12 +392,11 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	unread := r.URL.Query().Get("unread") == "true"
 	sort := r.URL.Query().Get("sort")
@@ -415,12 +438,11 @@ func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	username := r.Context().Value(usernameKey).(string)
 	slog.Debug("Full content requested", "id", id, "user", username)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	entry, err := store.GetEntryByID(id)
 	if err != nil {
@@ -459,9 +481,8 @@ func (s *Server) handleGetFullContent(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleMarkRead(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err == nil {
-		defer store.Close()
 		_ = store.MarkAsRead(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -482,9 +503,8 @@ func (s *Server) handleMarkAllRead(w http.ResponseWriter, r *http.Request) {
 		feedID = ""
 	}
 
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err == nil {
-		defer store.Close()
 		_ = store.MarkAllRead(category, feedID, search, limit)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -494,9 +514,8 @@ func (s *Server) handleMarkFavorite(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	isFavorite := r.URL.Query().Get("favorite") != "false"
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err == nil {
-		defer store.Close()
 		_ = store.ToggleFavorite(id, isFavorite)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -504,12 +523,11 @@ func (s *Server) handleMarkFavorite(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	feeds, err := store.ListFeeds()
 	if err != nil {
@@ -580,12 +598,11 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 	// Update recipes in background to catch new site rules
 	go rss.UpdateRecipes()
 
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Could not open DB", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	if err := s.parser.SyncFeed(r.Context(), req.URL, store); err != nil {
 		slog.Error("handleAddFeed: SyncFeed failed", "url", req.URL, "err", err)
@@ -626,12 +643,11 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	outlines, err := opml.Parse(reader)
 	if err == nil {
 		go func(feeds []opml.Outline, user string) {
-			st, err := db.NewStore(s.dataDir, user)
+			st, err := s.getStore(user)
 			if err != nil {
 				slog.Error("ImportOPML goroutine: failed to open store", "user", user, "err", err)
 				return
 			}
-			defer st.Close()
 
 			// Use a small semaphore to throttle background syncs
 			sem := make(chan struct{}, 5)
@@ -659,12 +675,11 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleExportOPML(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	feeds, _ := store.ListFeeds()
 	var outlines []opml.Outline
@@ -686,9 +701,8 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 	}
 	decodeJSONBody(w, r, &req)
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err == nil {
-		defer store.Close()
 		feed, err := store.GetFeedByID(id)
 		if err == nil {
 			store.UpdateFeed(id, req.Title, req.Category, feed.UserAgent)
@@ -700,9 +714,8 @@ func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err == nil {
-		defer store.Close()
 		store.DeleteFeed(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -710,12 +723,11 @@ func (s *Server) handleDeleteFeed(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleListFilters(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	filters, err := store.ListFilters()
 	if err != nil {
@@ -740,9 +752,8 @@ func (s *Server) handleAddFilter(w http.ResponseWriter, r *http.Request) {
 
 	f.ID = uuid.New().String()
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err == nil {
-		defer store.Close()
 		store.AddFilter(&f)
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -753,9 +764,8 @@ func (s *Server) handleAddFilter(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteFilter(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err == nil {
-		defer store.Close()
 		store.DeleteFilter(id)
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -890,12 +900,11 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	filters, _ := store.ListFilters()
 	w.Header().Set("Content-Type", "application/json")
@@ -916,12 +925,11 @@ func (s *Server) handleImportConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	for _, f := range config.Filters {
 		if f.Pattern == "" {
@@ -1128,12 +1136,11 @@ func (s *Server) handleListAPIKeys(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	keys, err := store.ListAPIKeys()
 	if err != nil {
@@ -1281,12 +1288,11 @@ func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetStats(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, "Server error", http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	stats, err := store.GetStats()
 	if err != nil {
@@ -1522,12 +1528,11 @@ func (s *Server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	username := r.Context().Value(usernameKey).(string)
-	store, err := db.NewStore(s.dataDir, username)
+	store, err := s.getStore(username)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	defer store.Close()
 
 	feed, err := store.GetFeedByID(req.FeedID)
 	if err != nil {

@@ -45,6 +45,9 @@ COPY --from=builder /app/docs ./docs
 ENV GORRSON_PORT=7077
 ENV GORRSON_DATA_DIR=/app/data
 ENV GORRSON_JWT_SECRET=change-me-in-production
+# Memory optimization for low-RAM environments
+ENV GOGC=50
+ENV GOMEMLIMIT=20MiB
 
 # Expose the configured port
 EXPOSE 7077

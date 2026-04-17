@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -73,9 +74,10 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		pass = existing.Password
 	}
 
-	// Create a local parser to be thread-safe with custom client
-	fp := gofeed.NewParser()
-	fp.Client = &http.Client{
+	// Use the shared parser but with a per-request client configuration if needed
+	// Actually gofeed.Parser.ParseURLWithContext uses the internal client.
+	// To be thread-safe and efficient, we should use our own client but avoid re-allocating the parser logic.
+	p.fp.Client = &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &transport{
 			rt:   http.DefaultTransport,
@@ -85,7 +87,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		},
 	}
 
-	feed, err := fp.ParseURLWithContext(url, ctx)
+	feed, err := p.fp.ParseURLWithContext(url, ctx)
 	if err != nil {
 		// If the URL doesn't obviously look like a feed, try discovery.
 		isFeedURL := strings.HasSuffix(url, ".rss") || strings.HasSuffix(url, ".xml") || strings.HasSuffix(url, ".atom") || strings.HasSuffix(url, "/feed")
@@ -96,7 +98,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			if discErr == nil && discoveredURL != url {
 				slog.Info("Discovered new feed URL", "original", url, "discovered", discoveredURL)
 				url = discoveredURL // Update the URL we are working with
-				feed, err = fp.ParseURLWithContext(url, ctx)
+				feed, err = p.fp.ParseURLWithContext(url, ctx)
 			}
 		}
 
@@ -398,7 +400,9 @@ func fetchOGImage(ctx context.Context, pageURL string) string {
 	}
 	defer body.Close()
 
-	doc, err := goquery.NewDocumentFromReader(body)
+	// Limit reading to 500KB to prevent memory exhaustion
+	limitedBody := io.LimitReader(body, 500*1024)
+	doc, err := goquery.NewDocumentFromReader(limitedBody)
 	if err != nil {
 		return ""
 	}

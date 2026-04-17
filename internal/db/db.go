@@ -92,6 +92,9 @@ func (s *Store) migrate() error {
 		`PRAGMA journal_mode=WAL;`,
 		`PRAGMA synchronous=NORMAL;`,
 		`PRAGMA busy_timeout=5000;`,
+		`PRAGMA cache_size=-1000;`,
+		`PRAGMA mmap_size=0;`,
+		`PRAGMA temp_store=MEMORY;`,
 		`PRAGMA foreign_keys=ON;`,
 		`CREATE TABLE IF NOT EXISTS feeds (
 			id TEXT PRIMARY KEY,
