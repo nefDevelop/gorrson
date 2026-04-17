@@ -1479,78 +1479,6 @@
 
   .empty-list { text-align: center; padding: 40px; color: var(--md-on-surface-variant); font: var(--m3-body-large); opacity: 0.6; }
 
-  /* Modal Styles */
-  .modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(2px);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-  }
-
-  .modal-card {
-    background: var(--md-surface);
-    width: 100%;
-    max-width: 400px;
-    border-radius: 28px;
-    border: 1px solid var(--md-outline);
-    box-shadow: 0 24px 48px rgba(0,0,0,0.3);
-    padding: 32px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: 16px;
-  }
-
-  .warning-circle {
-    width: 64px;
-    height: 64px;
-    border-radius: 50%;
-    background: rgba(255, 82, 82, 0.1);
-    color: #ff5252;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-bottom: 8px;
-  }
-
-  .modal-body h2 {
-    margin: 0 0 8px 0;
-    color: var(--md-on-surface);
-    font: var(--m3-headline-small);
-  }
-
-  .modal-body p {
-    margin: 0;
-    color: var(--md-on-surface-variant);
-    font: var(--m3-body-medium);
-    line-height: 1.6;
-  }
-
-  .modal-footer {
-    display: flex;
-    gap: 12px;
-    width: 100%;
-    margin-top: 16px;
-  }
-
-  .modal-footer button {
-    flex: 1;
-    height: 48px;
-    border-radius: var(--radius-full);
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s;
-    font-family: var(--font-main);
-  }
-
   .btn-secondary {
     background: var(--md-surface-variant);
     border: 1px solid var(--md-outline);
@@ -1732,15 +1660,19 @@
   .row-actions {
     display: flex;
     gap: 8px;
+    align-items: center;
   }
   .btn-icon {
     background: var(--md-surface-variant);
     border: none;
     color: var(--md-on-surface-variant);
     cursor: pointer;
-    padding: 8px;
-    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
     display: flex;
+    align-items: center;
+    justify-content: center;
     transition: all 0.2s;
   }
   .btn-icon:hover {

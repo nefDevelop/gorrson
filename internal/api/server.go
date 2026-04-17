@@ -568,7 +568,6 @@ func (s *Server) handleListFeeds(w http.ResponseWriter, r *http.Request) {
 			"category":     f.Category,
 			"unread_count": f.UnreadCount,
 			"has_recipe":   hasRecipe,
-			"user_agent":   f.UserAgent,
 		})
 	}
 
@@ -690,16 +689,18 @@ func (s *Server) handleExportOPML(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateFeed(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	var req struct {
-		Title     string `json:"title"`
-		Category  string `json:"category"`
-		UserAgent string `json:"user_agent"`
+		Title    string `json:"title"`
+		Category string `json:"category"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 	username := r.Context().Value(usernameKey).(string)
 	store, err := db.NewStore(s.dataDir, username)
 	if err == nil {
 		defer store.Close()
-		store.UpdateFeed(id, req.Title, req.Category, req.UserAgent)
+		feed, err := store.GetFeedByID(id)
+		if err == nil {
+			store.UpdateFeed(id, req.Title, req.Category, feed.UserAgent)
+		}
 	}
 	w.WriteHeader(http.StatusOK)
 }
@@ -1310,7 +1311,7 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 	feedID := r.URL.Query().Get("feed_id")
 	username := r.Context().Value(usernameKey).(string)
 	slog.Info("Page proxy request START", "url", targetURL, "feed_id", feedID, "user", username)
-	
+
 	// Ensure this specific endpoint is allowed to be framed by our own app
 	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 	w.Header().Set("Access-Control-Allow-Origin", "*")

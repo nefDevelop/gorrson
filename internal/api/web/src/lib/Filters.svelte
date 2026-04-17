@@ -231,6 +231,7 @@
 
   .header-left { display: flex; align-items: center; gap: 12px; }
   .title { font: var(--m3-headline-small); font-weight: 800; color: var(--md-on-surface); }
+  .header-icon { color: var(--md-primary); }
 
   .content-scroll { 
     padding: 40px; 

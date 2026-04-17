@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # gorrson - Expert RSS Engine (Installation Script)
-# Optimized for Linux and Termux
+# Optimized for Linux 
 
 set -e
 
@@ -21,6 +21,13 @@ then
 fi
 
 # 2. Compile the binary
+echo -e "${BLUE}===> Building frontend assets...${NC}"
+(cd internal/api/web && npm install && npm run build)
+if [ $? -ne 0 ]; then
+    echo -e "${RED}[ERROR] Frontend build failed.${NC}"
+    exit 1
+fi
+
 echo -e "${BLUE}===> Building binary...${NC}"
 go build -v -o rss-cli main.go
 
