@@ -13,6 +13,7 @@ import (
 	"github.com/antchfx/htmlquery"
 	"github.com/go-shiori/go-readability"
 	"github.com/nef734/gorrson/internal/sanitizer"
+	"golang.org/x/net/html"
 	"golang.org/x/net/html/charset"
 )
 
@@ -24,8 +25,15 @@ func debugLog(format string, a ...interface{}) {
 	}
 }
 
+// Global semaphore to limit concurrent high-memory scraping operations
+var scrapeSemaphore = make(chan struct{}, 5)
+
 // ScrapeFullContent attempts to extract the main article text from a URL.
 func ScrapeFullContent(ctx context.Context, targetURL string, originalTitle string, originalImage string, userAgent string) (string, error) {
+	// Limit concurrent scraping
+	scrapeSemaphore <- struct{}{}
+	defer func() { <-scrapeSemaphore }()
+
 	sc := NewSecureClient(userAgent)
 	body, err := sc.Fetch(ctx, targetURL)
 	if err != nil {
@@ -40,94 +48,85 @@ func ScrapeFullContent(ctx context.Context, targetURL string, originalTitle stri
 	}
 
 	// Capture the raw HTML tree
-	root, err := htmlquery.Parse(utf8Body)
+	root, err := html.Parse(utf8Body)
 	if err != nil {
 		return "", err
 	}
 
-	// Capture Raw HTML size before extraction
-	htmlStr := htmlquery.OutputHTML(root, true)
-	slog.Debug("Content received (raw)", "url", targetURL, "length", len(htmlStr), "raw", htmlStr)
-
-	var content string
-	var extractErr error
+	var extractedNode *html.Node
+	var ruleInfo = "None (Auto)"
 
 	// 1. Try Site-specific Recipe
 	recipe, err := FindRecipe(targetURL)
 	if err == nil && recipe != nil {
 		slog.Debug("Applying recipe", "url", targetURL, "source", recipe.Source, "body_rules", len(recipe.Body))
-		content, extractErr = ApplyRecipe(root, recipe)
-		if extractErr != nil {
-			slog.Debug("Recipe extraction failed", "url", targetURL, "error", extractErr)
+		extractedNode, err = ApplyRecipe(root, recipe)
+		if err != nil {
+			slog.Debug("Recipe extraction failed", "url", targetURL, "error", err)
 		} else {
-			slog.Debug("Content processed (recipe)", "url", targetURL, "length", len(content), "processed", content)
+			sourceName := "System"
+			if recipe.Source == "custom" {
+				sourceName = "Custom"
+			}
+			ruleInfo = fmt.Sprintf("%s Recipe: %d body, %d strip rules",
+				sourceName, len(recipe.Body), len(recipe.Strip))
 		}
-	} else if recipe == nil {
-		slog.Debug("No recipe found for URL", "url", targetURL)
 	}
 
 	// 2. Fallback: Use go-readability if recipe failed or didn't exist
-	if content == "" {
-		if err == nil && recipe != nil {
-			debugLog("DEBUG: Recipe failed to extract content from %s. Error: %v\n", targetURL, extractErr)
-		}
-
+	if extractedNode == nil {
 		// Parse URL for readability
 		parsedURL, _ := url.Parse(targetURL)
-		article, err := readability.FromReader(strings.NewReader(htmlStr), parsedURL)
+
+		// Streaming render to readability to avoid large string allocations
+		pr, pw := io.Pipe()
+		go func() {
+			err := html.Render(pw, root)
+			_ = pw.CloseWithError(err)
+		}()
+
+		article, err := readability.FromReader(pr, parsedURL)
 		if err != nil {
 			fmt.Printf("✘ Extraction Failed: %s | Error: %v\n", targetURL, err)
 			return "", err
 		}
 
-		// Remove duplicate titles and hero images already shown in UI
-		doc, err := goquery.NewDocumentFromReader(strings.NewReader(article.Content))
-		if err == nil {
-			cleanNoise(doc, originalTitle, originalImage)
-			content, _ = doc.Html()
-			slog.Debug("Content processed (readability fallback)", "url", targetURL, "length", len(content), "processed", content)
-		} else {
-			content = article.Content
-			slog.Debug("Content processed (readability fallback, raw)", "url", targetURL, "length", len(content), "processed", content)
+		// Convert readability result to node
+		extractedNode, err = htmlquery.Parse(strings.NewReader(article.Content))
+		if err != nil {
+			return article.Content, nil
 		}
 	}
 
-	// 3. New: Smart Global Deduplication (Removed as it was causing issues with parent/child clones)
-	finalContent := content
+	// 3. Post-processing with goquery (Unified DOM operations)
+	doc := goquery.NewDocumentFromNode(extractedNode)
+	
+	// Remove duplicate titles and hero images
+	cleanNoise(doc, originalTitle, originalImage)
+	
+	// Resolve relative URLs in-place
+	resolveRelativeURLs(doc.Selection, targetURL)
 
-	// Final Summary Log (Informative)
-	ruleInfo := "None (Auto)"
-	if recipe != nil {
-		sourceName := "System"
-		if recipe.Source == "custom" {
-			sourceName = "Custom"
-		}
-		ruleInfo = fmt.Sprintf("%s Recipe: %d body, %d strip rules",
-			sourceName, len(recipe.Body), len(recipe.Strip))
+	// Final stringification (only once!)
+	finalContent, err := doc.Html()
+	if err != nil {
+		return "", err
 	}
 
-	// NEW: Resolve relative URLs before final cleaning
-	finalContent = resolveRelativeURLs(finalContent, targetURL)
-
-	fmt.Printf("➜ Extraction [%s]: %s | Raw: %dB | Extracted: %dB | Final: %dB\n",
-		ruleInfo, targetURL, len(htmlStr), len(content), len(finalContent))
+	fmt.Printf("➜ Extraction [%s]: %s | Final: %dB\n",
+		ruleInfo, targetURL, len(finalContent))
 
 	// Final clean with our sanitizer (which uses bluemonday)
 	return sanitizer.Clean(finalContent), nil
 }
 
-func resolveRelativeURLs(htmlStr string, baseURL string) string {
+func resolveRelativeURLs(selection *goquery.Selection, baseURL string) {
 	base, err := url.Parse(baseURL)
 	if err != nil {
-		return htmlStr
+		return
 	}
 
-	doc, err := goquery.NewDocumentFromReader(strings.NewReader(htmlStr))
-	if err != nil {
-		return htmlStr
-	}
-
-	doc.Find("img, a, source, iframe").Each(func(i int, s *goquery.Selection) {
+	selection.Find("img, a, source, iframe").Each(func(i int, s *goquery.Selection) {
 		// Handle Lazy Loading: Move data-src to src if src is missing or a placeholder
 		if s.Is("img") {
 			lazyAttrs := []string{"data-src", "data-lazy-src", "data-original", "data-actualsrc"}
@@ -172,12 +171,9 @@ func resolveRelativeURLs(htmlStr string, baseURL string) string {
 	})
 
 	// Wrap tables for responsiveness
-	doc.Find("table").Each(func(i int, s *goquery.Selection) {
+	selection.Find("table").Each(func(i int, s *goquery.Selection) {
 		s.WrapHtml("<div class=\"table-container\" style=\"overflow-x: auto; max-width: 100%; margin-bottom: 1em;\"></div>")
 	})
-
-	h, _ := doc.Html()
-	return h
 }
 
 func cleanNoise(doc *goquery.Document, originalTitle string, originalImage string) {

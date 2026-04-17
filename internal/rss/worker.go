@@ -23,6 +23,9 @@ func NewWorker(store *db.Store, interval time.Duration) *Worker {
 	}
 }
 
+// Global semaphore to limit concurrent user sync cycles across all goroutines.
+var syncSemaphore = make(chan struct{}, 10)
+
 // Start runs the sync loop until context is canceled.
 func (w *Worker) Start(ctx context.Context) {
 	ticker := time.NewTicker(w.interval)
@@ -43,6 +46,10 @@ func (w *Worker) Start(ctx context.Context) {
 
 // SyncAll syncs all feeds currently in the database.
 func (w *Worker) SyncAll(ctx context.Context) {
+	// Acquire semaphore to limit concurrency
+	syncSemaphore <- struct{}{}
+	defer func() { <-syncSemaphore }()
+
 	start := time.Now()
 	feeds, err := w.store.ListFeeds()
 	if err != nil {

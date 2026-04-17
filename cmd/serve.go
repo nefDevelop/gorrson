@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"log/slog"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -106,7 +107,15 @@ var serveCmd = &cobra.Command{
 					
 					// Each user gets a background worker to sync their feeds independently
 					worker := rss.NewWorker(store, 15*time.Minute)
-					go worker.Start(ctx)
+					
+					// Use a small jitter for initial sync to avoid "thundering herd"
+					go func(w *rss.Worker, user string) {
+						// Wait up to 2 minutes to spread the load
+						jitter := time.Duration(rand.Intn(120)) * time.Second
+						slog.Debug("Jittering initial sync", slog.String("user", user), slog.Duration("wait", jitter))
+						time.Sleep(jitter)
+						w.Start(ctx)
+					}(worker, username)
 					slog.Info("Started background worker", slog.String("user", username))
 				}
 			}

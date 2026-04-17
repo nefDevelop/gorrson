@@ -33,7 +33,7 @@ func BenchmarkSearch(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = store.SearchEntries("gorrson")
+		_, _ = store.SearchEntries("gorrson", 50, 0)
 	}
 }
 
