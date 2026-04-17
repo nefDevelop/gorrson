@@ -17,6 +17,7 @@ export default defineConfig({
       '/import': 'http://localhost:7077',
       '/backup': 'http://localhost:7077',
       '/restore': 'http://localhost:7077',
+      '/proxy': 'http://localhost:7077',
     }
   }
 })

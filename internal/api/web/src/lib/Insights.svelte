@@ -24,7 +24,7 @@
 <div class="view-container">
   <header class="header-bar">
     <div class="header-left">
-      <BarChart2 size={20} class="header-icon" />
+      <BarChart2 size={20} color="var(--md-primary)" />
       <h1 class="title">Insights & Statistics</h1>
     </div>
   </header>
@@ -138,7 +138,6 @@
     border-bottom: 1px solid var(--md-outline);
   }
   .header-left { display: flex; align-items: center; gap: 12px; }
-  .header-icon { color: var(--md-primary); }
   .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-primary); }
 
   .corner-bg { 

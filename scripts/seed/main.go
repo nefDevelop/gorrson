@@ -79,13 +79,13 @@ func main() {
 		{"GameSpot", "https://www.gamespot.com/feeds/news/", "Gaming"},
 		{"PC Gamer", "https://www.pcgamer.com/rss/", "Gaming"},
 		{"Nintendo Life", "https://www.nintendolife.com/feeds/latest", "Gaming"},
-		{"Vandal", "https://vandal.elespanol.com/noticias.xml", "Gaming"},
+		{"Vandal", "https://vandal.elespanol.com/xml/rss.xml", "Gaming"},
 
 		// SCIENCE & CULTURE
 		{"Nature", "https://www.nature.com/nature.rss", "Science"},
 		{"Science Daily", "https://www.sciencedaily.com/rss/all.xml", "Science"},
-		{"Scientific American", "https://www.scientificamerican.com/section/reuters/rss/", "Science"},
-		{"National Geographic", "https://www.nationalgeographic.com/rss/index.xml", "Science"},
+		{"Scientific American", "https://www.scientificamerican.com/feed/", "Science"},
+		{"National Geographic", "https://www.nationalgeographic.com/rss/all.xml", "Science"},
 		{"The Atlantic", "https://www.theatlantic.com/feed/all/", "Culture"},
 		{"New Yorker", "https://www.newyorker.com/feed/everything", "Culture"},
 		{"Hyperallergic", "https://hyperallergic.com/feed/", "Art"},
@@ -94,7 +94,7 @@ func main() {
 		{"ESPN", "https://www.espn.com/espn/rss/news", "Sports"},
 		{"BBC Sport", "https://feeds.bbci.co.uk/sport/rss.xml", "Sports"},
 		{"Marca", "https://e00-marca.uecdn.es/rss/portada.xml", "Sports"},
-		{"AS.com", "https://as.com/rss/portada.xml", "Sports"},
+		{"AS.com", "https://as.com/rss/tags/portada.xml", "Sports"},
 		{"Wall Street Journal", "https://feeds.a.dj.com/rss/RSSWorldNews.xml", "Business"},
 		{"Financial Times", "https://www.ft.com/?format=rss", "Business"},
 	}
