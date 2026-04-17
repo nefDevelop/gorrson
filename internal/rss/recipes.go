@@ -158,10 +158,10 @@ func ParseRecipe(path string) (*Recipe, error) {
 	return recipe, nil
 }
 
-// ApplyRecipe applies the rules to an HTML document.
-func ApplyRecipe(root *html.Node, recipe *Recipe) (string, error) {
+// ApplyRecipe applies the rules to an HTML document and returns a container node with matches.
+func ApplyRecipe(root *html.Node, recipe *Recipe) (*html.Node, error) {
 	if recipe == nil {
-		return "", fmt.Errorf("nil recipe")
+		return nil, fmt.Errorf("nil recipe")
 	}
 
 	debugLog("DEBUG: Applying recipe with %d body rules and %d strip rules\n", len(recipe.Body), len(recipe.Strip))
@@ -177,7 +177,7 @@ func ApplyRecipe(root *html.Node, recipe *Recipe) (string, error) {
 	}
 
 	if len(allMatchedNodes) == 0 {
-		return "", fmt.Errorf("recipe applied but no nodes matched")
+		return nil, fmt.Errorf("recipe applied but no nodes matched")
 	}
 
 	// 2. Filter out nodes that are descendants of other matched nodes (Hierarchy De-duplication)
@@ -208,9 +208,11 @@ func ApplyRecipe(root *html.Node, recipe *Recipe) (string, error) {
 		}
 	}
 
-	// 3. Process and clean each top-level node
-	var results []string
-	seenContent := make(map[string]bool)
+	// 3. Create a container node to hold all results
+	container := &html.Node{
+		Type: html.ElementNode,
+		Data: "div",
+	}
 
 	for _, node := range finalNodes {
 		// Apply Strip rules INSIDE the node
@@ -225,14 +227,26 @@ func ApplyRecipe(root *html.Node, recipe *Recipe) (string, error) {
 			}
 		}
 
-		content := htmlquery.OutputHTML(node, true)
-		if !seenContent[content] {
-			seenContent[content] = true
-			results = append(results, content)
-		}
+		// Clone and append to container
+		cloned := cloneNode(node)
+		container.AppendChild(cloned)
 	}
 
-	return strings.Join(results, "\n"), nil
+	return container, nil
+}
+
+func cloneNode(n *html.Node) *html.Node {
+	m := &html.Node{
+		Type:     n.Type,
+		DataAtom: n.DataAtom,
+		Data:     n.Data,
+		Attr:     make([]html.Attribute, len(n.Attr)),
+	}
+	copy(m.Attr, n.Attr)
+	for c := n.FirstChild; c != nil; c = c.NextSibling {
+		m.AppendChild(cloneNode(c))
+	}
+	return m
 }
 
 func isAncestor(ancestor, child *html.Node) bool {

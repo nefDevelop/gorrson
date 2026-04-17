@@ -20,7 +20,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -37,46 +36,7 @@ import (
 var (
 	//go:embed all:web/dist
 	frontendFS embed.FS
-
-	loginAttempts = make(map[string][]time.Time)
-	loginMu       sync.Mutex
 )
-
-func (s *Server) loginRateLimit(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != "POST" || (r.URL.Path != "/login" && r.URL.Path != "/api/fever") {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		ip := r.RemoteAddr
-		if pos := strings.LastIndex(ip, ":"); pos != -1 {
-			ip = ip[:pos] // Strip port
-		}
-
-		loginMu.Lock()
-		now := time.Now()
-		attempts := loginAttempts[ip]
-
-		var valid []time.Time
-		for _, t := range attempts {
-			if now.Sub(t) < time.Minute {
-				valid = append(valid, t)
-			}
-		}
-
-		if len(valid) >= 10 { // Slightly higher limit for Fever sync
-			loginMu.Unlock()
-			http.Error(w, "Too many login attempts. Try again in a minute.", http.StatusTooManyRequests)
-			return
-		}
-
-		loginAttempts[ip] = append(valid, now)
-		loginMu.Unlock()
-
-		next.ServeHTTP(w, r)
-	})
-}
 
 type contextKey string
 
@@ -97,6 +57,10 @@ func NewServer(dataDir string, silent bool) *Server {
 		silent:  silent,
 	}
 	s.routes()
+	
+	// Start background cache cleaner (Run every 24h, keep files for 15 days)
+	go s.cleanupImageCache(15 * 24 * time.Hour)
+	
 	return s
 }
 
@@ -115,13 +79,13 @@ func (s *Server) routes() {
 		w.Write([]byte("OK"))
 	})
 
-	s.router.With(s.loginRateLimit).Post("/login", s.handleLogin)
+	s.router.Post("/login", s.handleLogin)
 	s.router.Post("/refresh", s.handleRefresh)
 	s.router.Post("/logout", s.handleLogout)
 
 	// Fever API endpoint (authentication is handled inside the handler via api_key)
-	s.router.With(s.loginRateLimit).Post("/api/fever", s.handleFeverAPI)
-	s.router.With(s.loginRateLimit).Get("/api/fever", s.handleFeverAPI)
+	s.router.Post("/api/fever", s.handleFeverAPI)
+	s.router.Get("/api/fever", s.handleFeverAPI)
 
 	s.router.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
@@ -428,7 +392,7 @@ func (s *Server) handleListNews(w http.ResponseWriter, r *http.Request) {
 
 	var entries []models.Entry
 	if search != "" {
-		entries, err = store.SearchEntries(search)
+		entries, err = store.SearchEntries(search, limit, offset)
 	} else {
 		entries, err = store.ListEntries(unread, sort, limit, offset, category, feedID)
 	}
@@ -633,6 +597,10 @@ func (s *Server) handleAddFeed(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 	username := r.Context().Value(usernameKey).(string)
+
+	// Security: Limit size to 5MB to avoid memory DOS
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20)
+
 	var reader io.Reader = r.Body
 	if strings.Contains(r.Header.Get("Content-Type"), "multipart/form-data") {
 		file, _, err := r.FormFile("file")
@@ -651,12 +619,23 @@ func (s *Server) handleImportOPML(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			defer st.Close()
+
+			// Use a small semaphore to throttle background syncs
+			sem := make(chan struct{}, 5)
 			for _, o := range feeds {
 				if o.XMLURL != "" {
-					if err := s.parser.SyncFeed(context.Background(), o.XMLURL, st); err != nil {
-						slog.Error("ImportOPML goroutine: sync failed", "url", o.XMLURL, "err", err)
-					}
+					sem <- struct{}{}
+					go func(url string) {
+						defer func() { <-sem }()
+						if err := s.parser.SyncFeed(context.Background(), url, st); err != nil {
+							slog.Error("ImportOPML goroutine: sync failed", "url", url, "err", err)
+						}
+					}(o.XMLURL)
 				}
+			}
+			// Wait for all in this batch to finish
+			for i := 0; i < cap(sem); i++ {
+				sem <- struct{}{}
 			}
 		}(outlines, username)
 	}
@@ -1610,4 +1589,34 @@ func (s *Server) handleUpdateRecipes(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "Recipe update process started in the background."})
+}
+
+func (s *Server) cleanupImageCache(maxAge time.Duration) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+
+	cacheDir := filepath.Join(s.dataDir, "cache", "images")
+
+	clean := func() {
+		slog.Info("Cleaning up image cache", "dir", cacheDir)
+		_ = filepath.Walk(cacheDir, func(path string, info os.FileInfo, err error) error {
+			if err != nil || info.IsDir() {
+				return nil
+			}
+			if time.Since(info.ModTime()) > maxAge {
+				_ = os.Remove(path)
+			}
+			return nil
+		})
+	}
+
+	// Initial clean
+	clean()
+
+	for {
+		select {
+		case <-ticker.C:
+			clean()
+		}
+	}
 }

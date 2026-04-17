@@ -24,7 +24,7 @@ func TestDBSearches(t *testing.T) {
 	// Wait a bit for triggers? No, SQLite triggers are synchronous.
 	
 	// Test Search
-	results, err := s.SearchEntries("Golang")
+	results, err := s.SearchEntries("Golang", 10, 0)
 	if err != nil {
 		t.Fatalf("Search failed: %v", err)
 	}
@@ -32,7 +32,7 @@ func TestDBSearches(t *testing.T) {
 		t.Errorf("Expected e1, got %v", results)
 	}
 
-	results, _ = s.SearchEntries("is") // Both have "is"
+	results, _ = s.SearchEntries("is", 10, 0) // Both have "is"
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results, got %d", len(results))
 	}

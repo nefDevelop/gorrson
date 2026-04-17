@@ -56,10 +56,12 @@ func TestApplyRecipe(t *testing.T) {
 		Strip: []string{"//div[@class='ad']", "//h1"},
 	}
 
-	result, err := ApplyRecipe(root, recipe)
+	resultNode, err := ApplyRecipe(root, recipe)
 	if err != nil {
 		t.Fatalf("ApplyRecipe failed: %v", err)
 	}
+
+	result := htmlquery.OutputHTML(resultNode, true)
 
 	if strings.Contains(result, "Menu") {
 		t.Errorf("Result should not contain header")

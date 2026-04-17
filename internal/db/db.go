@@ -396,14 +396,23 @@ func (s *Store) CleanupOldEntries() (int64, error) {
 	return res.RowsAffected()
 }
 
-func (s *Store) SearchEntries(searchTerm string) ([]models.Entry, error) {
+func (s *Store) SearchEntries(searchTerm string, limit, offset int) ([]models.Entry, error) {
 	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.is_priority, e.matched_action, f.title, f.category 
               FROM entries e
               JOIN feeds f ON e.feed_id = f.id
               JOIN entries_fts ON e.rowid = entries_fts.rowid 
               WHERE entries_fts MATCH ? 
               ORDER BY rank`
-	rows, err := s.db.Query(query, searchTerm)
+	
+	var args []interface{}
+	args = append(args, searchTerm)
+
+	if limit > 0 {
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
+	}
+
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
