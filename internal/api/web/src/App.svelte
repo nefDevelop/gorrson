@@ -31,10 +31,12 @@
   let unreadOnly = localStorage.getItem('gorrson-unread-only') === 'true';
   let sortMode = "newest"; // "newest", "oldest"
   let cardStyle = localStorage.getItem('gorrson-card-style') || 'default';
+  let readerMode = localStorage.getItem('gorrson-reader-mode') || 'side-by-side';
 
   $: localStorage.setItem('gorrson-scroll-read', scrollRead.toString());
   $: localStorage.setItem('gorrson-unread-only', unreadOnly.toString());
   $: localStorage.setItem('gorrson-card-style', cardStyle);
+  $: localStorage.setItem('gorrson-reader-mode', readerMode);
 
   const STOP_WORDS = new Set(['de', 'a', 'el', 'la', 'en', 'y', 'que', 'os', 'un', 'una', 'con', 'para', 'por', 'lo', 'las', 'los', 'su', 'al', 'se', 'del', 'the', 'and', 'with', 'that', 'this', 'from']);
 
@@ -84,6 +86,8 @@
     { id: "favorites", name: "Favorites", icon: Star },
     { id: "insights", name: "Insights", icon: BarChart2 },
   ];
+
+  $: viewTitle = activeCategory ? activeCategory : (activeSource ? (feeds.find(f => f.id === activeSource)?.title || "Feed") : $t(currentView));
 
   async function loadData(append = false) {
     try {
@@ -136,7 +140,7 @@
       feeds = feedsData || [];
       
       // Auto-selection only for full desktop
-      if (articles.length > 0 && !selectedId && !append && !isMobile && !isSidebarMini) {
+      if (articles.length > 0 && !selectedId && !append && !isMobile && !isSidebarMini && readerMode === 'side-by-side') {
         selectedId = articles[0].id;
       }
       lastSyncDate = new Date();
@@ -493,14 +497,12 @@
     showAddFeed = false;
   }
 
-  let isFeedExpanded = false;
   let fullscreenReader = false;
-  const toggleFeedExpand = () => isFeedExpanded = !isFeedExpanded;
   const toggleFullscreen = () => fullscreenReader = !fullscreenReader;
 
   // Auto-collapse feed list if user shrinks the browser
-  $: if (isMobile && isFeedExpanded) {
-    isFeedExpanded = false;
+  $: if (isMobile && readerMode === 'full-list') {
+    readerMode = 'side-by-side';
   }
 </script>
 
@@ -508,33 +510,33 @@
   <Login onLoginSuccess={handleLoginSuccess} />
 {:else}
   <main class="app-container {selectedId ? 'has-selection' : ''} {isMobile ? 'mobile-mode' : ''}">
-    <div class="nav-panels" class:collapsed={fullscreenReader} class:full-width={currentView === 'settings' || currentView === 'filters' || currentView === 'add-feed' || currentView === 'insights'}>
-      {#if !isMobile || isSourcesDrawerOpen}
-        <div 
-          class="sidebar-wrapper" 
-          class:mobile-drawer={isMobile} 
-          class:open={isSourcesDrawerOpen} 
-          on:click|self={() => isSourcesDrawerOpen = false}
-          on:keydown={(e) => e.key === 'Escape' && (isSourcesDrawerOpen = false)}
-          role="button"
-          tabindex={isSourcesDrawerOpen ? 0 : -1}
-          aria-label="Close menu"
-        >
-          <Sidebar 
-            {navItems} 
-            {categories} 
-            {feeds}
-            {isMobile}
-            lastSync={lastSyncFormatted}
-            isMini={isSidebarMini}
-            activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
-            onViewChange={handleViewChange} 
-            onAddFeed={handleAddFeed}
-            onRefresh={loadData}
-          />
-        </div>
-      {/if}
-      
+    {#if !isMobile || isSourcesDrawerOpen}
+      <div 
+        class="sidebar-wrapper {fullscreenReader ? 'hidden-desktop' : ''}" 
+        class:mobile-drawer={isMobile} 
+        class:open={isSourcesDrawerOpen} 
+        on:click|self={() => isSourcesDrawerOpen = false}
+        on:keydown={(e) => e.key === 'Escape' && (isSourcesDrawerOpen = false)}
+        role="button"
+        tabindex={isSourcesDrawerOpen ? 0 : -1}
+        aria-label="Close menu"
+      >
+        <Sidebar 
+          {navItems} 
+          {categories} 
+          {feeds}
+          {isMobile}
+          lastSync={lastSyncFormatted}
+          isMini={isSidebarMini}
+          activeView={activeCategory ? 'cat:'+activeCategory : (activeSource ? 'src:'+activeSource : currentView)} 
+          onViewChange={handleViewChange} 
+          onAddFeed={handleAddFeed}
+          onRefresh={loadData}
+        />
+      </div>
+    {/if}
+
+    <div class="main-content-wrapper">
       {#if loading && articles.length === 0}
         <div class="loading-overlay">
           <div class="spinner"></div>
@@ -547,27 +549,38 @@
         </div>
       {:else}
         {#if currentView === 'inbox' || currentView === 'favorites'}
-          {#if (!isSidebarMini && !isMobile) || (isSidebarMini && !selectedId) || (isMobile && !selectedId)}
-            <FeedList 
-              bind:searchQuery
-              articles={filteredArticles} 
-              selectedId={selectedId} 
-              isExpanded={isFeedExpanded}
-              onToggleExpand={toggleFeedExpand}
-              onSelect={handleSelect} 
-              onMarkAsRead={handleMarkAsRead}
-              onToggleFavorite={handleToggleFavorite}
-              onShare={handleShare}
-              onMarkAllRead={handleMarkAllRead}
-              onLoadMore={handleLoadMore}
-              {loadingMore}
-              {allLoaded}
-              {scrollRead}
-              {cardStyle}
-              bind:unreadOnly
-              bind:sortMode
-            />
-          {/if}
+          <FeedList 
+            bind:searchQuery
+            bind:cardStyle
+            title={viewTitle}
+            articles={filteredArticles} 
+            selectedId={selectedId} 
+            hasSelection={!!selectedId}
+            bind:readerMode
+            onSelect={handleSelect} 
+            onMarkAsRead={handleMarkAsRead}
+            onToggleFavorite={handleToggleFavorite}
+            onShare={handleShare}
+            onMarkAllRead={handleMarkAllRead}
+            onLoadMore={handleLoadMore}
+            {loadingMore}
+            {allLoaded}
+            {scrollRead}
+            bind:unreadOnly
+            bind:sortMode
+          >
+            <svelte:fragment slot="reader">
+              {#if selectedId}
+                <PostViewer 
+                  article={selectedArticle} 
+                  onBack={() => selectedId = null}
+                  isFullscreen={fullscreenReader}
+                  onToggleFullscreen={toggleFullscreen}
+                  showDesktopBack={readerMode === 'overlay'}
+                />
+              {/if}
+            </svelte:fragment>
+          </FeedList>
         {:else if currentView === 'filters'}
           <Filters />
         {:else if currentView === 'insights'}
@@ -593,15 +606,6 @@
         {/if}
       {/if}
     </div>
-
-    {#if (currentView === 'inbox' || currentView === 'favorites') && filteredArticles.length > 0 && (!isMobile || (isMobile && selectedId))}
-      <PostViewer 
-        article={selectedArticle} 
-        onBack={() => selectedId = null}
-        isFullscreen={fullscreenReader}
-        onToggleFullscreen={toggleFullscreen}
-      />
-    {/if}
 
     {#if showAddFeed}
       <AddFeed onSave={handleAddFeedSave} onCancel={handleAddFeedCancel} />
@@ -639,30 +643,27 @@
     background: var(--md-background);
   }
 
-  .nav-panels {
-    display: flex;
-    height: 100%;
-    transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-    transform-origin: left center;
+  .sidebar-wrapper {
     flex-shrink: 0;
-    min-width: 0;
-    max-width: 100%;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    width: var(--sidebar-width);
+    z-index: 100;
   }
 
-  @media (max-width: 1000px) {
-    .nav-panels {
-      flex-shrink: 0;
-      width: auto !important; /* Adapt to Rail or Rail+List */
-    }
+  .sidebar-wrapper.hidden-desktop {
+    width: 0;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(-20px);
   }
 
-  .nav-panels.full-width {
+  .main-content-wrapper {
     flex: 1;
-  }
-
-  /* Mobile Mode Adjustments */
-  .mobile-mode .nav-panels {
-    width: 100%;
+    display: flex;
+    min-width: 0;
+    height: 100%;
+    position: relative;
+    background: var(--md-background);
   }
 
   .mobile-mode .sidebar-wrapper.mobile-drawer {
@@ -714,16 +715,6 @@
     padding-bottom: 72px;
   }
 
-  .nav-panels.collapsed {
-    max-width: 0 !important;
-    opacity: 0;
-    pointer-events: none;
-    transform: scaleX(0.95);
-  }
-  .app-container > :global(.sidebar),
-  .app-container > :global(.feed-list) {
-     flex-shrink: 0;
-  }
   .loading-overlay, .error-view {
     flex: 1;
     display: flex;

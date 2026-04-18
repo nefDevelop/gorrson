@@ -111,16 +111,16 @@
     position: relative;
     z-index: 10;
     width: 100%;
-    max-width: 440px;
+    max-width: 420px;
     padding: 20px;
   }
 
   .login-card {
     background: var(--md-surface);
     border: 1px solid var(--md-outline);
-    border-radius: 32px;
-    padding: 56px 48px;
-    box-shadow: none;
+    border-radius: 40px;
+    padding: 64px 48px;
+    box-shadow: 0 16px 40px var(--shadow-color, rgba(0,0,0,0.1));
     display: flex;
     flex-direction: column;
     gap: 32px;
@@ -146,11 +146,13 @@
   }
 
   .subtitle {
-    font: var(--m3-body-medium);
-    opacity: 0.5;
+    font: var(--m3-label-small);
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 800;
+    color: var(--md-on-surface-variant);
     margin: 12px 0 0 0;
     text-align: center;
-    letter-spacing: 0.5px;
   }
   .rss-logo-part {
     font-size: 1.12em;
@@ -182,10 +184,10 @@
 
   input {
     width: 100%;
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid var(--md-outline);
-    border-radius: 20px;
-    padding: 16px 20px 16px 56px;
+    background: var(--md-surface-variant);
+    border: 1px solid transparent;
+    border-radius: var(--radius-full);
+    padding: 16px 24px 16px 52px;
     color: var(--md-on-surface);
     font: var(--m3-body-large);
     outline: none;
@@ -193,34 +195,37 @@
   }
 
   input:focus {
-    background: rgba(255, 255, 255, 0.06);
+    background: var(--md-surface);
     border-color: var(--md-primary);
-    box-shadow: 0 0 0 4px rgba(165, 139, 255, 0.1);
+    box-shadow: 0 0 0 4px var(--md-primary-container);
   }
 
   .submit-btn {
-    margin-top: 12px;
+    margin-top: 16px;
     height: 56px;
     background: var(--md-primary);
     color: var(--md-on-primary);
     border: none;
-    border-radius: 20px;
+    border-radius: var(--radius-full);
     font: var(--m3-label-large);
     font-size: 16px;
     font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 12px;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: none;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
   }
 
   .submit-btn:hover:not(:disabled) {
     background: var(--md-primary-container);
     color: var(--md-primary);
-    transform: translateY(-1px);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px var(--md-primary-container);
   }
 
   .submit-btn:active:not(:disabled) {
@@ -245,7 +250,7 @@
   .card-footer {
     display: flex;
     justify-content: center;
-    opacity: 0.3;
+    opacity: 0.4;
   }
 
   .version {
@@ -271,7 +276,7 @@
   @media (max-width: 480px) {
     .login-card {
       padding: 40px 24px;
-      border-radius: 24px;
+      border-radius: 32px;
     }
   }
 </style>
