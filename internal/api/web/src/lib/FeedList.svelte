@@ -12,6 +12,11 @@
     ListFilter,
     Clock,
     CheckCircle2,
+    LayoutGrid,
+    List,
+    AlignJustify,
+    BookOpen,
+    LayoutTemplate
   } from "lucide-svelte";
   import { t } from "./i18n.js";
   import { fade, slide } from "svelte/transition";
@@ -20,13 +25,17 @@
   /** @type {Array<any>} */
   export let articles = [];
 
+  /** @type {string} */
+  export let title = "Inbox";
+
   /** @type {number} */
   export let selectedId;
 
-  export let isExpanded = false;
+  /** @type {boolean} */
+  export let hasSelection = false;
 
-  /** @type {() => void} */
-  export let onToggleExpand = () => {};
+  /** @type {string} */
+  export let readerMode = 'side-by-side';
 
   /** @type {() => void} */
   export let onLoadMore = () => {};
@@ -59,21 +68,8 @@
   export let cardStyle = "default";
 
   export let searchQuery = "";
-  let showSearch = false;
   let showFilters = false;
-  let searchInput;
-
-  function toggleSearch() {
-    showSearch = !showSearch;
-    if (!showSearch) searchQuery = "";
-    else {
-      setTimeout(() => searchInput?.focus(), 50);
-    }
-  }
-
-  function handleKeydown(e) {
-    if (e.key === "Escape" && showSearch) toggleSearch();
-  }
+  let showViewMenu = false;
 
   /** @type {() => void} */
   export let onMarkAllRead;
@@ -128,6 +124,23 @@
     };
   });
 
+  // Lógica para la cuadrícula Bento (Bento Grid)
+  function getBentoClass(index) {
+    if (cardStyle === 'compact' || cardStyle === 'minimal') return 'bento-full'; // Mantiene listas simples
+    if (cardStyle === 'magazine') {
+      const pos = index % 4;
+      if (pos === 0) return 'mag-hero';
+      if (pos === 1) return 'mag-side-text';
+      if (pos === 2) return 'mag-side-img';
+      if (pos === 3) return 'mag-horizontal';
+    }
+    if (index === 0) return 'bento-hero';
+    return 'bento-standard';
+  }
+
+  // Si hay un artículo seleccionado, forzamos la vista de lista simple (1 columna)
+  $: getActiveBento = (index) => (selectedId && readerMode === 'side-by-side') ? 'bento-full' : getBentoClass(index);
+
   // Re-observe logic
   let sentinelEl;
   $: if (statusObserver && (articles || scrollRead !== undefined)) {
@@ -145,48 +158,93 @@
 </script>
 
 <section
-  class="feed-list {isExpanded ? 'expanded' : ''} {articles.length === 0
+  class="dashboard-view {articles.length === 0
     ? 'is-empty'
     : ''} style-{cardStyle}"
   transition:fly={{ x: -20, duration: 400, easing: cubicOut }}
 >
-  <header class="header-bar">
-    <div></div>
-    <!-- Empty spacer to keep actions aligned -->
+  <header class="header-bar" class:mobile-reading={hasSelection}>
+    <div class="header-title">
+      <h2>{title}</h2>
+    </div>
+
     <div class="actions">
-      <button
-        class="action-btn {showSearch ? 'active' : ''}"
-        on:click={toggleSearch}
-        title="Search feeds"
-      >
-        {#if showSearch}
-          <X size={18} />
-        {:else}
+      <!-- Buscador integrado -->
+      <div class="inline-search">
+        <span class="search-icon-inner">
           <Search size={18} />
+        </span>
+        <input bind:value={searchQuery} placeholder={$t("search") || "Search..."} class="search-input" />
+        {#if searchQuery}
+          <button class="clear-btn" on:click={() => (searchQuery = "")}>
+            <X size={14} />
+          </button>
         {/if}
-      </button>
+      </div>
+
+      <!-- Menú Desplegable de Vista y Lector -->
       <div class="filter-wrapper">
-        <button
-          class="action-btn {unreadOnly || sortMode !== 'newest'
-            ? 'active'
-            : ''}"
-          on:click={() => (showFilters = !showFilters)}
-          title="Filter and Sort"
-        >
+        <button class="action-btn {showViewMenu ? 'active' : ''}" on:click={() => {showViewMenu = !showViewMenu; showFilters = false;}} title="View Options">
+          {#if cardStyle === 'default'}
+            <LayoutGrid size={18} />
+          {:else if cardStyle === 'compact'}
+            <AlignJustify size={18} />
+          {:else if cardStyle === 'magazine'}
+            <LayoutTemplate size={18} />
+          {:else}
+            <List size={18} />
+          {/if}
+        </button>
+        {#if showViewMenu}
+          <div class="filter-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
+            <div class="menu-section">
+              <span class="section-title">Layout</span>
+              <button class="menu-item {cardStyle === 'default' ? 'selected' : ''}" on:click={() => {cardStyle = 'default'; showViewMenu = false;}}>
+                <LayoutGrid size={16} />
+                <span>Grid (Bento)</span>
+              </button>
+            <button class="menu-item {cardStyle === 'magazine' ? 'selected' : ''}" on:click={() => {cardStyle = 'magazine'; showViewMenu = false;}}>
+              <LayoutTemplate size={16} />
+              <span>Magazine</span>
+            </button>
+              <button class="menu-item {cardStyle === 'compact' ? 'selected' : ''}" on:click={() => {cardStyle = 'compact'; showViewMenu = false;}}>
+                <AlignJustify size={16} />
+                <span>Compact</span>
+              </button>
+              <button class="menu-item {cardStyle === 'minimal' ? 'selected' : ''}" on:click={() => {cardStyle = 'minimal'; showViewMenu = false;}}>
+                <List size={16} />
+                <span>Minimal</span>
+              </button>
+            </div>
+            <div class="menu-divider expand-divider"></div>
+            <div class="menu-section expand-section">
+              <span class="section-title">Reading Pane</span>
+              <button class="menu-item {readerMode === 'side-by-side' ? 'selected' : ''}" on:click={() => { readerMode = 'side-by-side'; showViewMenu = false; }}>
+                <PanelRightClose size={16} />
+                <span>Side-by-Side</span>
+              </button>
+              <button class="menu-item {readerMode === 'full-list' ? 'selected' : ''}" on:click={() => { readerMode = 'full-list'; showViewMenu = false; }}>
+                <PanelRightOpen size={16} />
+                <span>Full List</span>
+              </button>
+              <button class="menu-item {readerMode === 'overlay' ? 'selected' : ''}" on:click={() => { readerMode = 'overlay'; showViewMenu = false; }}>
+                <BookOpen size={16} />
+                <span>Overlay</span>
+              </button>
+            </div>
+          </div>
+        {/if}
+      </div>
+
+      <div class="filter-wrapper">
+        <button class="action-btn {unreadOnly || sortMode !== 'newest' ? 'active' : ''}" on:click={() => {showFilters = !showFilters; showViewMenu = false;}} title="Filter and Sort">
           <ListFilter size={18} />
         </button>
         {#if showFilters}
-          <div
-            class="filter-menu"
-            in:fly={{ y: 10, duration: 200 }}
-            out:fade={{ duration: 100 }}
-          >
+          <div class="filter-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
             <div class="menu-section">
               <span class="section-title">Filter</span>
-              <button
-                class="menu-item {unreadOnly ? 'selected' : ''}"
-                on:click={() => (unreadOnly = !unreadOnly)}
-              >
+              <button class="menu-item {unreadOnly ? 'selected' : ''}" on:click={() => (unreadOnly = !unreadOnly)}>
                 <CheckCircle2 size={16} />
                 <span>Unread Only</span>
               </button>
@@ -194,17 +252,11 @@
             <div class="menu-divider"></div>
             <div class="menu-section">
               <span class="section-title">Sort</span>
-              <button
-                class="menu-item {sortMode === 'newest' ? 'selected' : ''}"
-                on:click={() => (sortMode = "newest")}
-              >
+              <button class="menu-item {sortMode === 'newest' ? 'selected' : ''}" on:click={() => (sortMode = "newest")}>
                 <Clock size={16} />
                 <span>Newest</span>
               </button>
-              <button
-                class="menu-item {sortMode === 'oldest' ? 'selected' : ''}"
-                on:click={() => (sortMode = "oldest")}
-              >
+              <button class="menu-item {sortMode === 'oldest' ? 'selected' : ''}" on:click={() => (sortMode = "oldest")}>
                 <Clock size={16} style="transform: rotate(180deg)" />
                 <span>Oldest</span>
               </button>
@@ -212,67 +264,36 @@
           </div>
         {/if}
       </div>
-      <button
-        class="action-btn"
-        on:click={onMarkAllRead}
-        title="Mark all as read"
-      >
+      <button class="action-btn" on:click={onMarkAllRead} title="Mark all as read">
         <CheckCheck size={18} />
-      </button>
-      <button
-        class="action-btn expand-btn"
-        on:click={onToggleExpand}
-        title={isExpanded ? "Show reader panel" : "Expand feed list"}
-      >
-        {#if isExpanded}
-          <PanelRightOpen size={18} />
-        {:else}
-          <PanelRightClose size={18} />
-        {/if}
       </button>
     </div>
   </header>
 
-  {#if showSearch}
-    <div
-      class="floating-search"
-      in:fly={{ y: -10, duration: 300 }}
-      out:fly={{ y: -10, duration: 200 }}
-    >
-      <span class="search-icon-inner">
-        <Search size={16} />
-      </span>
-      <input
-        bind:value={searchQuery}
-        bind:this={searchInput}
-        placeholder={$t("search") || "Search..."}
-        on:keydown={handleKeydown}
-        class="search-input"
-      />
-      {#if searchQuery}
-        <button class="clear-btn" on:click={() => (searchQuery = "")}>
-          <X size={14} />
-        </button>
-      {/if}
-    </div>
-  {/if}
+  <div class="dashboard-split">
+    <div class="feed-column {hasSelection && readerMode === 'side-by-side' ? 'narrow' : 'wide'}" class:mobile-hidden={hasSelection}>
+      <div class="articles-container scroll-area">
 
-  <!-- Solid surface background for the gap -->
-  <div class="corner-bg"></div>
+      <!-- Hero Page Header -->
+      <div class="feed-page-header">
+        <div class="header-text-block">
+          <h2 class="page-title">{title}</h2>
+          <p class="page-subtitle">Your curated feed insights and updates.</p>
+        </div>
+        <div class="header-badges desktop-only">
+          <span class="unread-badge">Unread ({articles.filter(a => !a.is_read).length})</span>
+        </div>
+      </div>
 
-  <!-- Overlay to draw the perfectly curved sharp line -->
-  <div class="corner-arc"></div>
-
-  <div class="feed-content">
-    <div class="articles-container scroll-area" class:search-open={showSearch}>
-      {#each articles as item (item.id)}
+      {#each articles as item, i (item.id)}
         <div
           data-id={item.id}
-          class="card-wrapper {item.is_read ? 'read' : ''}"
+          class="card-wrapper {item.is_read ? 'read' : ''} {getActiveBento(i)}"
         >
           <PostCard
             article={{ ...item, selected: selectedId === item.id }}
             viewMode={cardStyle}
+            bentoSize={getActiveBento(i)}
             onClick={onSelect}
             {onToggleFavorite}
             onShare={() => onShare(item)}
@@ -308,100 +329,114 @@
       {/if}
     </div>
   </div>
+
+    {#if hasSelection && readerMode !== 'full-list'}
+      <div class="reader-column" class:overlay-mode={readerMode === 'overlay'} transition:fly={{x: 40, duration: 400, easing: cubicOut}}>
+        <slot name="reader"></slot>
+      </div>
+    {/if}
+  </div>
 </section>
 
 <style>
-  .feed-list {
+  .dashboard-view {
     position: relative;
-    width: var(--feed-width);
+    width: 100%;
     background: var(--md-background);
     display: flex;
     flex-direction: column;
     height: 100vh;
     transition: all var(--layout-transition);
   }
-  .feed-list.style-image {
+  .dashboard-view.style-image {
     --feed-width: calc(var(--feed-width-base) * 1.25);
   }
-  .feed-list.expanded {
-    width: calc(100vw - var(--sidebar-width));
+
+  .dashboard-split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .feed-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    transition: width var(--layout-transition);
+    border-right: 1px solid var(--md-outline);
+    background: transparent;
+  }
+
+  .feed-column.narrow {
+    width: var(--feed-width);
     flex-shrink: 0;
   }
-  .feed-list.is-empty {
+
+  .feed-column.wide {
+    width: 100%;
     flex: 1;
-    width: auto;
+    border-right: none;
+  }
+
+  .reader-column {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    background: var(--md-background);
+  }
+
+  @media (min-width: 1001px) {
+    .reader-column.overlay-mode {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 200;
+      box-shadow: -20px 0 60px rgba(0,0,0,0.4);
+      border-left: 1px solid var(--md-outline);
+    }
   }
 
   .header-bar {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 0 24px;
-    border-bottom: 1px solid var(--md-outline);
-    background: var(--md-surface);
+    padding: 0 32px;
+    border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 50%, transparent);
+    background: color-mix(in srgb, var(--md-background) 85%, transparent);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
     box-sizing: border-box;
     height: var(--header-height);
     min-height: var(--header-height);
     max-height: var(--header-height);
-    border-bottom-right-radius: 32px;
     position: relative;
-    z-index: 20;
+    flex-shrink: 0;
+    z-index: 50;
     width: 100%;
-    max-width: 100%;
   }
 
-  /* Eraser for the straight line crossing the curved gap */
-  .header-bar::before {
-    content: "";
-    position: absolute;
-    left: 0px;
-    bottom: -1px;
-    width: 32px;
-    height: 2px;
-    background: var(--md-surface);
-    z-index: 15;
-  }
-
-  /* Solid background to color the gap outside the feed-content radius */
-  .corner-bg {
-    position: absolute;
-    top: var(--header-height);
-    left: 0;
-    width: 32px;
-    height: 32px;
-    background: var(--md-surface);
-    z-index: 0;
-  }
-
-  /* Overlaid pure arc to draw the crisp 1px unibody curve without clipping */
-  .corner-arc {
-    position: absolute;
-    top: var(--header-height);
-    left: 0;
-    width: 32px;
-    height: 32px;
-    border-top-left-radius: 32px;
-    border-top: 1px solid var(--md-outline);
-    border-left: 1px solid var(--md-outline);
-    z-index: 20; /* Keep stroke sharp and unclipped */
-    pointer-events: none;
-  }
-
-  .feed-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+  .header-title h2 {
+    font-family: var(--font-display);
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--md-on-surface);
+    margin: 0;
+    white-space: nowrap;
     overflow: hidden;
-    background: var(--md-background);
-    border-top-left-radius: 32px;
-    border-left: 1px solid var(--md-outline);
-    position: relative;
-    z-index: 10;
+    text-overflow: ellipsis;
+    max-width: 300px;
+    text-transform: capitalize;
+    letter-spacing: -0.5px;
   }
+
 
   .actions {
     display: flex;
-    gap: 4px;
+    gap: 8px;
     align-items: center;
   }
 
@@ -416,21 +451,83 @@
     align-items: center;
     justify-content: center;
     border-radius: var(--radius-full);
-    transition: all 0.2s;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     flex-shrink: 0;
   }
   .action-btn:hover {
-    background: var(--md-surface-variant);
+    background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
     color: var(--md-on-surface);
   }
 
   .articles-container {
     flex: 1;
-    padding: 24px 16px;
+    overflow-y: auto;
+    padding: 24px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 24px;
+    align-content: start;
+    transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dashboard-view.style-magazine .articles-container {
+    grid-template-columns: repeat(12, 1fr);
+  }
+
+  .feed-page-header {
+    grid-column: 1 / -1;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 8px;
+    padding-bottom: 16px;
+  }
+  .page-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--md-on-surface);
+    margin: 0 0 4px 0;
+    letter-spacing: -0.5px;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: var(--md-on-surface-variant);
+    margin: 0;
+  }
+  .unread-badge {
+    background: var(--md-surface-variant);
+    color: var(--md-on-surface-variant);
+    padding: 6px 16px;
+    border-radius: var(--radius-full);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+
+  .card-wrapper {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    transition: padding-top 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Si está en modo lista o hay noticia seleccionada, ocupa toda la fila */
+  .card-wrapper.bento-full {
+    grid-column: 1 / -1;
+  }
+
+  /* Magazine Grid Rules */
+  .dashboard-view.style-magazine .card-wrapper { grid-column: 1 / -1; }
+  @media (min-width: 800px) {
+    .dashboard-view.style-magazine .card-wrapper.mag-hero { grid-column: span 8; }
+    .dashboard-view.style-magazine .card-wrapper.mag-side-text { grid-column: span 4; }
+    .dashboard-view.style-magazine .card-wrapper.mag-side-img { grid-column: span 4; }
+    .dashboard-view.style-magazine .card-wrapper.mag-horizontal { grid-column: span 8; }
+  }
+
+  /* Diseño Bento Grid Responsivo */
+  @media (min-width: 800px) {
+    .card-wrapper.bento-hero { grid-column: 1 / -1; }
   }
 
   .articles-container.search-open {
@@ -438,6 +535,7 @@
   }
 
   .empty-state {
+    grid-column: 1 / -1;
     flex: 1;
     display: flex;
     flex-direction: column;
@@ -490,14 +588,14 @@
       padding-left: 12px;
       padding-right: 12px;
     }
-    .feed-list {
-      flex: 1 !important;
-      width: auto !important;
-      min-width: 0;
-      border-right: none;
-    }
-    .expand-btn {
+    .expand-section, .expand-divider {
       display: none !important;
+    }
+    .feed-column.mobile-hidden {
+      display: none;
+    }
+    .header-bar.mobile-reading {
+      display: none;
     }
   }
   .action-btn.active {
@@ -505,58 +603,84 @@
     background: var(--md-primary-container);
   }
 
-  .floating-search {
-    position: absolute;
-    top: calc(var(--header-height) + 12px);
-    left: 24px;
-    right: 24px;
-    z-index: 100;
+  .inline-search {
     display: flex;
     align-items: center;
     background: var(--md-surface);
     border: 1px solid var(--md-outline);
     border-radius: var(--radius-full);
     padding: 0 16px;
-    height: 44px;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
-    gap: 12px;
+    height: 40px;
+    width: 280px;
+    gap: 10px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+
+  .inline-search:focus-within {
+    border-color: var(--md-primary);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-primary) 20%, transparent);
+    width: 320px;
   }
 
   .search-icon-inner {
+    color: var(--md-on-surface-variant);
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+  }
+
+  .inline-search:focus-within .search-icon-inner {
     color: var(--md-primary);
-    opacity: 0.7;
   }
 
   .search-input {
     background: transparent;
     border: none;
     color: var(--md-on-surface);
-    font: var(--m3-body-large);
+    font: var(--m3-body-medium);
     outline: none;
     flex: 1;
+  }
+
+  .search-input::placeholder {
+    color: var(--md-on-surface-variant);
+    opacity: 0.6;
   }
 
   .clear-btn {
     background: var(--md-surface-variant);
     border: none;
     color: var(--md-on-surface-variant);
-    width: 24px;
-    height: 24px;
+    width: 22px;
+    height: 22px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    transition: all 0.2s;
+  }
+  .clear-btn:hover {
+    background: var(--md-outline);
+    color: var(--md-on-surface);
   }
 
-  @media (max-width: 600px) {
-    .floating-search {
-      left: 12px;
-      right: 12px;
+  @media (max-width: 800px) {
+    .inline-search {
+      width: 140px; /* Se hace más pequeña en móviles para caber con los botones */
+    }
+    .inline-search:focus-within {
+      width: 180px;
+    }
+    .header-title h2 {
+      max-width: 120px;
+      font-size: 16px;
     }
   }
 
   .sentinel {
+    grid-column: 1 / -1;
     height: 48px;
     display: flex;
     align-items: center;
@@ -571,12 +695,12 @@
 
   .filter-menu {
     position: absolute;
-    top: calc(100% + 8px);
+    top: calc(100% + 12px);
     right: 0;
-    width: 180px;
-    background: var(--md-surface-variant);
-    border-radius: 12px;
-    box-shadow: 0 10px 25px var(--shadow-color);
+    width: 200px;
+    background: var(--md-surface);
+    border-radius: 16px;
+    box-shadow: 0 12px 32px var(--shadow-color);
     border: 1px solid var(--md-outline);
     z-index: 100;
     padding: 8px;
@@ -588,17 +712,16 @@
   .menu-section {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
   }
 
   .section-title {
     font-size: 10px;
-    font-weight: 700;
+    font-weight: 800;
     text-transform: uppercase;
     color: var(--md-on-surface-variant);
-    opacity: 0.6;
-    padding: 4px 8px;
-    letter-spacing: 0.5px;
+    padding: 6px 12px;
+    letter-spacing: 1px;
   }
 
   .menu-divider {
@@ -611,27 +734,29 @@
   .menu-item {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 8px 10px;
+    gap: 12px;
+    padding: 10px 12px;
     border: none;
     background: transparent;
     color: var(--md-on-surface);
     font-size: 13px;
     font-family: var(--font-main);
+    font-weight: 500;
     cursor: pointer;
-    border-radius: 8px;
+    border-radius: 10px;
     transition: all 0.2s;
     text-align: left;
     width: 100%;
   }
 
   .menu-item:hover {
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--md-on-surface) 5%, transparent);
   }
 
   .menu-item.selected {
     background: var(--md-primary);
     color: var(--md-on-primary);
+    font-weight: 700;
   }
 
   .load-more-btn {

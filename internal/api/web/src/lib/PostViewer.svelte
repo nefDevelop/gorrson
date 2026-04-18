@@ -12,6 +12,7 @@
   export let onBack = () => {};
   export let isFullscreen = false;
   export let onToggleFullscreen = () => {};
+  export let showDesktopBack = false;
 
   let exportServices = [];
   function loadServices() {
@@ -164,7 +165,7 @@
         <div class="meta">
           <div class="meta-top">
             <div class="info-left">
-              <button class="action-btn mobile-only back-btn" on:click={onBack} title="Back to list">
+              <button class="action-btn back-btn {showDesktopBack ? '' : 'mobile-only'}" on:click={onBack} title="Back to list">
                 <ArrowLeft size={20} />
               </button>
               <span class="category">{article.category || 'General'}</span>

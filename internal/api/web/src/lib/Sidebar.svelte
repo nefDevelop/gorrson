@@ -97,11 +97,12 @@
 
 <aside class="sidebar">
   {#if !isMobile}
-    <header class="sidebar-header header-bar">
-      <div class="logo">
-        <span class="full-logo">GO<span class="rss-logo-part-sidebar">RSS</span>ON</span>
-        <span class="mini-logo">G</span>
-      </div>
+      <header class="sidebar-header">
+        <div class="logo-container">
+          <h1 class="full-logo">Gorrson</h1>
+          <p class="logo-subtitle">Reader & Archive</p>
+          <span class="mini-logo">G</span>
+        </div>
     </header>
   {/if}
   
@@ -322,13 +323,15 @@
 <style>
   .sidebar {
     width: var(--sidebar-width);
-    background: var(--md-surface);
+    background: var(--md-surface-variant);
     height: 100vh;
     display: flex;
     flex-direction: column;
     gap: 0; /* Gap managed by children */
     transition: all var(--layout-transition);
     overflow: hidden;
+    border-top-right-radius: 24px;
+    border-bottom-right-radius: 24px;
   }
 
   .sidebar-header {
@@ -340,29 +343,32 @@
     background: var(--md-surface);
     padding: 0;
     box-sizing: border-box;
-    /* No borders here, the path curves away */
+    background: transparent;
   }
 
-  .logo {
-    padding: 0 24px;
-    font: var(--m3-headline-large);
-    font-size: 36px;
-    height: 100%;
-    line-height: 1;
-    font-weight: 900;
-    background: linear-gradient(135deg, var(--md-primary), #3B82F6);
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    letter-spacing: -2px;
+  .logo-container {
+    padding: 24px 24px 16px 24px;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 4px;
+    width: 100%;
   }
-
-  .rss-logo-part-sidebar {
-    font-size: 1.1em;
-    font-weight: 950;
-    margin: 0 -1px;
+  .full-logo {
+    font-family: var(--font-display);
+    font-size: 22px;
+    font-weight: 900;
+    color: var(--md-on-surface);
+    margin: 0;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+  }
+  .logo-subtitle {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    font-weight: 800;
+    color: var(--md-on-surface-variant);
+    margin: 0;
   }
 
   .mini-logo { display: none; }
@@ -372,8 +378,8 @@
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 16px;
-    background: linear-gradient(to top, var(--md-surface), transparent);
+    padding: 0;
+    background: linear-gradient(to top, var(--md-surface-variant), transparent);
   }
 
   .header-actions {
@@ -390,47 +396,49 @@
   }
 
   .nav-item {
-    height: 56px;
-    padding: 0 24px 0 16px;
+    height: auto;
+    padding: 10px 16px;
     border-radius: var(--radius-full);
     color: var(--md-on-surface-variant);
-    font: var(--m3-label-large);
-    font-weight: 500;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
     cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: background 0.2s, color 0.2s;
+    transition: all 0.2s;
     background: transparent;
     border: none;
     width: 100%;
     outline: none;
+    margin-bottom: 4px;
   }
 
   .nav-item:hover { 
-    background: var(--md-surface-variant); 
+    background: color-mix(in srgb, var(--md-on-surface) 5%, transparent); 
     color: var(--md-on-surface); 
   }
   .nav-item.active { 
-    background: var(--md-primary-container); 
-    color: var(--md-on-primary-container);
-    font-weight: 600;
+    background: var(--md-primary); 
+    color: var(--md-on-primary);
+    box-shadow: 0 4px 12px var(--shadow-color);
   }
 
   .item-left { display: flex; align-items: center; gap: 12px; }
 
   .badge {
-    color: var(--md-primary);
-    background: var(--md-primary-container);
-    padding: 2px 10px;
+    background: color-mix(in srgb, var(--md-on-surface) 10%, transparent);
+    color: inherit;
+    padding: 2px 8px;
     border-radius: var(--radius-full);
-    font: var(--m3-label-small);
+    font-size: 10px;
     font-weight: 800;
   }
 
   .nav-item.active .badge {
-    background: var(--md-primary);
-    color: var(--md-on-primary);
+    background: rgba(255,255,255,0.2);
   }
 
   .divider { height: 1px; background: var(--md-outline); opacity: 0.15; margin: 12px 16px; }
@@ -448,10 +456,13 @@
   }
 
   .section-title-text {
-    font: var(--m3-label-medium);
-    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    font-weight: 800;
+    color: var(--md-on-surface-variant);
+    opacity: 0.7;
     margin-left: 12px;
-    opacity: 0.9;
   }
 
   .refresh-btn-inline {
@@ -490,36 +501,41 @@
   }
 
   .cat-item {
-    height: 40px;
-    padding: 0 16px 0 28px;
-    font: var(--m3-label-large);
-    font-weight: 500;
+    height: auto;
+    padding: 10px 16px 10px 24px;
+    border-radius: var(--radius-full);
     color: var(--md-on-surface-variant);
-    background: transparent;
-    border: none;
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    cursor: pointer;
-    border-radius: var(--radius-full);
     transition: all 0.2s;
+    background: transparent;
+    border: none;
+    width: 100%;
+    outline: none;
+    margin-bottom: 2px;
   }
-  .cat-item:hover { background: var(--md-surface-variant); color: var(--md-on-surface); }
+  .cat-item:hover { background: color-mix(in srgb, var(--md-on-surface) 5%, transparent); color: var(--md-on-surface); }
   .cat-item.active { 
-    background: var(--md-secondary-container); 
-    color: var(--md-on-secondary-container); 
-    font-weight: 700; 
+    background: var(--md-primary); 
+    color: var(--md-on-primary); 
+    box-shadow: 0 4px 12px var(--shadow-color);
   }
   
   .count { 
-    background: var(--md-surface-variant);
-    color: var(--md-on-surface-variant);
-    padding: 2px 8px;
+    background: color-mix(in srgb, var(--md-on-surface) 10%, transparent);
+    color: inherit;
+    padding: 2px 6px;
     border-radius: var(--radius-full);
-    font: var(--m3-label-small);
-    font-weight: 600;
+    font-size: 10px;
+    font-weight: 800;
   }
-  .cat-item.active .count { background: var(--md-primary); color: var(--md-on-primary); }
+  .cat-item.active .count { background: rgba(255,255,255,0.2); }
 
   .user-profile-container {
     position: relative;
@@ -648,11 +664,12 @@
   }
 
   .user-profile {
-    padding: 8px 12px;
+    padding: 16px 24px;
     display: flex;
     align-items: center;
     gap: 8px;
     transition: all 0.2s;
+    border-top: 1px solid var(--md-outline);
   }
 
   .profile-main {
@@ -660,7 +677,6 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px;
     border-radius: var(--radius-full);
     cursor: pointer;
     min-width: 0;
@@ -668,22 +684,20 @@
     border: none;
     background: transparent;
     text-align: left;
-  }
-  .profile-main:hover {
-    background: var(--md-secondary-container);
+    padding: 0;
   }
 
   .avatar {
-    width: 32px;
-    height: 32px;
+    width: 40px;
+    height: 40px;
     background: var(--md-primary);
     color: var(--md-on-primary);
     border-radius: var(--radius-full);
     display: flex;
     align-items: center;
     justify-content: center;
-    font: var(--m3-label-large);
-    font-weight: 800;
+    font-size: 16px;
+    font-weight: 900;
     flex-shrink: 0;
     position: relative;
     transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -704,9 +718,9 @@
     opacity: 0.15;
   }
 
-  .user-info { flex: 1; min-width: 0; }
-  .username { font: var(--m3-label-large); font-weight: 700; color: var(--md-primary); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
-  .status { font: var(--m3-label-small); color: var(--md-on-surface-variant); opacity: 0.8; }
+  .user-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px;}
+  .username { font-size: 11px; font-weight: 800; color: var(--md-on-surface); text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+  .status { font-size: 9px; text-transform: uppercase; letter-spacing: 1px; font-weight: 700; color: var(--md-on-surface-variant); opacity: 0.8; }
 
 
 
@@ -738,6 +752,7 @@
       box-sizing: border-box !important;
     }
     .full-logo, 
+    .logo-subtitle,
     .nav-item span, 
     .cat-item span, 
     .section-title-text,
@@ -919,4 +934,3 @@
     align-items: center;
   }
 </style>
-

@@ -620,6 +620,10 @@
               <div class="style-preview def"></div>
               <span>Default</span>
             </button>
+          <button class="style-btn {cardStyle === 'magazine' ? 'active' : ''}" on:click={() => cardStyle = 'magazine'}>
+            <div class="style-preview mag"></div>
+            <span>Magazine</span>
+          </button>
             <button class="style-btn {cardStyle === 'image' ? 'active' : ''}" on:click={() => cardStyle = 'image'}>
               <div class="style-preview img"></div>
               <span>Image</span>
@@ -1613,6 +1617,9 @@
   .style-preview.com::before { content: ""; position: absolute; top: 16px; left: 8px; right: 8px; height: 4px; background: var(--md-on-surface-variant); opacity: 0.15; border-radius: 2px; }
   
   .style-preview.min::after { content: ""; position: absolute; top: 10px; left: 10px; right: 10px; height: 5px; background: var(--md-primary); opacity: 0.4; border-radius: 2px; }
+
+  .style-preview.mag::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 16px; background: var(--md-primary); opacity: 0.4; }
+  .style-preview.mag::before { content: ""; position: absolute; top: 22px; left: 8px; right: 8px; height: 4px; background: var(--md-on-surface-variant); opacity: 0.15; border-radius: 2px; }
 
   /* API Keys Styles */
   .section-hint { font: var(--m3-label-medium); color: var(--md-on-surface-variant); margin-bottom: 24px; opacity: 0.8; }
