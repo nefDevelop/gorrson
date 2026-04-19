@@ -1,6 +1,6 @@
 <script>
   import { t, locale } from './i18n.js';
-  import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon, Wand2 } from 'lucide-svelte';
+  import { Globe, Shield, Info, LogOut, Palette, Moon, Sun, Monitor, Settings as SettingsIcon, Wand2, ChevronDown, Menu } from 'lucide-svelte';
   import Filters from './Filters.svelte';
   import { onMount } from 'svelte';
   import { Share2, Plus, Trash2, ExternalLink as ExtIcon, Download, Upload, FileJson, FileCode, Database } from 'lucide-svelte';
@@ -81,6 +81,7 @@
   $: uniqueCategories = Array.from(new Set(feeds.map(f => f.category).filter(Boolean))).sort();
 
   let activeTab = 'general';
+  let showSectionMenu = false;
   
   // Theme state
   let currentTheme = localStorage.getItem('gorrson-theme') || 'lavender';
@@ -520,29 +521,46 @@
   onConfirm={dialog.onConfirm}
 />
 
-<div class="view-container">
+<div class="dashboard-view">
   <header class="header-bar">
-    {#if !isMobile}
-      <div class="header-left">
-        <SettingsIcon size={20} />
-        <h1 class="title">{$t('settings')}</h1>
+    <div class="actions">
+      <div class="filter-wrapper">
+        <button class="action-btn dropdown-btn {showSectionMenu ? 'active' : ''}" on:click={() => showSectionMenu = !showSectionMenu}>
+          <Menu size={16} />
+          <span class="active-tab-label">
+            {#if activeTab === 'sources'}{$t('sources')}
+            {:else if activeTab === 'filters'}{$t('filters')}
+            {:else if activeTab === 'sharing'}{$t('sharing')}
+            {:else if activeTab === 'categories'}{$t('categories')}
+            {:else}{activeTab}{/if}
+          </span>
+          <ChevronDown size={14} />
+        </button>
+        {#if showSectionMenu}
+          <div class="filter-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
+            <button class="menu-item {activeTab === 'general' ? 'selected' : ''}" on:click={() => {activeTab = 'general'; showSectionMenu = false;}}>General</button>
+            <button class="menu-item {activeTab === 'categories' ? 'selected' : ''}" on:click={() => {activeTab = 'categories'; showSectionMenu = false;}}>{$t('categories')}</button>
+            <button class="menu-item {activeTab === 'sources' ? 'selected' : ''}" on:click={() => {activeTab = 'sources'; showSectionMenu = false;}}>{$t('sources')}</button>
+            <button class="menu-item {activeTab === 'filters' ? 'selected' : ''}" on:click={() => {activeTab = 'filters'; showSectionMenu = false;}}>{$t('filters')}</button>
+            <button class="menu-item {activeTab === 'sharing' ? 'selected' : ''}" on:click={() => {activeTab = 'sharing'; showSectionMenu = false;}}>{$t('sharing')}</button>
+            <button class="menu-item {activeTab === 'keys' ? 'selected' : ''}" on:click={() => {activeTab = 'keys'; showSectionMenu = false;}}>API Keys</button>
+            <button class="menu-item {activeTab === 'data' ? 'selected' : ''}" on:click={() => {activeTab = 'data'; showSectionMenu = false;}}>Data</button>
+          </div>
+        {/if}
       </div>
-    {/if}
-    <div class="tabs">
-      <button class="tab {activeTab === 'general' ? 'active' : ''}" on:click={() => activeTab = 'general'}>General</button>
-      <button class="tab {activeTab === 'sources' ? 'active' : ''}" on:click={() => activeTab = 'sources'}>{$t('sources')}</button>
-      <button class="tab {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
-      <button class="tab {activeTab === 'sharing' ? 'active' : ''}" on:click={() => activeTab = 'sharing'}>{$t('sharing')}</button>
-      <button class="tab {activeTab === 'keys' ? 'active' : ''}" on:click={() => activeTab = 'keys'}>API Keys</button>
-      <button class="tab {activeTab === 'data' ? 'active' : ''}" on:click={() => activeTab = 'data'}>Data</button>
     </div>
   </header>
 
-  <!-- Sharp edge fix for unibody rounding -->
-  <div class="corner-bg"></div>
-  <div class="corner-arc"></div>
+  <div class="dashboard-split">
+    <div class="feed-column wide">
+      <div class="content-scroll scroll-area">
+        <div class="feed-page-header">
+          <div class="header-text-block">
+            <h2 class="page-title">{$t('settings')}</h2>
+            <p class="page-subtitle">Manage your preferences, sources, and data.</p>
+          </div>
+        </div>
 
-  <div class="content-scroll scroll-area">
     {#if activeTab === 'general'}
       <div class="settings-section">
         <div class="section-header">
@@ -956,6 +974,9 @@
         </div>
       </div>
     {/if}
+      </div>
+    </div>
+  </div>
   </div>
 
   <Modal 
@@ -984,127 +1005,159 @@
       <p>Are you sure you want to remove <strong>{feedToDelete.title}</strong>? This will delete all its articles from your database. This action cannot be undone.</p>
     {/if}
   </Modal>
-</div>
 
 <style>
-  .view-container { 
+  .dashboard-view {
+    position: relative;
+    width: 100%;
+    background: var(--md-background);
     display: flex; 
     flex-direction: column; 
-    height: 100vh; 
-    background: var(--md-surface); 
-    flex: 1; 
-    width: 100%; 
-    position: relative;
-    overflow: hidden;
+    height: 100vh;
+    transition: all var(--layout-transition);
   }
-  .header-bar { 
-    height: var(--header-height); 
-    padding: 0 40px; 
+  .dashboard-split {
     display: flex; 
-    align-items: center; 
-    background: var(--md-surface); 
-    gap: 48px; 
-    box-sizing: border-box;
-    position: relative;
-    z-index: 20;
-    border-bottom: 1px solid var(--md-outline);
+    flex: 1;
+    min-height: 0;
   }
-
-  /* Eraser for the straight line crossing the curved gap */
-  .header-bar::before {
-    content: "";
-    position: absolute;
-    left: 0px; 
-    bottom: -1px; 
-    width: 32px; 
-    height: 2px;
-    background: var(--md-surface);
-    z-index: 15;
-  }
-
-  /* Solid background to color the gap outside the feed-content radius */
-  .corner-bg {
-    position: absolute;
-    top: var(--header-height);
-    left: 0;
-    width: 32px;
-    height: 32px;
-    background: var(--md-surface);
-    z-index: 0;
-  }
-
-  /* Overlaid pure arc to draw the crisp 1px unibody curve without clipping */
-  .corner-arc {
-    position: absolute;
-    top: var(--header-height);
-    left: 0;
-    width: 32px;
-    height: 32px;
-    border-top-left-radius: 32px;
-    border-top: 1px solid var(--md-outline);
-    border-left: 1px solid var(--md-outline);
-    z-index: 20;
-    pointer-events: none;
-  }
-
-  .header-left { display: flex; align-items: center; gap: 12px; }
-  .header-left :global(svg) { color: var(--md-primary); }
-  .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-primary); }
-
-  .tabs { 
-    display: flex; 
-    gap: 8px; 
-    height: 100%; 
-    align-items: center; 
-    padding-left: 24px; 
-    overflow-x: auto;
-    scrollbar-width: none; /* Firefox */
-    -ms-overflow-style: none; /* IE/Edge */
-    flex-wrap: nowrap;
-    -webkit-overflow-scrolling: touch;
-  }
-  .tabs::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
-  }
-  .tab { 
-    background: transparent; 
-    border: none; 
-    color: var(--md-on-surface-variant); 
-    font: var(--m3-label-large); 
-    padding: 8px 16px; 
-    height: 36px;
+  .feed-column {
     display: flex;
-    align-items: center;
-    cursor: pointer; 
-    border-radius: var(--radius-full);
-    transition: all 0.2s;
-    opacity: 0.8;
-    white-space: nowrap; /* Prevent text wrapping */
+    flex-direction: column;
+    height: 100%; 
+    width: 100%;
+    flex: 1;
+  }
+  .header-bar {
+    display: flex;
+    justify-content: flex-end;
+    align-items: center; 
+    padding: 0 32px;
+    border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 50%, transparent);
+    background: color-mix(in srgb, var(--md-background) 85%, transparent);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-sizing: border-box;
+    height: var(--header-height);
+    min-height: var(--header-height);
+    max-height: var(--header-height);
+    position: relative;
     flex-shrink: 0;
-  }
-  .tab:hover { 
-    background: var(--md-surface-variant);
-    opacity: 1; 
-    color: var(--md-on-surface); 
-  }
-  .tab.active { 
-    background: var(--md-primary-container);
-    color: var(--md-primary); 
-    font-weight: 800;
-    opacity: 1;
+    z-index: 50;
+    width: 100%;
   }
 
   .content-scroll { 
-    padding: 48px; 
+    padding: 24px; 
     flex: 1; 
-    width: 100%; 
-    box-sizing: border-box; 
     overflow-y: auto; 
-    background: var(--md-background);
-    border-top-left-radius: 32px;
-    border-left: 1px solid var(--md-outline);
+  }
+  
+  .feed-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 8px;
+    padding-bottom: 16px;
+  }
+  .page-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--md-on-surface);
+    margin: 0 0 4px 0;
+    letter-spacing: -0.5px;
+    text-transform: capitalize;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: var(--md-on-surface-variant);
+    margin: 0;
+  }
+
+  /* Actions and dropdown styles */
+  .actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .filter-wrapper {
     position: relative;
-    z-index: 10;
+  }
+  .action-btn {
+    background: transparent;
+    border: none;
+    color: var(--md-on-surface-variant);
+    cursor: pointer;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-full);
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    flex-shrink: 0;
+  }
+  .action-btn.dropdown-btn {
+    width: auto;
+    padding: 0 16px;
+    gap: 8px;
+    background: var(--md-surface-variant);
+    border: 1px solid var(--md-outline);
+  }
+  .action-btn.dropdown-btn:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+    color: var(--md-on-surface);
+    border-color: var(--md-primary);
+  }
+  .action-btn.active {
+    color: var(--md-primary);
+    background: var(--md-primary-container);
+    border-color: var(--md-primary);
+  }
+  .active-tab-label {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: capitalize;
+  }
+  .filter-menu {
+    position: absolute;
+    top: calc(100% + 12px);
+    right: 0;
+    width: 200px;
+    background: var(--md-surface);
+    border-radius: 16px;
+    box-shadow: 0 12px 32px var(--shadow-color);
+    border: 1px solid var(--md-outline);
+    z-index: 100;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .menu-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: none;
+    background: transparent;
+    color: var(--md-on-surface);
+    font-size: 13px;
+    font-family: var(--font-main);
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: all 0.2s;
+    text-align: left;
+    width: 100%;
+  }
+  .menu-item:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 5%, transparent);
+  }
+  .menu-item.selected {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
+    font-weight: 700;
   }
   
   .settings-section { margin-bottom: 48px; max-width: 900px; }
@@ -1290,6 +1343,7 @@
     font: var(--m3-body-large);
     font-weight: 700;
     color: var(--md-on-surface);
+    text-transform: capitalize;
   }
   .filters-view-embedded {
     margin-top: 16px;
