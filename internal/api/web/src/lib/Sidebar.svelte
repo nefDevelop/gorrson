@@ -664,7 +664,7 @@
   }
 
   .user-profile {
-    padding: 16px 24px;
+    padding: 8px 0;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -684,7 +684,13 @@
     border: none;
     background: transparent;
     text-align: left;
-    padding: 0;
+    padding: 8px 12px;
+    margin: 0 12px;
+    width: calc(100% - 24px);
+  }
+
+  .profile-main:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 5%, transparent);
   }
 
   .avatar {
