@@ -165,7 +165,7 @@
         <div class="meta">
           <div class="meta-top">
             <div class="info-left">
-              <button class="action-btn back-btn {showDesktopBack ? '' : 'mobile-only'}" on:click={onBack} title="Back to list">
+              <button class="action-btn back-btn" on:click={onBack} title="Close article">
                 <ArrowLeft size={20} />
               </button>
               <span class="category">{article.category || 'General'}</span>

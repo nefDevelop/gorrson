@@ -21,19 +21,19 @@
   $: maxFeed = stats?.feed_stats?.reduce((max, s) => Math.max(max, s.count), 0) || 1;
 </script>
 
-<div class="view-container">
-  <header class="header-bar">
-    <div class="header-left">
-      <BarChart2 size={20} color="var(--md-primary)" />
-      <h1 class="title">Insights & Statistics</h1>
-    </div>
-  </header>
+<div class="dashboard-view">
+  <header class="header-bar"></header>
 
-  <!-- Sharp edge fix for unibody rounding -->
-  <div class="corner-bg"></div>
-  <div class="corner-arc"></div>
+  <div class="dashboard-split">
+    <div class="feed-column wide">
+      <div class="content-scroll scroll-area">
+        <div class="feed-page-header">
+          <div class="header-text-block">
+            <h2 class="page-title">Insights & Statistics</h2>
+            <p class="page-subtitle">Your reading habits and content metrics.</p>
+          </div>
+        </div>
 
-  <div class="content-scroll scroll-area">
     {#if loading}
       <div class="loading-state">
         <div class="spinner"></div>
@@ -111,57 +111,81 @@
         </div>
       </div>
     {/if}
+      </div>
+    </div>
   </div>
 </div>
 
 <style>
-  .view-container { 
+  .dashboard-view {
+    position: relative;
+    width: 100%;
+    background: var(--md-background);
     display: flex; 
     flex-direction: column; 
-    height: 100vh; 
-    background: var(--md-surface); 
-    flex: 1; 
-    width: 100%; 
-    position: relative;
-    overflow: hidden;
+    height: 100vh;
+    transition: all var(--layout-transition);
   }
-  .header-bar { 
-    height: var(--header-height); 
-    padding: 0 40px; 
-    display: flex; 
-    align-items: center; 
-    background: var(--md-surface); 
-    gap: 48px; 
-    box-sizing: border-box;
-    position: relative;
-    z-index: 20;
-    border-bottom: 1px solid var(--md-outline);
-  }
-  .header-left { display: flex; align-items: center; gap: 12px; }
-  .title { font: var(--m3-headline-small); font-weight: 700; color: var(--md-primary); }
 
-  .corner-bg { 
-    position: absolute; top: var(--header-height); left: 0; 
-    width: 32px; height: 32px; background: var(--md-surface); z-index: 0; 
+  .dashboard-split {
+    display: flex;
+    flex: 1;
+    min-height: 0;
   }
-  .corner-arc { 
-    position: absolute; top: var(--header-height); left: 0; 
-    width: 32px; height: 32px; border-top-left-radius: 32px; 
-    border-top: 1px solid var(--md-outline); border-left: 1px solid var(--md-outline); 
-    z-index: 20; pointer-events: none; 
+
+  .feed-column {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    flex: 1;
+  }
+
+  .header-bar {
+    display: flex; 
+    justify-content: flex-end;
+    align-items: center; 
+    padding: 0 32px;
+    border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 50%, transparent);
+    background: color-mix(in srgb, var(--md-background) 85%, transparent);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    box-sizing: border-box;
+    height: var(--header-height);
+    min-height: var(--header-height);
+    max-height: var(--header-height);
+    position: relative;
+    flex-shrink: 0;
+    z-index: 50;
+    width: 100%;
   }
 
   .content-scroll { 
-    padding: 40px; 
+    padding: 24px; 
     flex: 1; 
-    width: 100%; 
-    box-sizing: border-box; 
     overflow-y: auto; 
-    background: var(--md-background);
-    border-top-left-radius: 32px;
-    border-left: 1px solid var(--md-outline);
-    position: relative;
-    z-index: 10;
+  }
+
+  .feed-page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    margin-bottom: 8px;
+    padding-bottom: 16px;
+  }
+  .page-title {
+    font-family: var(--font-display);
+    font-size: 32px;
+    font-weight: 800;
+    color: var(--md-on-surface);
+    margin: 0 0 4px 0;
+    letter-spacing: -0.5px;
+    text-transform: capitalize;
+  }
+  .page-subtitle {
+    font-size: 14px;
+    color: var(--md-on-surface-variant);
+    margin: 0;
   }
 
   .loading-state {

@@ -22,6 +22,7 @@
   let searchQuery = "";
   let isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
   let isSidebarMini = typeof window !== 'undefined' ? window.innerWidth <= 1000 : false;
+  let historyPushed = false;
   
   let offset = 0;
   const LIMIT = 50;
@@ -71,9 +72,19 @@
       }
     }, 5 * 60 * 1000);
 
+    // Detectar cuando el usuario pulsa "Atrás" en el ratón o navegador
+    const handlePopState = (e) => {
+      if (selectedId) {
+        selectedId = null;
+        historyPushed = false;
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+
     return () => {
       clearInterval(interval);
       clearInterval(pollInterval);
+      window.removeEventListener('popstate', handlePopState);
     };
   });
 
@@ -340,6 +351,7 @@
 
   function handleViewChange(viewId) {
     selectedId = null;
+    historyPushed = false;
     let shouldLoad = true;
 
     if (viewId.startsWith('cat:')) {
@@ -414,6 +426,11 @@
   }
 
   async function handleSelect(id) {
+    // Guardar estado en el historial solo si es el primer artículo que abrimos
+    if (!selectedId) {
+      window.history.pushState({ articleOpen: true }, "");
+      historyPushed = true;
+    }
     selectedId = id;
     handleMarkAsRead(id);
   }
@@ -573,7 +590,14 @@
               {#if selectedId}
                 <PostViewer 
                   article={selectedArticle} 
-                  onBack={() => selectedId = null}
+                  onBack={() => {
+                    if (historyPushed) {
+                      window.history.back(); // Esto dispara el popstate de arriba
+                      historyPushed = false;
+                    } else {
+                      selectedId = null;
+                    }
+                  }}
                   isFullscreen={fullscreenReader}
                   onToggleFullscreen={toggleFullscreen}
                   showDesktopBack={readerMode === 'overlay'}

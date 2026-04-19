@@ -124,22 +124,72 @@
     };
   });
 
-  // Lógica para la cuadrícula Bento (Bento Grid)
-  function getBentoClass(index) {
-    if (cardStyle === 'compact' || cardStyle === 'minimal') return 'bento-full'; // Mantiene listas simples
-    if (cardStyle === 'magazine') {
-      const pos = index % 4;
-      if (pos === 0) return 'mag-hero';
-      if (pos === 1) return 'mag-side-text';
-      if (pos === 2) return 'mag-side-img';
-      if (pos === 3) return 'mag-horizontal';
-    }
-    if (index === 0) return 'bento-hero';
-    return 'bento-standard';
+  // Función de análisis de contenido previo (busca imagen principal)
+  function hasImage(article) {
+    return !!article.image_url;
   }
 
-  // Si hay un artículo seleccionado, forzamos la vista de lista simple (1 columna)
-  $: getActiveBento = (index) => (selectedId && readerMode === 'side-by-side') ? 'bento-full' : getBentoClass(index);
+  // Reordena localmente en bloques de 4 para optimizar el grid.
+  // Intenta poner artículos sin imagen en las ranuras verticales (4 columnas)
+  // y artículos con imagen en las ranuras grandes (8 columnas)
+  function reorderForMagazine(arts) {
+    let result = [];
+    for (let i = 0; i < arts.length; i += 4) {
+      let chunk = arts.slice(i, i + 4);
+      let withImg = chunk.filter(a => hasImage(a));
+      let withoutImg = chunk.filter(a => !hasImage(a));
+
+      for (let j = 0; j < chunk.length; j++) {
+        if (j === 1 || j === 2) { // Slots de 4 columnas (mag-side-text / mag-side-img) prefieren texto sin imagen
+          if (withoutImg.length > 0) result.push(withoutImg.shift());
+          else result.push(withImg.shift());
+        } else { // Slots de 8 columnas (mag-hero / mag-horizontal) prefieren imagen destacada
+          if (withImg.length > 0) result.push(withImg.shift());
+          else result.push(withoutImg.shift());
+        }
+      }
+    }
+    return result;
+  }
+
+  // Creamos un array derivado dinámico que se reordena solo si estamos en modo magazine
+  $: displayArticles = cardStyle === 'magazine' ? reorderForMagazine(articles) : articles;
+  $: layoutRoles = computeLayout(displayArticles, cardStyle, readerMode, selectedId);
+
+  function computeLayout(arts, style, mode, selId) {
+    if (selId && mode === 'side-by-side') return arts.map(() => 'bento-full');
+    if (style === 'compact' || style === 'minimal') return arts.map(() => 'bento-full');
+    if (style !== 'magazine') return arts.map((_, i) => i === 0 ? 'bento-hero' : 'bento-standard');
+
+    let roles = new Array(arts.length);
+    for (let i = 0; i < arts.length; i += 4) {
+      const img0 = arts[i] ? hasImage(arts[i]) : false;
+      const img1 = arts[i+1] ? hasImage(arts[i+1]) : false;
+      const img2 = arts[i+2] ? hasImage(arts[i+2]) : false;
+      const img3 = arts[i+3] ? hasImage(arts[i+3]) : false;
+
+      // Fila 1: Necesita sumar 12 columnas (8 + 4)
+      if (arts[i+1] && !img0 && img1) {
+        roles[i] = 'mag-side-text'; // Lo vuelve vertical sin imagen (4 cols)
+        roles[i+1] = 'mag-hero';    // Mueve el destacado con imagen a un lado (8 cols)
+      } else {
+        roles[i] = img0 ? 'mag-hero' : 'mag-horizontal'; // Si no hay imagen, un horizontal ancho degrada bien a texto
+        if (arts[i+1]) roles[i+1] = 'mag-side-text';
+      }
+
+      // Fila 2: Necesita sumar 12 columnas (4 + 8)
+      if (arts[i+2]) {
+        if (arts[i+3] && !img3 && img2) {
+          roles[i+2] = 'mag-horizontal'; // 8 cols
+          roles[i+3] = 'mag-side-text';  // 4 cols
+        } else {
+          roles[i+2] = img2 ? 'mag-side-img' : 'mag-side-text';
+          if (arts[i+3]) roles[i+3] = 'mag-horizontal';
+        }
+      }
+    }
+    return roles;
+  }
 
   // Re-observe logic
   let sentinelEl;
@@ -164,10 +214,6 @@
   transition:fly={{ x: -20, duration: 400, easing: cubicOut }}
 >
   <header class="header-bar" class:mobile-reading={hasSelection}>
-    <div class="header-title">
-      <h2>{title}</h2>
-    </div>
-
     <div class="actions">
       <!-- Buscador integrado -->
       <div class="inline-search">
@@ -285,15 +331,15 @@
         </div>
       </div>
 
-      {#each articles as item, i (item.id)}
+      {#each displayArticles as item, i (item.id)}
         <div
           data-id={item.id}
-          class="card-wrapper {item.is_read ? 'read' : ''} {getActiveBento(i)}"
+          class="card-wrapper {item.is_read ? 'read' : ''} {layoutRoles[i]}"
         >
           <PostCard
             article={{ ...item, selected: selectedId === item.id }}
             viewMode={cardStyle}
-            bentoSize={getActiveBento(i)}
+            bentoSize={layoutRoles[i]}
             onClick={onSelect}
             {onToggleFavorite}
             onShare={() => onShare(item)}
@@ -402,7 +448,7 @@
 
   .header-bar {
     display: flex;
-    justify-content: space-between;
+    justify-content: flex-end;
     align-items: center;
     padding: 0 32px;
     border-bottom: 1px solid color-mix(in srgb, var(--md-outline) 50%, transparent);
@@ -418,21 +464,6 @@
     z-index: 50;
     width: 100%;
   }
-
-  .header-title h2 {
-    font-family: var(--font-display);
-    font-size: 20px;
-    font-weight: 800;
-    color: var(--md-on-surface);
-    margin: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    max-width: 300px;
-    text-transform: capitalize;
-    letter-spacing: -0.5px;
-  }
-
 
   .actions {
     display: flex;
@@ -489,6 +520,7 @@
     color: var(--md-on-surface);
     margin: 0 0 4px 0;
     letter-spacing: -0.5px;
+    text-transform: capitalize;
   }
   .page-subtitle {
     font-size: 14px;
@@ -672,10 +704,6 @@
     }
     .inline-search:focus-within {
       width: 180px;
-    }
-    .header-title h2 {
-      max-width: 120px;
-      font-size: 16px;
     }
   }
 
