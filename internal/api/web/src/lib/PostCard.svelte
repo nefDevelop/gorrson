@@ -1,7 +1,7 @@
 <script>
   import { stripHtml, extractFirstImage } from './utils.js';
-  import { Star, Share2, Image as ImageIcon } from 'lucide-svelte';
-  import { fetchFullContent } from './api.js';
+  import { Star, Share2, Image as ImageIcon, ExternalLink } from 'lucide-svelte';
+  import { fetchFullContent, markAsRead } from './api.js';
   /** @type {{id: string, title: string, source: string, time: string, category: string, is_read?: boolean, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean, matched_action?: string, image_url?: string}} */
   export let article;
   
@@ -36,7 +36,13 @@
   let loadingFull = false;
   let attemptedFullLoad = false;
 
-  $: if (bentoSize === 'mag-side-text' && !article.is_full_content && !loadingFull && !attemptedFullLoad) {
+  $: isAggregator = article.url && (
+    article.url.includes('news.google.com') || 
+    article.url.includes('ycombinator.com') || 
+    article.url.includes('reddit.com')
+  );
+
+  $: if (bentoSize === 'mag-side-text' && !article.is_full_content && !loadingFull && !attemptedFullLoad && !isAggregator) {
     loadExtraText();
   }
 
@@ -52,15 +58,27 @@
       loadingFull = false;
     }
   }
+
+  async function handleCardClick() {
+    if (isAggregator) {
+      window.open(article.url, '_blank');
+      if (!article.is_read) {
+        article = { ...article, is_read: true };
+        markAsRead(article.id).catch(console.error);
+      }
+    } else {
+      onClick(article.id);
+    }
+  }
 </script>
 
 <div 
   data-id={article.id}
   class="post-card {article.selected ? 'selected' : ''} {article.is_read ? 'read' : ''} {article.matched_action?.toLowerCase()} mode-{viewMode} {bentoSize}" 
-  on:click={() => onClick(article.id)}
+  on:click={handleCardClick}
   role="button"
   tabindex="0"
-  on:keydown={(e) => e.key === 'Enter' && onClick(article.id)}
+  on:keydown={(e) => e.key === 'Enter' && handleCardClick()}
 >
   <div class="card-layout">
     <div class="content-side">
@@ -85,6 +103,9 @@
       <div class="footer-row">
         <div class="meta">
           <span class="source-tag">{article.source}</span>
+          {#if isAggregator}
+            <span class="aggregator-badge" title="Opens in new tab"><ExternalLink size={12} /></span>
+          {/if}
           {#if viewMode === 'compact' || viewMode === 'minimal'}
             <span class="dot">•</span>
             <span class="time-mini">{article.time}</span>
@@ -111,7 +132,11 @@
 
       {#if bentoSize === 'mag-hero'}
         <div class="hero-read-more">
-          Read Full Article <span class="arrow">→</span>
+          {#if isAggregator}
+            Open Original <ExternalLink size={14} style="margin-left:4px" />
+          {:else}
+            Read Full Article <span class="arrow">→</span>
+          {/if}
         </div>
       {/if}
     </div>
@@ -426,6 +451,13 @@
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 120px;
+  }
+
+  .aggregator-badge {
+    display: flex;
+    align-items: center;
+    color: var(--md-on-surface-variant);
+    opacity: 0.5;
   }
 
   .actions { display: flex; gap: 4px; }
