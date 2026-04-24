@@ -105,7 +105,7 @@
       const text = await fetchFullContent(article.id);
       fullContent = text;
     } catch (e) {
-      console.error(e);
+      // Silenciamos el error por límite de concurrencia (503). El visualizador usará el resumen corto como respaldo.
       if (e.message === 'Unauthorized') {
         fullContent = `<div class="error-inline">${$t('unauthorized_content') || 'Unauthorized to load full content. Please check your session.'}</div>`;
       }
