@@ -31,7 +31,6 @@ func TestTokenTampering(t *testing.T) {
 
 	// Tamper with the token (e.g., change a character in the payload)
 	// JWT is header.payload.signature
-	parts := 3
 	// We'll just change the last character of the payload part if possible
 	// or just append something to the signature
 	tampered := tokenString + "extra"
@@ -48,7 +47,7 @@ func TestInvalidSigningMethod(t *testing.T) {
 		"username": "testuser",
 		"exp":      time.Now().Add(time.Hour).Unix(),
 	})
-	
+
 	// jwt.SigningMethodNone.Sign doesn't actually sign, it just returns empty string for signature
 	tokenString, _ := token.SignedString(jwt.UnsafeAllowNoneSignatureType)
 

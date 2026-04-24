@@ -9,7 +9,7 @@ func Clean(content string) string {
 	p := bluemonday.UGCPolicy()
 
 	// Allow structural tags for better article layout
-	p.AllowElements("figure", "figcaption", "article", "section", "header", "footer")
+	p.AllowElements("figure", "figcaption", "article", "section", "header", "footer", "button")
 
 	// Allow iframes from trusted video providers
 	p.AllowElements("iframe")

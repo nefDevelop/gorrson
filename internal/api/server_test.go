@@ -242,6 +242,12 @@ func TestImageProxy(t *testing.T) {
 
 	srv := NewServer(dataDir, true)
 
+	// Setup user
+	username := "proxy_tester"
+	store, _ := db.NewStore(dataDir, username)
+	store.Close()
+	token, _ := auth.GenerateToken(username)
+
 	// Mock image server
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "image/png")
@@ -251,6 +257,7 @@ func TestImageProxy(t *testing.T) {
 
 	// Request through our proxy
 	req := httptest.NewRequest("GET", "/proxy?url="+ts.URL, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
 	rr := httptest.NewRecorder()
 	srv.router.ServeHTTP(rr, req)
 
