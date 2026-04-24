@@ -907,6 +907,13 @@ func (s *Server) handleExportConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filters, _ := store.ListFilters()
+	// Evitar que un slice vacío se serialice como `null` en JSON en lugar de `[]`
+	if filters == nil {
+		filters = make([]models.Filter, 0)
+	}
+
+	slog.Info("Config and filters exported", "user", username, "filters_count", len(filters))
+
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Content-Disposition", "attachment; filename=gorrson-config.json")
 	json.NewEncoder(w).Encode(map[string]interface{}{

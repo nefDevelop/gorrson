@@ -17,6 +17,7 @@ const apiRoutes = [
   "/proxy",
   "/recipes",
   "/categories",
+  "/config",
 ];
 const proxy = {};
 apiRoutes.forEach((route) => (proxy[route] = backendUrl));

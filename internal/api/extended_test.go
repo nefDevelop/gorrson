@@ -84,6 +84,18 @@ func TestConfigAPI(t *testing.T) {
 		t.Errorf("Export config failed: %d", rr.Code)
 	}
 
+	// Validar que el cuerpo de la respuesta es un JSON válido y no texto plano
+	var exportData map[string]interface{}
+	if err := json.Unmarshal(rr.Body.Bytes(), &exportData); err != nil {
+		t.Fatalf("Failed to parse exported config JSON: %v. Body was: %s", err, rr.Body.String())
+	}
+	if exportData["version"] != "1.0" {
+		t.Errorf("Expected version 1.0, got %v", exportData["version"])
+	}
+	if exportData["filters"] == nil {
+		t.Error("Expected filters to be an array, got nil")
+	}
+
 	// 2. Import Config
 	configJson := `{"filters": [{"pattern": "test", "action": "BLOCK"}]}`
 	req = httptest.NewRequest("POST", "/config/import", strings.NewReader(configJson))
