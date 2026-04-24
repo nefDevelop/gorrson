@@ -19,9 +19,18 @@
  
   /** @type {string} */
   export let bentoSize = 'bento-full';
+  
+  let fetchedContent = null;
+  let lastArticleId = null;
 
-  $: summary = stripHtml(article.content || article.summary || "");
-  $: imageUrl = article.image_url || extractFirstImage(article.content);
+  $: if (article && article.id !== lastArticleId) {
+    lastArticleId = article.id;
+    fetchedContent = null;
+    attemptedFullLoad = false;
+  }
+
+  $: summary = stripHtml(fetchedContent || article.content || article.summary || "");
+  $: imageUrl = article.image_url || extractFirstImage(fetchedContent || article.content);
   $: showThumbnail = (viewMode !== 'minimal') && imageUrl;
 
   let loadingFull = false;
@@ -36,9 +45,9 @@
     attemptedFullLoad = true; // Evita reintentos infinitos si el servidor da 503
     try {
       const text = await fetchFullContent(article.id);
-      article = { ...article, content: text, is_full_content: true };
+      fetchedContent = text;
     } catch (e) {
-      console.error("Failed to load full content for vertical card", e);
+      // Silenciamos el error: si falla, mantendrá el resumen corto sin romper la rejilla
     } finally {
       loadingFull = false;
     }
@@ -289,19 +298,25 @@
   }
   .post-card.mag-horizontal .card-layout {
     flex-direction: row-reverse;
-    align-items: center;
+    align-items: stretch;
     gap: 24px;
   }
   .post-card.mag-horizontal .image-side {
-    width: 220px;
-    height: 180px;
+    width: 35%;
+    max-width: 300px;
+    min-width: 200px;
+    height: auto;
+    min-height: 180px;
     margin: 0;
     border-radius: 12px;
     flex-shrink: 0;
   }
+  .post-card.mag-horizontal .content-side {
+    justify-content: center;
+  }
   
   .post-card.mag-side-text .content-side {
-    justify-content: space-between;
+    justify-content: center;
   }
 
   /* Magazine Typography */
@@ -313,11 +328,13 @@
   .post-card.mag-side-text .title { font-size: 20px; margin-bottom: 12px; }
   .post-card.mag-side-text .summary { 
     -webkit-line-clamp: 12; 
-    font-size: 14px; 
-    line-height: 1.6; 
-    margin-bottom: auto; 
-    opacity: 0.8;
-    margin-top: 8px;
+    font-size: 14.5px; 
+    line-height: 1.85; 
+    margin-bottom: 24px; 
+    opacity: 0.85;
+    margin-top: 16px;
+    font-family: "Georgia", "Times New Roman", serif;
+    text-align: justify;
   }
   .post-card.mag-side-text .source-tag { color: var(--md-tertiary); opacity: 1; }
 

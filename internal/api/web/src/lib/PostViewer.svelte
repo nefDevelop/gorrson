@@ -3,7 +3,7 @@
   import { cubicOut } from 'svelte/easing';
   import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal, Maximize2, Minimize2 } from 'lucide-svelte';
   import { t } from './i18n.js';
-  import { toggleFavorite, fetchFullContent } from './api.js';
+  import { fetchFullContent } from './api.js';
   import { success as toastSuccess } from './toast.js';
   import { onMount } from 'svelte';
   
@@ -13,6 +13,7 @@
   export let isFullscreen = false;
   export let onToggleFullscreen = () => {};
   export let showDesktopBack = false;
+  export let onToggleFavorite = (id) => {};
 
   let exportServices = [];
   function loadServices() {
@@ -47,14 +48,18 @@
   }
 
   let lastHandledId = null;
+  let fullContent = null;
 
   // Reset and auto-load full content when article changes
   $: if (article && article.id !== lastHandledId) {
     lastHandledId = article.id;
     progress = 0;
+    fullContent = null;
     if (container) container.scrollTop = 0;
     if (!article.is_full_content) {
       loadFullContent();
+    } else {
+      fullContent = article.content;
     }
   }
 
@@ -89,8 +94,7 @@
 
   async function handleFavorite() {
     if (!article) return;
-    await toggleFavorite(article.id, !article.is_favorite);
-    article = { ...article, is_favorite: !article.is_favorite };
+    onToggleFavorite(article.id);
   }
 
   let loadingFull = false;
@@ -99,12 +103,11 @@
     loadingFull = true;
     try {
       const text = await fetchFullContent(article.id);
-      article = { ...article, content: text, is_full_content: true };
+      fullContent = text;
     } catch (e) {
       console.error(e);
       if (e.message === 'Unauthorized') {
-        // We might want to notify the parent app or show a clear error
-        article = { ...article, content: `<div class="error-inline">${$t('unauthorized_content') || 'Unauthorized to load full content. Please check your session.'}</div>`, is_full_content: false };
+        fullContent = `<div class="error-inline">${$t('unauthorized_content') || 'Unauthorized to load full content. Please check your session.'}</div>`;
       }
     } finally {
       loadingFull = false;
@@ -118,7 +121,7 @@
 
   $: cleanedContent = (() => {
     if (!article) return '';
-    let html = (article.content || article.summary || '');
+    let html = (fullContent || article.content || article.summary || '');
     
     // 1. Hide lazy-loading placeholders (BBC, etc.)
     html = html.replace(/<img[^>]+src="[^"]*(placeholder|grey|static\.files\.bbci)[^"]*"[^>]*>/gi, '');
