@@ -49,25 +49,31 @@ export async function fetchWithAuth(url, options = {}) {
     }
   }
 
+  if (res.status === 401) throw new Error("Unauthorized");
+
   return res;
+}
+
+/**
+ * Helper to clean and build query strings
+ * @param {Record<string, any>} params
+ */
+function buildQuery(params) {
+  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "" && v !== "null"));
+  return new URLSearchParams(clean).toString();
 }
 
 /**
  * @param {Record<string, any>} [params]
  */
 export async function fetchNews(params = {}) {
-  // Remove null/undefined/empty values to avoid spurious filters like category=null
-  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "" && v !== "null"));
-  const query = new URLSearchParams(clean).toString();
-  const res = await fetchWithAuth(`/news?${query}`);
-  if (res.status === 401) throw new Error("Unauthorized");
+  const res = await fetchWithAuth(`/news?${buildQuery(params)}`);
   if (!res.ok) throw new Error("Failed to fetch news");
   return res.json();
 }
 
 export async function fetchFeeds() {
   const res = await fetchWithAuth("/feeds");
-  if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error("Failed to fetch feeds");
   return res.json();
 }
@@ -84,9 +90,7 @@ export async function markAsRead(id) {
  * @param {Record<string, any>} [params]
  */
 export async function markAllRead(params = {}) {
-  const clean = Object.fromEntries(Object.entries(params).filter(([, v]) => v != null && v !== "" && v !== "null"));
-  const query = new URLSearchParams(clean).toString();
-  const res = await fetchWithAuth(`/news/read-all?${query}`, { method: "PUT" });
+  const res = await fetchWithAuth(`/news/read-all?${buildQuery(params)}`, { method: "PUT" });
   return res.ok;
 }
 
@@ -101,7 +105,6 @@ export async function toggleFavorite(id, favorite = true) {
 
 export async function fetchFilters() {
   const res = await fetchWithAuth("/filters");
-  if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error("Failed to fetch filters");
   return res.json();
 }
@@ -186,19 +189,46 @@ export async function deleteFeed(id) {
   if (!res.ok) throw new Error("Failed to delete feed");
 }
 
+// Cola de concurrencia para proteger el límite (Semaphore) del servidor
+const MAX_CONCURRENT_FETCHES = 3;
+let activeFetches = 0;
+/** @type {Array<(value?: any) => void>} */
+let fetchQueue = [];
+
+/**
+ * @template T
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function enqueueFetch(fn) {
+  if (activeFetches >= MAX_CONCURRENT_FETCHES) {
+    await new Promise((resolve) => fetchQueue.push(resolve));
+  }
+  activeFetches++;
+  try {
+    return await fn();
+  } finally {
+    activeFetches--;
+    if (fetchQueue.length > 0) {
+      const next = fetchQueue.shift();
+      if (next) next();
+    }
+  }
+}
+
 /**
  * @param {string | number} id
  */
 export async function fetchFullContent(id) {
-  const res = await fetchWithAuth(`/news/${id}/content`);
-  if (res.status === 401) throw new Error("Unauthorized");
-  if (!res.ok) throw new Error("Failed to fetch full content");
-  return res.text();
+  return enqueueFetch(async () => {
+    const res = await fetchWithAuth(`/news/${id}/content`);
+    if (!res.ok) throw new Error("Failed to fetch full content");
+    return res.text();
+  });
 }
 
 export async function fetchAPIKeys() {
   const res = await fetchWithAuth("/api-keys");
-  if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error("Failed to fetch API keys");
   return res.json();
 }
@@ -226,12 +256,11 @@ export async function deleteAPIKey(id) {
 
 export async function fetchStats() {
   const res = await fetchWithAuth("/stats");
-  if (res.status === 401) throw new Error("Unauthorized");
   if (!res.ok) throw new Error("Failed to fetch stats");
   return res.json();
 }
 
 export async function updateRecipes() {
-  const res = await fetchWithAuth('/recipes/update', { method: 'POST' });
+  const res = await fetchWithAuth("/recipes/update", { method: "POST" });
   return res.ok;
 }
