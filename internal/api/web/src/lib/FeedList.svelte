@@ -22,7 +22,7 @@
   import { t } from "./i18n.js";
   import { fade, slide } from "svelte/transition";
   import { onMount } from "svelte";
-  import { extractFirstImage } from "./utils.js";
+  import { extractFirstImage, stripHtml } from "./utils.js";
 
   /** @type {Array<any>} */
   export let articles = [];
@@ -132,77 +132,49 @@
     };
   });
 
-  // Función de análisis de contenido previo (busca imagen principal)
-  function hasImage(article) {
-    return !!(article.image_url || extractFirstImage(article.content));
-  }
+  $: renderedArticles = buildLayout(articles, cardStyle, readerMode, selectedId);
 
-  // Reordena localmente en bloques de 4 para optimizar el grid.
-  // Intenta poner artículos sin imagen en las ranuras verticales (4 columnas)
-  // y artículos con imagen en las ranuras grandes (8 columnas)
-  function reorderForMagazine(arts) {
+  function buildLayout(arts, style, mode, selId) {
+    if (!arts || arts.length === 0) return [];
+    
+    if (selId && mode === 'side-by-side') return arts.map(a => ({ ...a, _role: 'bento-full' }));
+    if (style === 'compact' || style === 'minimal') return arts.map(a => ({ ...a, _role: 'bento-full' }));
+    if (style === 'default' || style === 'image') return arts.map((a, i) => ({ ...a, _role: i === 0 ? 'bento-hero' : 'bento-standard' }));
+    
+    // Magazine style (Masonry Grid Construction)
     let result = [];
-    for (let i = 0; i < arts.length; i += 4) {
-      let chunk = arts.slice(i, i + 4);
-      let withImg = chunk.filter(a => hasImage(a));
-      let withoutImg = chunk.filter(a => !hasImage(a));
+    let pool = [...arts];
+    let rowType = 0; // 0: 8+4 cols, 1: 4+8 cols
 
-      for (let j = 0; j < chunk.length; j++) {
-        if (j === 1 || j === 2) { // Slots de 4 columnas (mag-side-text / mag-side-img) prefieren texto sin imagen
-          if (withoutImg.length > 0) result.push(withoutImg.shift());
-          else result.push(withImg.shift());
-        } else { // Slots de 8 columnas (mag-hero / mag-horizontal) prefieren imagen destacada
-          if (withImg.length > 0) result.push(withImg.shift());
-          else result.push(withoutImg.shift());
+    const hasImage = (a) => !!(a.image_url || extractFirstImage(a.content));
+    const isGoodVertical = (a) => stripHtml(a.content || a.summary || "").length >= 150;
+
+    while (pool.length > 0) {
+      let vertIdx = pool.findIndex(a => isGoodVertical(a) && !hasImage(a));
+      if (vertIdx === -1) vertIdx = pool.findIndex(a => isGoodVertical(a));
+
+      if (vertIdx !== -1 && pool.length >= 2) {
+        let vert = pool.splice(vertIdx, 1)[0];
+        let main = pool.shift();
+
+        vert._role = 'mag-side-text'; // Fuerza texto sin imagen
+        main._role = hasImage(main) ? 'mag-hero' : 'mag-horizontal';
+
+        if (rowType === 0) {
+          result.push({ ...main }, { ...vert });
+          rowType = 1;
+        } else {
+          result.push({ ...vert }, { ...main });
+          rowType = 0;
         }
+      } else {
+        // Si no hay buen texto vertical, usamos ancho completo (12 columnas) para la fila
+        let main = pool.shift();
+        main._role = hasImage(main) ? 'bento-hero' : 'bento-standard';
+        result.push({ ...main });
       }
     }
     return result;
-  }
-
-  // Creamos un array derivado dinámico que se reordena solo si estamos en modo magazine
-  $: displayArticles = cardStyle === 'magazine' ? reorderForMagazine(articles) : articles;
-  $: layoutRoles = computeLayout(displayArticles, cardStyle, readerMode, selectedId);
-  
-  // Mapeamos el rol directamente dentro del objeto para forzar la reactividad en Svelte 5
-  $: renderedArticles = displayArticles.map((item, i) => ({
-    ...item,
-    _role: layoutRoles[i]
-  }));
-
-  function computeLayout(arts, style, mode, selId) {
-    if (selId && mode === 'side-by-side') return arts.map(() => 'bento-full');
-    if (style === 'compact' || style === 'minimal') return arts.map(() => 'bento-full');
-    if (style !== 'magazine') return arts.map((_, i) => i === 0 ? 'bento-hero' : 'bento-standard');
-
-    let roles = new Array(arts.length);
-    for (let i = 0; i < arts.length; i += 4) {
-      const img0 = arts[i] ? hasImage(arts[i]) : false;
-      const img1 = arts[i+1] ? hasImage(arts[i+1]) : false;
-      const img2 = arts[i+2] ? hasImage(arts[i+2]) : false;
-      const img3 = arts[i+3] ? hasImage(arts[i+3]) : false;
-
-      // Fila 1: Necesita sumar 12 columnas (8 + 4)
-      if (arts[i+1] && !img0 && img1) {
-        roles[i] = 'mag-side-text'; // Lo vuelve vertical sin imagen (4 cols)
-        roles[i+1] = 'mag-hero';    // Mueve el destacado con imagen a un lado (8 cols)
-      } else {
-        roles[i] = img0 ? 'mag-hero' : 'mag-horizontal'; // Si no hay imagen, un horizontal ancho degrada bien a texto
-        if (arts[i+1]) roles[i+1] = 'mag-side-text';
-      }
-
-      // Fila 2: Necesita sumar 12 columnas (4 + 8)
-      if (arts[i+2]) {
-        if (arts[i+3] && !img3 && img2) {
-          roles[i+2] = 'mag-horizontal'; // 8 cols
-          roles[i+3] = 'mag-side-text';  // 4 cols
-        } else {
-          roles[i+2] = img2 ? 'mag-side-img' : 'mag-side-text';
-          if (arts[i+3]) roles[i+3] = 'mag-horizontal';
-        }
-      }
-    }
-    return roles;
   }
 
   // Svelte Action para enlazar la tarjeta al IntersectionObserver nativamente

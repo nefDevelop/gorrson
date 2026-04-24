@@ -1,5 +1,5 @@
 <script>
-  import { Shield, Wand2, X, Plus, Trash2, Send, Check } from 'lucide-svelte';
+  import { Shield, Wand2, X, Plus, Trash2, Send, Check, AlertTriangle } from 'lucide-svelte';
   import { t } from './i18n.js';
   import { success, error as toastError } from './toast.js';
   import { fetchWithAuth } from './api.js';
@@ -98,6 +98,7 @@
 
   $: targetUrl = feed?.sample_url || feed?.site_url || feed?.feed_url || "";
   $: { console.log("RecipeBuilder target:", targetUrl); }
+  $: isAggregator = targetUrl && (targetUrl.includes('news.google.com') || targetUrl.includes('ycombinator.com') || targetUrl.includes('reddit.com'));
 </script>
 
 {#if show && feed}
@@ -116,22 +117,31 @@
 
     <div class="builder-main">
       <div class="iframe-view">
-        <iframe 
-          bind:this={iframe}
-          title="Recipe Preview"
-          src={targetUrl ? `/proxy/page?url=${encodeURIComponent(targetUrl)}&feed_id=${feed.id}&token=${localStorage.getItem('token')}` : ''}
-          class="preview-frame"
-          on:load={() => loading = false}
-        ></iframe>
-        {#if loading}
-          <div class="iframe-loading" out:fade>
-            <div class="spinner"></div>
-            <span>Loading Site Preview...</span>
+        {#if isAggregator}
+          <div class="aggregator-warning">
+            <AlertTriangle size={48} />
+            <h3>Agregador Detectado</h3>
+            <p>Sitios como Google News, Hacker News o Reddit enlazan a miles de webs distintas. No es posible crear una única receta para todos ellos.</p>
+            <p><strong>Gorrson mostrará los resúmenes directamente en tu muro y abrirá las noticias en una nueva pestaña</strong> en lugar de usar el lector interno.</p>
+          </div>
+        {:else}
+          <iframe 
+            bind:this={iframe}
+            title="Recipe Preview"
+            src={targetUrl ? `/proxy/page?url=${encodeURIComponent(targetUrl)}&feed_id=${feed.id}&token=${localStorage.getItem('token')}` : ''}
+            class="preview-frame"
+            on:load={() => loading = false}
+          ></iframe>
+          {#if loading}
+            <div class="iframe-loading" out:fade>
+              <div class="spinner"></div>
+              <span>Loading Site Preview...</span>
+            </div>
+          {/if}
+          <div class="visual-hint">
+            Click elements in the page to select them
           </div>
         {/if}
-        <div class="visual-hint">
-          Click elements in the page to select them
-        </div>
       </div>
 
       <aside class="builder-sidebar">
@@ -278,6 +288,32 @@
     width: 100%;
     height: 100%;
     border: none;
+  }
+
+  .aggregator-warning {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 40px;
+    background: var(--md-surface-variant);
+    color: var(--md-on-surface-variant);
+  }
+  .aggregator-warning h3 {
+    color: var(--md-on-surface);
+    margin: 16px 0 8px;
+    font: var(--m3-headline-small);
+  }
+  .aggregator-warning p {
+    max-width: 440px;
+    line-height: 1.6;
+    margin: 8px 0;
+  }
+  .aggregator-warning :global(svg) {
+    color: #ffb300;
   }
 
   .visual-hint {

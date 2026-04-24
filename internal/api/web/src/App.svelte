@@ -501,6 +501,7 @@
                   isFullscreen={fullscreenReader}
                   onToggleFullscreen={toggleFullscreen}
                   showDesktopBack={readerMode === 'overlay'}
+                  onToggleFavorite={handleToggleFavorite}
                 />
               {/if}
             </svelte:fragment>
