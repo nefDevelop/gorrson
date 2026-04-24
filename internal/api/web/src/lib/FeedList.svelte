@@ -16,11 +16,13 @@
     List,
     AlignJustify,
     BookOpen,
-    LayoutTemplate
+    LayoutTemplate,
+    Image as ImageIcon
   } from "lucide-svelte";
   import { t } from "./i18n.js";
   import { fade, slide } from "svelte/transition";
   import { onMount } from "svelte";
+  import { extractFirstImage } from "./utils.js";
 
   /** @type {Array<any>} */
   export let articles = [];
@@ -79,6 +81,8 @@
 
   let statusObserver;
   let scrollObserver;
+  let pendingCards = [];
+  let pendingSentinel = null;
 
   onMount(() => {
     // Observer for marking articles as read (top 20% of screen)
@@ -118,6 +122,10 @@
       },
     );
 
+    pendingCards.forEach(node => statusObserver.observe(node));
+    pendingCards = [];
+    if (pendingSentinel) scrollObserver.observe(pendingSentinel);
+
     return () => {
       if (statusObserver) statusObserver.disconnect();
       if (scrollObserver) scrollObserver.disconnect();
@@ -126,7 +134,7 @@
 
   // Función de análisis de contenido previo (busca imagen principal)
   function hasImage(article) {
-    return !!article.image_url;
+    return !!(article.image_url || extractFirstImage(article.content));
   }
 
   // Reordena localmente en bloques de 4 para optimizar el grid.
@@ -155,6 +163,12 @@
   // Creamos un array derivado dinámico que se reordena solo si estamos en modo magazine
   $: displayArticles = cardStyle === 'magazine' ? reorderForMagazine(articles) : articles;
   $: layoutRoles = computeLayout(displayArticles, cardStyle, readerMode, selectedId);
+  
+  // Mapeamos el rol directamente dentro del objeto para forzar la reactividad en Svelte 5
+  $: renderedArticles = displayArticles.map((item, i) => ({
+    ...item,
+    _role: layoutRoles[i]
+  }));
 
   function computeLayout(arts, style, mode, selId) {
     if (selId && mode === 'side-by-side') return arts.map(() => 'bento-full');
@@ -191,19 +205,33 @@
     return roles;
   }
 
-  // Re-observe logic
-  let sentinelEl;
-  $: if (statusObserver && (articles || scrollRead !== undefined)) {
-    statusObserver.disconnect();
-    setTimeout(() => {
-      const cards = document.querySelectorAll(".post-card:not(.read)");
-      cards.forEach((card) => statusObserver.observe(card));
-    }, 100);
+  // Svelte Action para enlazar la tarjeta al IntersectionObserver nativamente
+  function observeCard(node, isRead) {
+    if (!isRead) {
+      if (statusObserver) statusObserver.observe(node);
+      else pendingCards.push(node);
+    }
+    return {
+      update(newIsRead) {
+        if (newIsRead && statusObserver) statusObserver.unobserve(node);
+      },
+      destroy() {
+        if (statusObserver) statusObserver.unobserve(node);
+        pendingCards = pendingCards.filter(n => n !== node);
+      }
+    };
   }
 
-  $: if (scrollObserver && sentinelEl) {
-    scrollObserver.disconnect();
-    scrollObserver.observe(sentinelEl);
+  // Svelte Action para el scroll infinito
+  function observeSentinel(node) {
+    if (scrollObserver) scrollObserver.observe(node);
+    else pendingSentinel = node;
+    return {
+      destroy() {
+        if (scrollObserver) scrollObserver.unobserve(node);
+        pendingSentinel = null;
+      }
+    };
   }
 </script>
 
@@ -252,6 +280,10 @@
             <button class="menu-item {cardStyle === 'magazine' ? 'selected' : ''}" on:click={() => {cardStyle = 'magazine'; showViewMenu = false;}}>
               <LayoutTemplate size={16} />
               <span>Magazine</span>
+            </button>
+            <button class="menu-item {cardStyle === 'image' ? 'selected' : ''}" on:click={() => {cardStyle = 'image'; showViewMenu = false;}}>
+              <ImageIcon size={16} />
+              <span>Image</span>
             </button>
               <button class="menu-item {cardStyle === 'compact' ? 'selected' : ''}" on:click={() => {cardStyle = 'compact'; showViewMenu = false;}}>
                 <AlignJustify size={16} />
@@ -317,7 +349,7 @@
   </header>
 
   <div class="dashboard-split">
-    <div class="feed-column {hasSelection && readerMode === 'side-by-side' ? 'narrow' : 'wide'}" class:mobile-hidden={hasSelection}>
+    <div class="feed-column {hasSelection && readerMode === 'side-by-side' ? 'narrow' : 'wide'}" class:mobile-hidden={hasSelection} class:desktop-hidden={hasSelection && readerMode === 'full-list'}>
       <div class="articles-container scroll-area">
 
       <!-- Hero Page Header -->
@@ -331,15 +363,16 @@
         </div>
       </div>
 
-      {#each displayArticles as item, i (item.id)}
+      {#each renderedArticles as item (item.id)}
         <div
           data-id={item.id}
-          class="card-wrapper {item.is_read ? 'read' : ''} {layoutRoles[i]}"
+          class="card-wrapper {item.is_read ? 'read' : ''} {item._role}"
+          use:observeCard={item.is_read}
         >
           <PostCard
             article={{ ...item, selected: selectedId === item.id }}
             viewMode={cardStyle}
-            bentoSize={layoutRoles[i]}
+            bentoSize={item._role}
             onClick={onSelect}
             {onToggleFavorite}
             onShare={() => onShare(item)}
@@ -361,7 +394,7 @@
       {/each}
 
       {#if articles.length > 0}
-        <div class="sentinel" bind:this={sentinelEl}>
+        <div class="sentinel" use:observeSentinel>
           {#if loadingMore}
             <div class="loading-more-spinner"></div>
           {:else if !allLoaded}
@@ -376,7 +409,7 @@
     </div>
   </div>
 
-    {#if hasSelection && readerMode !== 'full-list'}
+    {#if hasSelection}
       <div class="reader-column" class:overlay-mode={readerMode === 'overlay'} transition:fly={{x: 40, duration: 400, easing: cubicOut}}>
         <slot name="reader"></slot>
       </div>
@@ -444,6 +477,9 @@
       box-shadow: -20px 0 60px rgba(0,0,0,0.4);
       border-left: 1px solid var(--md-outline);
     }
+    .feed-column.desktop-hidden {
+      display: none !important;
+    }
   }
 
   .header-bar {
@@ -503,6 +539,13 @@
 
   .dashboard-view.style-magazine .articles-container {
     grid-template-columns: repeat(12, 1fr);
+  }
+
+  /* Forzar modo lista para tarjetas delgadas */
+  .dashboard-view.style-compact .articles-container,
+  .dashboard-view.style-minimal .articles-container {
+    grid-template-columns: 1fr;
+    gap: 8px;
   }
 
   .feed-page-header {

@@ -22,20 +22,25 @@
 
   $: summary = stripHtml(article.content || article.summary || "");
   $: imageUrl = article.image_url || extractFirstImage(article.content);
-  $: showThumbnail = (viewMode !== 'minimal' && viewMode !== 'compact') && imageUrl;
+  $: showThumbnail = (viewMode !== 'minimal') && imageUrl;
 
   let loadingFull = false;
-  $: if (bentoSize === 'mag-side-text' && !article.is_full_content && !loadingFull) {
+  let attemptedFullLoad = false;
+
+  $: if (bentoSize === 'mag-side-text' && !article.is_full_content && !loadingFull && !attemptedFullLoad) {
     loadExtraText();
   }
 
   async function loadExtraText() {
     loadingFull = true;
+    attemptedFullLoad = true; // Evita reintentos infinitos si el servidor da 503
     try {
       const text = await fetchFullContent(article.id);
       article = { ...article, content: text, is_full_content: true };
     } catch (e) {
       console.error("Failed to load full content for vertical card", e);
+    } finally {
+      loadingFull = false;
     }
   }
 </script>
@@ -52,6 +57,9 @@
     <div class="content-side">
       <div class="title-row">
         <h3 class="title" class:active-title={article.selected}>
+          {#if !article.is_read}
+            <span class="unread-dot"></span>
+          {/if}
           {article.title}
         </h3>
         {#if viewMode !== 'compact' && viewMode !== 'minimal'}
@@ -158,42 +166,70 @@
   .image-side img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
   .post-card:hover .image-side img { transform: scale(1.03); }
 
+  /* Unread Dot Indicator */
+  .unread-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background-color: var(--md-primary);
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    box-shadow: 0 0 8px color-mix(in srgb, var(--md-primary) 50%, transparent);
+    transform: translateY(-2px);
+  }
+
   /* Modes */
-  .mode-compact { padding: 12px 16px 8px 16px; border-radius: 16px; margin-bottom: 4px; }
+  .mode-compact { padding: 12px 16px; border-radius: 12px; margin-bottom: 0; }
   .mode-compact .title { font-size: 15px; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; }
-  .mode-compact .summary { font-size: 12px; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; margin-top: 2px; }
-  
-  .mode-minimal { padding: 10px 14px; border-radius: 12px; margin-bottom: 4px; }
-  .mode-minimal .title { font-size: 14px; font-weight: 500; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; margin-bottom: 2px; }
-  .mode-minimal .footer-row { margin-top: 2px; }
-  .mode-minimal .action-btn { padding: 2px; }
+  .mode-compact .summary { font-size: 13px; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; margin-top: 4px; }
+  .mode-compact .image-side { width: 72px; height: 72px; border-radius: 8px; margin-top: 0; }
+
+  .mode-minimal { padding: 12px 16px; border-radius: 12px; margin-bottom: 0; }
+  .mode-minimal .image-side { display: none !important; }
+  .mode-minimal .summary { display: none; }
+  .mode-minimal .title { font-size: 15px; font-weight: 600; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; display: -webkit-box; margin-bottom: 2px; }
+  .mode-minimal .title-row { align-items: center; margin-bottom: 0; }
+  .mode-minimal .content-side { justify-content: center; }
+  .mode-minimal .footer-row { margin-top: 4px; }
+  .mode-minimal .action-btn { padding: 4px; }
+
+  /* Image Mode (Cinematic / Overlay) */
+  .post-card.mode-image { padding: 0; overflow: hidden; min-height: 280px; }
+  .post-card.mode-image .card-layout {
+    flex-direction: column; justify-content: flex-end; height: 100%; min-height: 280px; padding: 24px; position: relative; z-index: 2;
+    background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 50%, transparent 100%); gap: 8px;
+  }
+  .post-card.mode-image .image-side { position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; border-radius: 0; z-index: -1; }
+  .post-card.mode-image .title { color: #ffffff; text-shadow: 0 1px 4px rgba(0,0,0,0.8); }
+  .post-card.mode-image .summary { display: none; }
+  .post-card.mode-image .time, .post-card.mode-image .source-tag { color: rgba(255,255,255,0.8); }
+  .post-card.mode-image .action-btn { color: rgba(255,255,255,0.8); }
+  .post-card.mode-image .action-btn:hover { background: rgba(255,255,255,0.2); color: #fff; }
+  .post-card.mode-image:not(.read) .title { color: #ffffff; }
 
   /* Layout Estandar (Grid) */
-  .post-card.bento-standard .card-layout {
-    flex-direction: column-reverse; /* Pone la imagen arriba */
-  }
-  
-  .post-card.bento-standard .image-side {
-    width: 100%;
-    height: auto;
-    aspect-ratio: 16 / 10;
-    margin-top: 0;
-    margin-bottom: 16px;
-  }
+  .post-card.bento-standard { padding: 0; overflow: hidden; }
+  .post-card.bento-standard .content-side { padding: 16px 20px 20px 20px; }
+  .post-card.bento-standard .card-layout { flex-direction: column-reverse; gap: 0; }
+  .post-card.bento-standard .image-side { width: 100%; height: auto; aspect-ratio: 16 / 9; margin: 0; border-radius: 0; }
 
   /* Hero (Artículo Destacado) */
   .post-card.bento-hero {
-    padding: 24px;
-    background: var(--md-surface-variant); /* Le damos un fondo sutilmente distinto para destacar */
+    padding: 0;
+    overflow: hidden;
+    background: var(--md-surface-variant);
   }
 
   @media (min-width: 800px) {
-    .post-card.bento-hero .card-layout { align-items: center; }
+    .post-card.bento-hero .card-layout { align-items: stretch; gap: 0; }
+    .post-card.bento-hero .content-side { padding: 40px; justify-content: center; }
     .post-card.bento-hero .image-side {
-      width: 45%;
+      width: 50%;
       height: auto;
       aspect-ratio: 16 / 9;
       margin: 0;
+      border-radius: 0;
     }
     .post-card.bento-hero .title {
       font-size: 32px;
@@ -202,11 +238,11 @@
       margin-bottom: 12px;
       -webkit-line-clamp: 4;
     }
-    .post-card.bento-hero .summary { font-size: 16px; -webkit-line-clamp: 3; }
   }
   @media (max-width: 799px) {
-    .post-card.bento-hero .card-layout { flex-direction: column-reverse; }
-    .post-card.bento-hero .image-side { width: 100%; aspect-ratio: 16 / 9; margin-bottom: 16px; }
+    .post-card.bento-hero .card-layout { flex-direction: column-reverse; gap: 0; }
+    .post-card.bento-hero .content-side { padding: 24px; }
+    .post-card.bento-hero .image-side { width: 100%; aspect-ratio: 16 / 9; border-radius: 0; margin: 0; }
     .post-card.bento-hero .title { font-size: 24px; line-height: 1.2; }
   }
 
