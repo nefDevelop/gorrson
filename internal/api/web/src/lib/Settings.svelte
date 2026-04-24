@@ -202,7 +202,25 @@
   async function exportConfig() {
     try {
       const res = await fetchWithAuth('/config/export');
-      const serverConfig = await res.json();
+      
+      if (!res.ok) {
+        const errorMsg = await res.text();
+        toastError("Error al exportar: " + errorMsg);
+        return;
+      }
+
+      const rawText = await res.text();
+
+      // Si empieza por '<', Vite nos está devolviendo el index.html
+      if (rawText.trim().startsWith('<')) {
+        toastError("Error de Proxy: El servidor Vite devolvió HTML. Verifica vite.config.js");
+        return;
+      }
+
+      let serverConfig = {};
+      if (rawText.trim()) {
+        serverConfig = JSON.parse(rawText);
+      }
       
       const config = {
         ...serverConfig,
@@ -270,13 +288,23 @@
   }
 
   async function exportOPMLBlob() {
-    const res = await fetchWithAuth('/feeds/export');
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'gorrson.opml';
-    a.click();
+    try {
+      const res = await fetchWithAuth('/feeds/export');
+      if (!res.ok) {
+        const err = await res.text();
+        toastError('OPML Export failed: ' + err);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'gorrson.opml';
+      a.click();
+    } catch (e) {
+      console.error(e);
+      toastError('OPML export failed');
+    }
   }
 
   async function importOPML(event) {
@@ -304,6 +332,12 @@
   async function exportBackup() {
     try {
       const res = await fetchWithAuth('/backup/export');
+      if (!res.ok) {
+        const err = await res.text();
+        toastError('Backup failed: ' + err);
+        return;
+      }
+      
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');

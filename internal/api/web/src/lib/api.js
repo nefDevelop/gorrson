@@ -129,6 +129,32 @@ export async function deleteFilter(id) {
   return res.ok;
 }
 
+export async function exportConfig() {
+  const res = await fetchWithAuth("/config/export");
+  if (!res.ok) throw new Error("Failed to export config");
+  
+  // Convertir la respuesta a Blob y forzar su descarga en el navegador
+  const blob = await res.blob();
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "gorrson-config.json";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+export async function importConfig(configData) {
+  const res = await fetchWithAuth("/config/import", {
+    method: "POST",
+    body: JSON.stringify(configData),
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) throw new Error("Failed to import config");
+  return res.json();
+}
+
 /**
  * @param {string} username
  * @param {string} password
