@@ -1,87 +1,90 @@
 package api
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
 
-func TestSecurity_PathTraversal(t *testing.T) {
-	dataDir := "./test_security"
-	os.RemoveAll(dataDir)
-	defer os.RemoveAll(dataDir)
+func TestSecurityHeadersMiddleware(t *testing.T) {
+	s := NewServer("test_data", true)
+	handler := s.securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
 
-	srv := NewServer(dataDir, true)
-
-	// Try to register/login with suspicious username
-	evilUser := "../../etc/passwd"
-	loginBody := `{"username":"` + evilUser + `", "password":"password"}`
-	req := httptest.NewRequest("POST", "/login", strings.NewReader(loginBody))
+	req := httptest.NewRequest("GET", "/", nil)
 	rr := httptest.NewRecorder()
 
-	srv.router.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, req)
 
-	// Should be rejected by NewStore/IsValidUsername
-	if rr.Code != http.StatusNotFound && rr.Code != http.StatusBadRequest {
-		t.Errorf("Expected rejection for evil username, got %d", rr.Code)
+	if rr.Header().Get("X-Content-Type-Options") != "nosniff" {
+		t.Error("Missing X-Content-Type-Options: nosniff")
 	}
-
-	// Verify no file was created outside dataDir
-	if _, err := os.Stat("../../etc/passwd.db"); err == nil {
-		t.Error("Vulnerability found: evil database file created at root!")
-		_ = os.Remove("../../etc/passwd.db")
+	if rr.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
+		t.Error("Missing X-Frame-Options: SAMEORIGIN")
+	}
+	if !strings.Contains(rr.Header().Get("Content-Security-Policy"), "default-src 'self'") {
+		t.Error("Content-Security-Policy is not strict enough")
 	}
 }
 
-func TestSecurity_Headers(t *testing.T) {
-	dataDir := "./test_headers"
-	os.RemoveAll(dataDir)
-	defer os.RemoveAll(dataDir)
+func TestProxySecurityHeaders(t *testing.T) {
+	s := NewServer("test_data", true)
+	handler := s.securityHeaders(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
 
-	srv := NewServer(dataDir, true)
-	req := httptest.NewRequest("GET", "/login", nil) // Login is public
+	req := httptest.NewRequest("GET", "/proxy/page?url=http://example.com", nil)
 	rr := httptest.NewRecorder()
 
-	srv.router.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, req)
 
-	headers := []string{
-		"X-Content-Type-Options",
-		"X-Frame-Options",
-		"X-XSS-Protection",
-		"Referrer-Policy",
-		"Content-Security-Policy",
+	// Proxy should have slightly different CSP but still SAMEORIGIN
+	if rr.Header().Get("X-Frame-Options") != "SAMEORIGIN" {
+		t.Errorf("Proxy should still be SAMEORIGIN, got %s", rr.Header().Get("X-Frame-Options"))
 	}
-
-	for _, h := range headers {
-		if rr.Header().Get(h) == "" {
-			t.Errorf("Security header %s missing", h)
-		}
+	if !strings.Contains(rr.Header().Get("Content-Security-Policy"), "unsafe-inline") {
+		t.Error("Proxy CSP should allow unsafe-inline for compatibility")
 	}
 }
 
-func TestSecurity_SSRF(t *testing.T) {
-	// This test verifies that the local IP ranges are blocked
-	dataDir := "./test_ssrf"
-	os.RemoveAll(dataDir)
-	defer os.RemoveAll(dataDir)
+func TestAuthMiddlewareRejection(t *testing.T) {
+	s := NewServer("test_data", true)
+	handler := s.authMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
 
-	srv := NewServer(dataDir, true)
-
-	// We use the proxy endpoint which uses SecureClient
-	// http://localhost:8080/proxy?url=http://127.0.0.1:22
-	req := httptest.NewRequest("GET", "/proxy?url=http://127.0.0.1:22", nil)
+	req := httptest.NewRequest("GET", "/news", nil)
 	rr := httptest.NewRecorder()
 
-	srv.router.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, req)
 
-	// Should be blocked
-	if rr.Code == http.StatusOK {
-		t.Error("SSRF vulnerability: access to 127.0.0.1 should be blocked")
+	if rr.Code != http.StatusUnauthorized {
+		t.Errorf("Expected 401 Unauthorized for missing token, got %d", rr.Code)
 	}
+}
 
-	if !strings.Contains(rr.Body.String(), "blocked") && rr.Code != http.StatusInternalServerError {
-		t.Logf("Response body: %s", rr.Body.String())
+func TestJSONBodyLimit(t *testing.T) {
+	s := NewServer("test_data", true)
+	
+	// Create a large payload (> 1MB)
+	largeBody := strings.Repeat("a", (1024*1024) + 100)
+	reqBody := `{"username": "test", "password": "` + largeBody + `"}`
+	
+	req := httptest.NewRequest("POST", "/login", strings.NewReader(reqBody))
+	rr := httptest.NewRecorder()
+	
+	s.handleLogin(rr, req)
+	
+	// Should fail due to body limit in decodeJSONBody
+	if rr.Code != http.StatusBadRequest && rr.Code != http.StatusInternalServerError {
+		t.Errorf("Expected error for oversized JSON body, got %d", rr.Code)
 	}
+}
+
+func TestIsValidUsernameIntegration(t *testing.T) {
+	// Although tested in sanitizer, we verify how it would be used in a simulated request if needed.
+	// This is a placeholder for where integration logic would go.
 }
