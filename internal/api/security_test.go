@@ -1,7 +1,6 @@
 package api
 
 import (
-	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -68,16 +67,16 @@ func TestAuthMiddlewareRejection(t *testing.T) {
 
 func TestJSONBodyLimit(t *testing.T) {
 	s := NewServer("test_data", true)
-	
+
 	// Create a large payload (> 1MB)
-	largeBody := strings.Repeat("a", (1024*1024) + 100)
+	largeBody := strings.Repeat("a", (1024*1024)+100)
 	reqBody := `{"username": "test", "password": "` + largeBody + `"}`
-	
+
 	req := httptest.NewRequest("POST", "/login", strings.NewReader(reqBody))
 	rr := httptest.NewRecorder()
-	
+
 	s.handleLogin(rr, req)
-	
+
 	// Should fail due to body limit in decodeJSONBody
 	if rr.Code != http.StatusBadRequest && rr.Code != http.StatusInternalServerError {
 		t.Errorf("Expected error for oversized JSON body, got %d", rr.Code)

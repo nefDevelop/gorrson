@@ -375,15 +375,17 @@ func extractFirstImageFromHTML(html string) string {
 	}
 	// Simple regex for speed, checking for common image extensions
 	re := regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+\.(jpg|jpeg|png|webp|gif|svg)[^"']*)["']`)
-	matches := re.FindStringSubmatch(html)
-	if len(matches) > 1 {
-		src := matches[1]
-		// Filter out common tracking pixels or icons
-		lower := strings.ToLower(src)
-		if strings.Contains(lower, "pixel") || strings.Contains(lower, "spacer") || strings.Contains(lower, "1x1") || strings.Contains(lower, "tracking") {
-			return ""
+	matches := re.FindAllStringSubmatch(html, -1)
+	for _, match := range matches {
+		if len(match) > 1 {
+			src := match[1]
+			// Filter out common tracking pixels or icons
+			lower := strings.ToLower(src)
+			if strings.Contains(lower, "pixel") || strings.Contains(lower, "spacer") || strings.Contains(lower, "1x1") || strings.Contains(lower, "tracking") {
+				continue
+			}
+			return src
 		}
-		return src
 	}
 	return ""
 }

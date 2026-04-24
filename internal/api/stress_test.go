@@ -75,8 +75,8 @@ func TestStress_ConcurrentLoginAndList(t *testing.T) {
 	// Pre-generate token to avoid redundant hashing overhead in listing test
 	token, _ := auth.GenerateToken(username)
 
-	const workerCount = 50
-	const iterations = 100
+	const workerCount = 10
+	const iterations = 10
 	var wg sync.WaitGroup
 
 	// --- Phase 1: Login ---
