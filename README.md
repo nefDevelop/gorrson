@@ -4,129 +4,91 @@
 
 # ![FileBernic](internal/api/web/public/icons.svg)  gorrson: High-Performance RSS CLI & API Engine
 
-**gorrson** is a RSS engine written in Go. Robust, private, and multi-user RSS solution that runs anywhere.
+**gorrson** is a modern, high-performance RSS engine written in Go. It provides a robust, private, and multi-user solution for news aggregation that runs anywhere—from small servers to high-end workstations.
 
-## Key Features
+## 🌟 Key Features
 
-1.  **Feed Discovery**: Automatically finds RSS/Atom feeds from any website URL.
-2.  **Advanced Filtering**: Rule-based engine with Regex support. Actions: `BLOCK`, `HIDE`, `REPLACE`, `SILENT`, `HIGHLIGHT`. Targets: `title`, `content`, or `both`.
-3.  **Full Content Scraping**: Intelligent reader mode extracts main text via recipes and `go-readability`. Robust charset detection (UTF-8, Latin1, CP1252, etc.).
-4.  **Image Proxy & Cache**: Proxies images to protect privacy and caches them on disk.
-5.  **SQLite FTS5**: Ultra-fast full-text search across all saved articles.
-6.  **Fever API Support**: Compatible with mobile readers (Reeder, Unread, etc.).
-7.  **Multi-Tenant**: Each user has a dedicated `.db` file for maximum privacy.
+1.  **Editorial Experience**: Modern web interface with **Magazine Mode** featuring a dynamic Bento Grid, editorial typography, and intelligent content preview.
+2.  **Full Content Scraping**: Extracts the main text from truncated feeds using custom recipes and `go-readability`. Robust charset detection for global support.
+3.  **Advanced Filtering**: Rule-based engine with Regex. Actions: `BLOCK`, `HIDE`, `REPLACE`, `HIGHLIGHT`, `IMPORTANT` (Priority) or `NOTIFY` (Bell).
+4.  **🔥 Fever API Support**: Full compatibility with professional mobile readers like **Reeder**, **Fiery Feeds**, and **Unread**.
+5.  **Data Portability**: Native backup/restore of your entire database (SQLite), export/import of OPML feeds, and JSON configuration for settings and filters.
+6.  **Privacy First**: Built-in Image Proxy & Cache to protect your identity. Each user has a dedicated, isolated SQLite database.
+7.  **Search & Speed**: Ultra-fast full-text search powered by **SQLite FTS5**.
 
-## Performance Benchmarks
+## 📊 Performance Benchmarks
 
 Measured on AMD Ryzen 5 5600X with `-benchtime=5s`:
 
 | Operation            | CPU Cores | Latency (ns/op) | Throughput     |
 | :------------------- | :-------- | :-------------- | :------------- |
 | **Full-Text Search** | 1 CPU     | 4,526,220       | ~221 ops/sec   |
-| **Full-Text Search** | 2 CPU     | 4,550,178       | ~220 ops/sec   |
-| **Full-Text Search** | 4 CPU     | 4,568,430       | ~218 ops/sec   |
 | **List News (Feed)** | 1 CPU     | 186,619         | ~5,358 ops/sec |
-| **List News (Feed)** | 2 CPU     | 177,149         | ~5,644 ops/sec |
 | **List News (Feed)** | 4 CPU     | 190,217         | ~5,257 ops/sec |
 
-_Notice: Performance remains extremely stable across different CPU configurations._
+_Performance remains extremely stable and linear across different CPU configurations._
 
-## 🚀 Installation & Setup
+## 🚀 Quick Start
 
-### 🐳 Docker (Recommended for Servers)
+### 🐳 Docker (Recommended)
 
-The most robust way to deploy Gorrson is using Docker Compose.
-
-1.  **Clone the repository**:
-
-    ```bash
-    git clone https://github.com/nef734/gorrson.git
-    cd gorrson
-    ```
-
-2.  **Configure environment**:
-    Copy the template and set a secure secret:
-
-    ```bash
-    cp .env.example .env
-    # We recommend changing GORRSON_JWT_SECRET in the .env file
-    ```
-
-3.  **Deploy**:
-
+1.  **Deploy**:
     ```bash
     docker compose up -d
     ```
 
-4.  **Create your first user**:
-    Run the CLI within the container to register:
+2.  **Register User**:
     ```bash
     docker exec -it gorrson-server ./gorrson register --user <admin> --pass <password>
     ```
 
 ---
 
-### 🛠️ Manual Installation (Bare Metal)
+### 🛠️ Manual Installation
 
-Ensure you have **Go 1.21+** installed on your system.
+Ensure you have **Go 1.22+** installed.
 
-1.  **Build the project**:
-
-    ```bash
-    make build
-    ```
-
-2.  **Initialize a user**:
-
-    ```bash
-    ./rss-cli register --user <name> --pass <secret>
-    ```
-
-3.  **Start the engine**:
-    ```bash
-    ./rss-cli serve
-    ```
+1.  **Build**: `make build`
+2.  **Register**: `./rss-cli register --user <name> --pass <secret>`
+3.  **Serve**: `./rss-cli serve`
 
 ---
 
-## 📖 Usage Guide
+## 📱 Mobile Integration (Fever)
 
-Once the server is running, you can interact with Gorrson via the API or the CLI.
+Gorrson is fully compatible with the Fever protocol. Connect your favorite mobile app using:
 
-### API Documentation
+- **Server URL**: `http://your-server:7077/api/fever`
+- **Auth**: Use your Gorrson username and password. The system handles the standard Fever MD5 authentication automatically.
 
-Gorrson includes interactive documentation:
+## 📖 API Documentation
 
-- **Swagger UI**: [http://localhost:7077/docs](http://localhost:7077/docs)
-- **OpenAPI Spec**: [http://localhost:7077/openapi.yaml](http://localhost:7077/openapi.yaml)
+Gorrson provides a powerful REST API for all its features. Once the server is running, you can access:
 
-### Mobile Integration (Fever)
+- **Interactive Swagger UI**: [http://localhost:7077/docs](http://localhost:7077/docs) (Browse & test endpoints).
+- **OpenAPI Spec**: [docs/openapi.yaml](docs/openapi.yaml) (Standard technical definition).
+- **Quick Reference**: See [DOCUMENTATION.md](DOCUMENTATION.md) for a human-friendly API summary.
 
-To use Gorrson with mobile apps like Reeder or Unread:
+## 🛠️ Architecture & CLI
 
-1. Use the **Fever API** endpoint: `http://your-server:7077/api/fever`
-2. Authenticate with your username and password.
+| Command    | Description                                      |
+| :--------- | :----------------------------------------------- |
+| `register` | Creates a new user, calculates Fever keys.       |
+| `user`     | Account management (list, passwd, delete).       |
+| `add`      | Discovers and adds a feed from any URL.          |
+| `filter`   | Manage advanced filtering rules via CLI.         |
+| `import`   | Bulk import feeds from OPML files.               |
+| `serve`    | Starts the API, Web UI, and Sync Workers.        |
+| `list`     | Built-in CLI news viewer for terminal power users. |
 
-## Architecture & CLI
+## 💡 Why Gorrson?
 
-| Command    | Description                              |
-| :--------- | :--------------------------------------- |
-| `register` | Creates a new user and database.         |
-| `user`     | Management (list, passwd, delete).       |
-| `add`      | Discovers and adds a feed.               |
-| `filter`   | Manage rules (`BLOCK`, `REPLACE`, etc.). |
-| `import`   | Bulk import feeds from OPML files.       |
-| `serve`    | Starts the API and Sync Workers.         |
-| `list`     | CLI news viewer.                         |
+Inspired by minimalist readers like Miniflux, but optimized for speed and editorial aesthetics:
 
-## Why Gorrson?
-
-Inspired by minimalist readers like Miniflux, but optimized for portability:
-
-- **Zero-Dependency**: No PostgreSQL required; uses embedded SQLite (CGO-free).
-- **Privacy**: Each user owns their physical database file.
-- **Resource Efficient**: Low CPU/RAM footprint, ideal for background daemons.
+- **Zero External Dependencies**: No PostgreSQL or Redis required. Uses an optimized embedded SQLite engine.
+- **High Customization**: Custom accent colors, light/dark modes, and multiple layout styles (Magazine, Compact, Minimal, Image-only).
+- **Resource Efficient**: Extremely low CPU/RAM footprint, designed to run 24/7 as a background daemon.
 
 ---
 
-**Developed with Go.**
+**Developed with Go. Private by design. Fast by nature.**
