@@ -243,8 +243,12 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	}
 
 	if category != "" {
-		conditions = append(conditions, "f.category COLLATE NOCASE = ?")
-		args = append(args, category)
+		if strings.ToLower(category) == "general" {
+			conditions = append(conditions, "(f.category IS NULL OR f.category = '' OR f.category COLLATE NOCASE = 'general')")
+		} else {
+			conditions = append(conditions, "f.category COLLATE NOCASE = ?")
+			args = append(args, category)
+		}
 	}
 
 	if feedID != "" {

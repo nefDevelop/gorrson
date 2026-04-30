@@ -156,7 +156,7 @@
       </div>
     {/if}
   </div>
-{#if !headless}
+
   <Modal 
     bind:show={dialog.show}
     title={dialog.title}
@@ -165,7 +165,6 @@
     confirmText={dialog.confirmText}
     onConfirm={dialog.onConfirm}
   />
-{/if}
 </div>
 
 <style>

@@ -141,38 +141,58 @@
     if (style === 'compact' || style === 'minimal') return arts.map(a => ({ ...a, _role: 'bento-full' }));
     if (style === 'default' || style === 'image') return arts.map((a, i) => ({ ...a, _role: i === 0 ? 'bento-hero' : 'bento-standard' }));
     
-    // Magazine style (Masonry Grid Construction)
+    // Magazine style (Dynamic Bento Grid)
     let result = [];
     let pool = [...arts];
-    let rowType = 0; // 0: 8+4 cols, 1: 4+8 cols
+    let cycle = 0;
 
     const hasImage = (a) => !!(a.image_url || extractFirstImage(a.content));
-    const isGoodVertical = (a) => stripHtml(a.content || a.summary || "").length >= 150;
+    const isTextRich = (a) => stripHtml(a.content || a.summary || "").length >= 200;
 
     while (pool.length > 0) {
-      let vertIdx = pool.findIndex(a => isGoodVertical(a) && !hasImage(a));
-      if (vertIdx === -1) vertIdx = pool.findIndex(a => isGoodVertical(a));
-
-      if (vertIdx !== -1 && pool.length >= 2) {
-        let vert = pool.splice(vertIdx, 1)[0];
+      const pattern = cycle % 4;
+      
+      if (pattern === 0 && pool.length >= 2) {
+        // Hero (8) + Side (4)
         let main = pool.shift();
-
-        vert._role = 'mag-side-text'; // Fuerza texto sin imagen
-        main._role = hasImage(main) ? 'mag-hero' : 'mag-horizontal';
-
-        if (rowType === 0) {
-          result.push({ ...main }, { ...vert });
-          rowType = 1;
-        } else {
-          result.push({ ...vert }, { ...main });
-          rowType = 0;
-        }
-      } else {
-        // Si no hay buen texto vertical, usamos ancho completo (12 columnas) para la fila
+        let side = pool.shift();
+        main._role = 'mag-hero';
+        side._role = isTextRich(side) && !hasImage(side) ? 'mag-side-text' : 'mag-side-img';
+        result.push(main, side);
+      } 
+      else if (pattern === 1 && pool.length >= 2) {
+        // Side (4) + Horizontal (8)
+        let side = pool.shift();
         let main = pool.shift();
-        main._role = hasImage(main) ? 'bento-hero' : 'bento-standard';
-        result.push({ ...main });
+        side._role = hasImage(side) ? 'mag-side-img' : 'mag-side-text';
+        main._role = 'mag-horizontal';
+        result.push(side, main);
       }
+      else if (pattern === 2 && pool.length >= 3) {
+        // Triple (4+4+4)
+        let a1 = pool.shift();
+        let a2 = pool.shift();
+        let a3 = pool.shift();
+        a1._role = 'mag-side-img';
+        a2._role = 'mag-side-img';
+        a3._role = 'mag-side-img';
+        result.push(a1, a2, a3);
+      }
+      else if (pattern === 3 && pool.length >= 2) {
+        // Horizontal (8) + Side (4)
+        let main = pool.shift();
+        let side = pool.shift();
+        main._role = 'mag-horizontal';
+        side._role = 'mag-side-img';
+        result.push(main, side);
+      }
+      else {
+        // Fallback or single remaining
+        let item = pool.shift();
+        item._role = hasImage(item) ? 'bento-hero' : 'bento-standard';
+        result.push(item);
+      }
+      cycle++;
     }
     return result;
   }

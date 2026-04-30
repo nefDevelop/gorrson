@@ -452,30 +452,44 @@
 <div class="dashboard-view">
   <header class="header-bar">
     <div class="actions">
-      <div class="filter-wrapper">
-        <button class="action-btn dropdown-btn {showSectionMenu ? 'active' : ''}" on:click={() => showSectionMenu = !showSectionMenu}>
-          <Menu size={16} />
-          <span class="active-tab-label">
-            {#if activeTab === 'sources'}{$t('sources')}
-            {:else if activeTab === 'filters'}{$t('filters')}
-            {:else if activeTab === 'sharing'}{$t('sharing')}
-            {:else if activeTab === 'categories'}{$t('categories')}
-            {:else}{activeTab}{/if}
-          </span>
-          <ChevronDown size={14} />
-        </button>
-        {#if showSectionMenu}
-          <div class="filter-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
-            <button class="menu-item {activeTab === 'general' ? 'selected' : ''}" on:click={() => {activeTab = 'general'; showSectionMenu = false;}}>General</button>
-            <button class="menu-item {activeTab === 'categories' ? 'selected' : ''}" on:click={() => {activeTab = 'categories'; showSectionMenu = false;}}>{$t('categories')}</button>
-            <button class="menu-item {activeTab === 'sources' ? 'selected' : ''}" on:click={() => {activeTab = 'sources'; showSectionMenu = false;}}>{$t('sources')}</button>
-            <button class="menu-item {activeTab === 'filters' ? 'selected' : ''}" on:click={() => {activeTab = 'filters'; showSectionMenu = false;}}>{$t('filters')}</button>
-            <button class="menu-item {activeTab === 'sharing' ? 'selected' : ''}" on:click={() => {activeTab = 'sharing'; showSectionMenu = false;}}>{$t('sharing')}</button>
-            <button class="menu-item {activeTab === 'keys' ? 'selected' : ''}" on:click={() => {activeTab = 'keys'; showSectionMenu = false;}}>API Keys</button>
-            <button class="menu-item {activeTab === 'data' ? 'selected' : ''}" on:click={() => {activeTab = 'data'; showSectionMenu = false;}}>Data</button>
-          </div>
-        {/if}
-      </div>
+      {#if isMobile}
+        <div class="filter-wrapper">
+          <button class="action-btn dropdown-btn {showSectionMenu ? 'active' : ''}" on:click={() => showSectionMenu = !showSectionMenu}>
+            <Menu size={16} />
+            <span class="active-tab-label">
+              {#if activeTab === 'sources'}{$t('sources')}
+              {:else if activeTab === 'filters'}{$t('filters')}
+              {:else if activeTab === 'sharing'}{$t('sharing')}
+              {:else if activeTab === 'categories'}{$t('categories')}
+              {:else if activeTab === 'keys'}API Keys
+              {:else if activeTab === 'data'}Data
+              {:else}{activeTab}{/if}
+            </span>
+            <ChevronDown size={14} />
+          </button>
+          {#if showSectionMenu}
+            <div class="filter-menu" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
+              <button class="menu-item {activeTab === 'general' ? 'selected' : ''}" on:click={() => {activeTab = 'general'; showSectionMenu = false;}}>General</button>
+              <button class="menu-item {activeTab === 'categories' ? 'selected' : ''}" on:click={() => {activeTab = 'categories'; showSectionMenu = false;}}>{$t('categories')}</button>
+              <button class="menu-item {activeTab === 'sources' ? 'selected' : ''}" on:click={() => {activeTab = 'sources'; showSectionMenu = false;}}>{$t('sources')}</button>
+              <button class="menu-item {activeTab === 'filters' ? 'selected' : ''}" on:click={() => {activeTab = 'filters'; showSectionMenu = false;}}>{$t('filters')}</button>
+              <button class="menu-item {activeTab === 'sharing' ? 'selected' : ''}" on:click={() => {activeTab = 'sharing'; showSectionMenu = false;}}>{$t('sharing')}</button>
+              <button class="menu-item {activeTab === 'keys' ? 'selected' : ''}" on:click={() => {activeTab = 'keys'; showSectionMenu = false;}}>API Keys</button>
+              <button class="menu-item {activeTab === 'data' ? 'selected' : ''}" on:click={() => {activeTab = 'data'; showSectionMenu = false;}}>Data</button>
+            </div>
+          {/if}
+        </div>
+      {:else}
+        <nav class="settings-tabs">
+          <button class="tab-item {activeTab === 'general' ? 'active' : ''}" on:click={() => activeTab = 'general'}>General</button>
+          <button class="tab-item {activeTab === 'categories' ? 'active' : ''}" on:click={() => activeTab = 'categories'}>{$t('categories')}</button>
+          <button class="tab-item {activeTab === 'sources' ? 'active' : ''}" on:click={() => activeTab = 'sources'}>{$t('sources')}</button>
+          <button class="tab-item {activeTab === 'filters' ? 'active' : ''}" on:click={() => activeTab = 'filters'}>{$t('filters')}</button>
+          <button class="tab-item {activeTab === 'sharing' ? 'active' : ''}" on:click={() => activeTab = 'sharing'}>{$t('sharing')}</button>
+          <button class="tab-item {activeTab === 'keys' ? 'active' : ''}" on:click={() => activeTab = 'keys'}>API Keys</button>
+          <button class="tab-item {activeTab === 'data' ? 'active' : ''}" on:click={() => activeTab = 'data'}>Data</button>
+        </nav>
+      {/if}
     </div>
   </header>
 
@@ -1046,6 +1060,34 @@
     font-size: 13px;
     font-weight: 700;
     text-transform: capitalize;
+  }
+  .settings-tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--md-surface-variant);
+    padding: 4px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--md-outline);
+  }
+  .tab-item {
+    background: transparent;
+    border: none;
+    color: var(--md-on-surface-variant);
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    font: var(--m3-label-large);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+  }
+  .tab-item:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+    color: var(--md-on-surface);
+  }
+  .tab-item.active {
+    background: var(--md-primary);
+    color: var(--md-on-primary);
   }
   .filter-menu {
     position: absolute;

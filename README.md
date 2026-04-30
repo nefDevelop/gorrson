@@ -1,3 +1,5 @@
+
+
 # gorrson: High-Performance RSS CLI & API Engine
 
 **gorrson** is a RSS engine written in Go. Robust, private, and multi-user RSS solution that runs anywhere.
@@ -6,7 +8,7 @@
 
 1.  **Feed Discovery**: Automatically finds RSS/Atom feeds from any website URL.
 2.  **Advanced Filtering**: Rule-based engine with Regex support. Actions: `BLOCK`, `HIDE`, `REPLACE`, `SILENT`, `HIGHLIGHT`. Targets: `title`, `content`, or `both`.
-3.  **Full Content Scraping**: Intelligent reader mode extracts main text via `go-readability`. Robust charset detection (UTF-8, Latin1, CP1252, etc.).
+3.  **Full Content Scraping**: Intelligent reader mode extracts main text via recipes and `go-readability`. Robust charset detection (UTF-8, Latin1, CP1252, etc.).
 4.  **Image Proxy & Cache**: Proxies images to protect privacy and caches them on disk.
 5.  **SQLite FTS5**: Ultra-fast full-text search across all saved articles.
 6.  **Fever API Support**: Compatible with mobile readers (Reeder, Unread, etc.).
