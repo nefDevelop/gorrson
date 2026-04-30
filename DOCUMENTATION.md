@@ -167,6 +167,19 @@ Base URL: `http://localhost:7077` (Default)
 
 ---
 
+### 💾 Data & Backup (Auth Required)
+
+| Method | Endpoint          | Description                                    |
+| :----- | :---------------- | :--------------------------------------------- |
+| `GET`  | `/backup/export`  | Download a full SQLite database backup (.db).  |
+| `POST` | `/backup/import`  | Restore entire database from a .db file.       |
+| `GET`  | `/feeds/export`   | Download your subscriptions in OPML format.    |
+| `POST` | `/feeds/import`   | Bulk import feeds from an OPML file.           |
+| `GET`  | `/config/export`  | Export filters and settings as JSON.           |
+| `POST` | `/config/import`  | Import settings and filters from JSON.         |
+
+---
+
 ### 🔥 Fever API (Mobile Support)
 
 **Endpoint**: `/api/fever`
