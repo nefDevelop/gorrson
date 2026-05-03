@@ -85,6 +85,9 @@
   let pendingSentinel = null;
 
   onMount(() => {
+    const isMobile = window.innerWidth <= 768;
+    const scrollRoot = isMobile ? null : document.querySelector(".articles-container");
+
     // Observer for marking articles as read (top 20% of screen)
     statusObserver = new IntersectionObserver(
       (entries) => {
@@ -102,7 +105,7 @@
         }
       },
       {
-        root: document.querySelector(".articles-container"),
+        root: scrollRoot,
         rootMargin: "0px 0px -80% 0px",
         threshold: 0.1,
       },
@@ -117,7 +120,7 @@
         }
       },
       {
-        root: document.querySelector(".articles-container"),
+        root: scrollRoot,
         threshold: 0.1,
       },
     );
@@ -859,6 +862,28 @@
   @keyframes spin {
     to {
       transform: rotate(360deg);
+    }
+  }
+
+  @media (max-width: 768px) {
+    .dashboard-view {
+      height: auto;
+      display: block;
+    }
+    .articles-container {
+      overflow-y: visible;
+      height: auto;
+      display: block; /* Stack cards on mobile if needed, or keep grid if it works */
+      padding-top: 12px;
+    }
+    .header-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      padding: 0 16px;
+    }
+    .feed-page-header {
+      padding: 0 16px 16px 16px;
     }
   }
 </style>

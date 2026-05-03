@@ -145,6 +145,9 @@ export async function exportConfig() {
   window.URL.revokeObjectURL(url);
 }
 
+/**
+ * @param {Object} configData
+ */
 export async function importConfig(configData) {
   const res = await fetchWithAuth("/config/import", {
     method: "POST",
