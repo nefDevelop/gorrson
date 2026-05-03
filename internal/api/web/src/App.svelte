@@ -568,6 +568,12 @@
     background: var(--md-background);
   }
 
+  .app-container.mobile-mode {
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
   .sidebar-wrapper {
     flex-shrink: 0;
     transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
@@ -589,6 +595,11 @@
     height: 100%;
     position: relative;
     background: var(--md-background);
+  }
+
+  .mobile-mode .main-content-wrapper {
+    display: block;
+    height: auto;
   }
 
   .mobile-mode .sidebar-wrapper.mobile-drawer {

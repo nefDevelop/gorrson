@@ -283,6 +283,12 @@
     }
   }
   @media (max-width: 1000px) {
+    .post-viewer {
+      height: auto;
+      min-height: 100vh;
+      display: block;
+      overflow: visible;
+    }
     .desktop-only {
       display: none !important;
     }

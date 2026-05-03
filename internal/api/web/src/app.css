@@ -79,7 +79,12 @@ body {
   margin: 0;
   padding: 0;
   background: var(--md-background);
-  overflow: hidden;
+}
+
+@media (min-width: 769px) {
+  body {
+    overflow: hidden;
+  }
 }
 
 * {

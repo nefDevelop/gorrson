@@ -3,6 +3,7 @@ package rss
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/nef734/gorrson/internal/db"
@@ -44,9 +45,9 @@ func (w *Worker) Start(ctx context.Context) {
 	}
 }
 
-// SyncAll syncs all feeds currently in the database.
+// SyncAll syncs all feeds currently in the database in parallel.
 func (w *Worker) SyncAll(ctx context.Context) {
-	// Acquire semaphore to limit concurrency
+	// Acquire semaphore to limit concurrent users
 	syncSemaphore <- struct{}{}
 	defer func() { <-syncSemaphore }()
 
@@ -58,18 +59,34 @@ func (w *Worker) SyncAll(ctx context.Context) {
 	}
 
 	user := w.store.GetUsername()
-	slog.Info("Starting sync cycle", slog.String("user", user), slog.Int("count", len(feeds)))
+	slog.Info("Starting parallel sync cycle", slog.String("user", user), slog.Int("count", len(feeds)))
+
+	// Limit concurrency for individual feeds within this user's cycle
+	feedSem := make(chan struct{}, 5)
+	var wg sync.WaitGroup
 
 	for _, f := range feeds {
-		// Log sync activity but continue on failure for a single feed
-		if err := w.parser.SyncFeed(ctx, f.FeedURL, w.store); err != nil {
-			slog.Error("Error syncing feed", slog.String("url", f.FeedURL), slog.Any("error", err), slog.String("user", user))
-		}
+		wg.Add(1)
+		feedSem <- struct{}{}
+		go func(feedURL string) {
+			defer wg.Done()
+			defer func() { <-feedSem }()
+			
+			// Use a sub-context with timeout for each individual feed sync
+			feedCtx, cancel := context.WithTimeout(ctx, 2*time.Minute)
+			defer cancel()
+			
+			if err := w.parser.SyncFeed(feedCtx, feedURL, w.store); err != nil {
+				slog.Error("Error syncing feed", slog.String("url", feedURL), slog.Any("error", err), slog.String("user", user))
+			}
+		}(f.FeedURL)
 	}
+
+	wg.Wait()
 
 	// Retention policy: Cleanup old entries after sync
 	if count, err := w.store.CleanupOldEntries(); err == nil && count > 0 {
 		slog.Info("Cleaned up old entries", slog.Int64("count", count), slog.String("user", user))
 	}
-	slog.Info("Sync cycle complete", slog.String("user", user), slog.Duration("duration", time.Since(start)))
+	slog.Info("Parallel sync cycle complete", slog.String("user", user), slog.Duration("duration", time.Since(start)))
 }

@@ -75,8 +75,6 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 	}
 
 	// Use the shared parser but with a per-request client configuration if needed
-	// Actually gofeed.Parser.ParseURLWithContext uses the internal client.
-	// To be thread-safe and efficient, we should use our own client but avoid re-allocating the parser logic.
 	p.fp.Client = &http.Client{
 		Timeout: 30 * time.Second,
 		Transport: &transport{
@@ -146,6 +144,14 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 	}
 
+	// Use a transaction for batch insertion of entries
+	tx, err := store.Begin()
+	if err != nil {
+		slog.Error("Failed to start transaction", "err", err)
+		return fmt.Errorf("could not start transaction: %w", err)
+	}
+	defer tx.Rollback()
+
 	saved := 0
 	for _, item := range feed.Items {
 		content := item.Content
@@ -190,10 +196,6 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			}
 		}
 
-		if cleanContent == "" && title != "" {
-			slog.Debug("Entry content is empty, only title available", "title", title, "link", item.Link)
-		}
-
 		// Apply Filters
 		matchedAction := ""
 		skip := false
@@ -217,17 +219,8 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 						cleanContent = re.ReplaceAllString(cleanContent, filter.Replacement)
 					}
 				}
-				if filter.Action == "SILENT" {
-					matchedAction = "SILENT"
-				}
-				if filter.Action == "HIGHLIGHT" {
-					matchedAction = "HIGHLIGHT"
-				}
 				if filter.Action == "IMPORTANT" || filter.Action == "FIRST" {
 					matchedAction = "IMPORTANT"
-				}
-				if filter.Action == "NOTIFY" {
-					matchedAction = "NOTIFY"
 				}
 			}
 		}
@@ -236,7 +229,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			continue
 		}
 
-		// Generate summary (plain text, first 200 chars)
+		// Generate summary
 		summary := item.Description
 		if len(summary) > 200 {
 			summary = summary[:197] + "..."
@@ -255,53 +248,28 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 			}
 		}
 
-		// Try media:content extension (Media RSS)
+		// Try media:content extension
 		if imageURL == "" {
 			if media, ok := item.Extensions["media"]; ok {
 				if contents, ok := media["content"]; ok && len(contents) > 0 {
-					// Take the first image content
 					for _, c := range contents {
 						if strings.Contains(c.Attrs["type"], "image") || c.Attrs["medium"] == "image" {
 							imageURL = c.Attrs["url"]
 							break
 						}
 					}
-					// Fallback to first one if no type specified
-					if imageURL == "" && len(contents) > 0 {
-						imageURL = contents[0].Attrs["url"]
-					}
 				}
 			}
 		}
 
-		// Special handling for Reddit: extract clean link and image from HTML content
-		isReddit := strings.Contains(url, "reddit.com")
-		if isReddit {
-			reLink := regexp.MustCompile(`<span><a href="([^"]+)">\[link\]</a></span>`)
-			if matches := reLink.FindStringSubmatch(content); len(matches) > 1 {
-				item.Link = matches[1]
-			}
-		}
-
-		// Extract image from content if still missing
 		if imageURL == "" {
 			imageURL = extractFirstImageFromHTML(content)
 		}
 
-		// Special handling for Mastodon & Bluesky
-
-		// If STILL no image and it's a social feed, try to fetch OG image from the page
-		// because official feeds often have limited media in RSS.
 		if (isBluesky || isMastodon) && imageURL == "" && item.Link != "" {
 			imageURL = fetchOGImage(ctx, item.Link)
 		}
 
-		// Last resort: fallback to feed image (avatar) for social platforms
-		if (isMastodon || isBluesky) && imageURL == "" && feed.Image != nil {
-			imageURL = feed.Image.URL
-		}
-
-		// Normalize URL to prevent duplicates (remove UTM and tracking params)
 		normalizedURL := normalizeURL(item.Link)
 
 		entry := &models.Entry{
@@ -321,11 +289,15 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 		entry.FeverID = generateFeverID(entry.ID)
 
-		if err := store.AddEntry(entry); err != nil {
-			// Skip single entry errors (e.g., duplicated link)
+		if err := store.AddEntryTx(tx, entry); err != nil {
 			continue
 		}
 		saved++
+	}
+
+	if err := tx.Commit(); err != nil {
+		slog.Error("Failed to commit transaction", "err", err)
+		return fmt.Errorf("could not commit entries: %w", err)
 	}
 
 	slog.Info("SyncFeed complete", "feed", feed.Title, "total_items", len(feed.Items), "saved_entries", saved)
@@ -336,36 +308,17 @@ func normalizeURL(rawURL string) string {
 	if rawURL == "" {
 		return ""
 	}
-
 	u, err := url.Parse(rawURL)
 	if err != nil {
 		return rawURL
 	}
-
-	// Remove fragment
 	u.Fragment = ""
-
-	// Common tracking parameters to remove
 	q := u.Query()
-	trackingParams := []string{
-		"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content",
-		"ref", "referrer", "source", "tracker",
-		"fbclid", "gclid", "msclkid",
-		"_hsenc", "_hsmi", "mc_cid", "mc_eid",
-	}
-
-	changed := false
+	trackingParams := []string{"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "ref", "fbclid", "gclid"}
 	for _, p := range trackingParams {
-		if q.Get(p) != "" {
-			q.Del(p)
-			changed = true
-		}
+		q.Del(p)
 	}
-
-	if changed {
-		u.RawQuery = q.Encode()
-	}
-
+	u.RawQuery = q.Encode()
 	return u.String()
 }
 
@@ -373,51 +326,36 @@ func extractFirstImageFromHTML(html string) string {
 	if html == "" {
 		return ""
 	}
-	// Simple regex for speed, checking for common image extensions
 	re := regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+\.(jpg|jpeg|png|webp|gif|svg)[^"']*)["']`)
 	matches := re.FindAllStringSubmatch(html, -1)
 	for _, match := range matches {
 		if len(match) > 1 {
-			src := match[1]
-			// Filter out common tracking pixels or icons
-			lower := strings.ToLower(src)
-			if strings.Contains(lower, "pixel") || strings.Contains(lower, "spacer") || strings.Contains(lower, "1x1") || strings.Contains(lower, "tracking") {
-				continue
-			}
-			return src
+			return match[1]
 		}
 	}
 	return ""
 }
 
 func fetchOGImage(ctx context.Context, pageURL string) string {
-	// Don't spend too much time on this
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-
 	sc := NewSecureClient("")
 	body, err := sc.Fetch(ctx, pageURL)
 	if err != nil {
 		return ""
 	}
 	defer body.Close()
-
-	// Limit reading to 500KB to prevent memory exhaustion
 	limitedBody := io.LimitReader(body, 500*1024)
 	doc, err := goquery.NewDocumentFromReader(limitedBody)
 	if err != nil {
 		return ""
 	}
-
 	var img string
-	// Try various OG and Twitter tags
-	doc.Find("meta[property='og:image'], meta[name='twitter:image'], meta[property='og:image:url']").Each(func(i int, s *goquery.Selection) {
+	doc.Find("meta[property='og:image'], meta[name='twitter:image']").Each(func(i int, s *goquery.Selection) {
 		if content, ok := s.Attr("content"); ok && img == "" {
 			img = content
 		}
 	})
-
-	// Resolve relative URLs
 	if img != "" && !strings.HasPrefix(img, "http") {
 		base, err := url.Parse(pageURL)
 		if err == nil {
@@ -427,6 +365,5 @@ func fetchOGImage(ctx context.Context, pageURL string) string {
 			}
 		}
 	}
-
 	return img
 }

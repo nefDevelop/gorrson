@@ -36,10 +36,10 @@ func NewStore(dataDir, username string) (*Store, error) {
 
 	s := &Store{db: db, username: username}
 
-	// Optimization: SQLite performs best with a single connection in Go to avoid lock contention.
-	// WAL mode handles the concurrency at the database level.
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
+	// Optimization: SQLite performs best with a limited number of connections in Go.
+	// WAL mode handles the concurrency at the database level, allowing multiple readers.
+	db.SetMaxOpenConns(10)
+	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
 
 	if err := s.migrate(); err != nil {
@@ -55,6 +55,11 @@ func (s *Store) Close() error {
 
 func (s *Store) GetUsername() string {
 	return s.username
+}
+
+// Begin starts a new transaction.
+func (s *Store) Begin() (*sql.Tx, error) {
+	return s.db.Begin()
 }
 
 // VerifySQLiteFile checks if a file is a valid SQLite database and passes a quick integrity check.
@@ -198,6 +203,12 @@ func (s *Store) AddFeed(f *models.Feed) error {
 
 func (s *Store) AddEntry(e *models.Entry) error {
 	_, err := s.db.Exec(`INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
+	return err
+}
+
+func (s *Store) AddEntryTx(tx *sql.Tx, e *models.Entry) error {
+	_, err := tx.Exec(`INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
 		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
