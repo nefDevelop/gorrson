@@ -38,6 +38,7 @@
   let showExportMenu = false;
 
   let progress = 0;
+  /** @type {HTMLElement | undefined} */
   let container;
 
   function handleScroll() {
@@ -47,7 +48,9 @@
     progress = total > 0 ? (scrollTop / total) * 100 : 0;
   }
 
+  /** @type {string | null} */
   let lastHandledId = null;
+  /** @type {string | null} */
   let fullContent = null;
 
   // Reset and auto-load full content when article changes
@@ -84,6 +87,7 @@
     toastSuccess($t('link_copied'));
   }
 
+  /** @param {any} svc */
   function sendToService(svc) {
     const url = svc.template
       .replace('{title}', encodeURIComponent(article.title))
@@ -105,8 +109,9 @@
       const text = await fetchFullContent(article.id);
       fullContent = text;
     } catch (e) {
+      const err = /** @type {Error} */ (e);
       // Silenciamos el error por límite de concurrencia (503). El visualizador usará el resumen corto como respaldo.
-      if (e.message === 'Unauthorized') {
+      if (err.message === 'Unauthorized') {
         fullContent = `<div class="error-inline">${$t('unauthorized_content') || 'Unauthorized to load full content. Please check your session.'}</div>`;
       }
     } finally {
@@ -114,6 +119,7 @@
     }
   }
 
+  /** @param {Event & { currentTarget: EventTarget & HTMLElement }} e */
   function handleImageError(e) {
     const parent = e.currentTarget.parentElement;
     if (parent) parent.style.display = 'none';
@@ -273,10 +279,6 @@
     animation: spin 0.8s linear infinite;
   }
 
-  .mobile-only {
-    display: none !important;
-  }
-
   @media (min-width: 1001px) {
     .desktop-only {
       display: flex !important;
@@ -291,9 +293,6 @@
     }
     .desktop-only {
       display: none !important;
-    }
-    .mobile-only {
-      display: flex !important;
     }
     .content-wrapper {
       padding: 24px 20px;
@@ -471,6 +470,8 @@
     font-size: 17px;
     line-height: 1.8;
     color: var(--md-on-surface);
+    overflow-wrap: break-word;
+    word-break: break-word;
   }
   .body-text :global(p) {
     margin-bottom: 24px;
