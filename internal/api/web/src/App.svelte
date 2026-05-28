@@ -19,6 +19,7 @@
   import { fetchNews, markAsRead, markAllRead, fetchFeeds, toggleFavorite } from './lib/api.js';
   import { generateTonal } from './lib/theme.js';
 
+  /** @type {string | number | null} */
   let selectedId = null;
   let searchQuery = "";
   let isMobile = typeof window !== 'undefined' ? window.innerWidth <= 768 : false;
@@ -46,15 +47,21 @@
     isMobile = window.innerWidth <= 768;
     isSidebarMini = window.innerWidth <= 1000;
   };
+  /** @type {Array<any>} */
   let articles = [];
+  /** @type {Array<any>} */
   let feeds = [];
   let loading = true;
+  /** @type {string | null} */
   let error = null;
   let isAuthenticated = false;
   let currentView = "inbox";
+  /** @type {string | null} */
   let activeCategory = null;
+  /** @type {string | null} */
   let activeSource = null;
   let showAddFeed = false;
+  /** @type {any} */
   let recipeBuilderFeed = null;
   let isSourcesDrawerOpen = false;
   let lastSyncDate = new Date();
@@ -74,6 +81,7 @@
     }, 5 * 60 * 1000);
 
     // Detectar cuando el usuario pulsa "Atrás" en el ratón o navegador
+    /** @param {PopStateEvent} e */
     const handlePopState = (e) => {
       if (selectedId) {
         selectedId = null;
@@ -157,8 +165,9 @@
       }
       lastSyncDate = new Date();
     } catch (e) {
-      error = e.message;
-      if (e.message === 'Unauthorized') isAuthenticated = false;
+      const err = /** @type {Error} */ (e);
+      error = err.message;
+      if (err.message === 'Unauthorized') isAuthenticated = false;
     } finally {
       loading = false;
       loadingMore = false;
@@ -166,6 +175,7 @@
   }
 
   let notifiedIds = new Set();
+  /** @param {Array<any>} newEntries */
   async function checkNotifications(newEntries) {
     if (typeof window === 'undefined' || !("Notification" in window)) return;
     
@@ -249,6 +259,7 @@
     return () => window.removeEventListener('resize', updateMobile);
   });
 
+  /** @param {string} viewId */
   function handleViewChange(viewId) {
     selectedId = null;
     historyPushed = false;
@@ -319,12 +330,14 @@
     count: feeds.filter(f => (f.category || 'General') === catName).reduce((acc, f) => acc + f.unread_count, 0)
   }));
 
+  /** @param {string|number} id */
   async function handleMarkAsRead(id) {
     if (articles.find(a => a.id === id)?.is_read) return;
     await markAsRead(id);
     articles = articles.map(a => a.id === id ? {...a, is_read: true} : a);
   }
 
+  /** @param {string|number} id */
   async function handleSelect(id) {
     // Guardar estado en el historial solo si es el primer artículo que abrimos
     if (!selectedId) {
@@ -353,6 +366,7 @@
     }
   }
 
+  /** @param {string|number} id */
   async function handleToggleFavorite(id) {
     const article = articles.find(a => a.id === id);
     if (!article) return;
@@ -370,6 +384,7 @@
     }
   }
 
+  /** @param {any} article */
   async function handleShare(article) {
     if (navigator.share) {
       try {
@@ -385,6 +400,7 @@
     }
   }
 
+  /** @param {string} url */
   async function copyToClipboard(url) {
     await navigator.clipboard.writeText(url);
     toastSuccess($t('link_copied'));
@@ -404,6 +420,7 @@
     showAddFeed = true;
   }
 
+  /** @param {string} feedTitle */
   function handleAddFeedSave(feedTitle) {
     showAddFeed = false;
     toastSuccess(`Feed "${feedTitle || 'nuevo feed'}" añadido correctamente ✓`);
@@ -500,7 +517,6 @@
                   }}
                   isFullscreen={fullscreenReader}
                   onToggleFullscreen={toggleFullscreen}
-                  showDesktopBack={readerMode === 'overlay'}
                   onToggleFavorite={handleToggleFavorite}
                 />
               {/if}
@@ -606,7 +622,7 @@
     position: fixed;
     top: 0;
     left: 0;
-    width: 100vw;
+    width: 100%;
     height: 100vh;
     background: rgba(0,0,0,0.4); /* Subtle Backdrop */
     backdrop-filter: blur(4px);

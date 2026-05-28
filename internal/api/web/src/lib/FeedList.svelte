@@ -30,7 +30,7 @@
   /** @type {string} */
   export let title = "Inbox";
 
-  /** @type {number} */
+  /** @type {string | number | null | undefined} */
   export let selectedId;
 
   /** @type {boolean} */
@@ -79,9 +79,13 @@
   /** @type {boolean} */
   export let scrollRead = false;
 
+  /** @type {IntersectionObserver | undefined} */
   let statusObserver;
+  /** @type {IntersectionObserver | undefined} */
   let scrollObserver;
+  /** @type {Array<HTMLElement>} */
   let pendingCards = [];
+  /** @type {HTMLElement | null} */
   let pendingSentinel = null;
 
   onMount(() => {
@@ -137,6 +141,12 @@
 
   $: renderedArticles = buildLayout(articles, cardStyle, readerMode, selectedId);
 
+  /**
+   * @param {Array<any>} arts
+   * @param {string} style
+   * @param {string} mode
+   * @param {number|string|null|undefined} selId
+   */
   function buildLayout(arts, style, mode, selId) {
     if (!arts || arts.length === 0) return [];
     
@@ -201,6 +211,10 @@
   }
 
   // Svelte Action para enlazar la tarjeta al IntersectionObserver nativamente
+  /**
+   * @param {HTMLElement} node
+   * @param {boolean} isRead
+   */
   function observeCard(node, isRead) {
     if (!isRead) {
       if (statusObserver) statusObserver.observe(node);
@@ -218,6 +232,9 @@
   }
 
   // Svelte Action para el scroll infinito
+  /**
+   * @param {HTMLElement} node
+   */
   function observeSentinel(node) {
     if (scrollObserver) scrollObserver.observe(node);
     else pendingSentinel = node;
@@ -738,10 +755,12 @@
 
   @media (max-width: 800px) {
     .inline-search {
-      width: 140px; /* Se hace más pequeña en móviles para caber con los botones */
+      width: auto;
+      flex: 1;
+      max-width: 140px;
     }
     .inline-search:focus-within {
-      width: 180px;
+      max-width: 180px;
     }
   }
 
