@@ -41,12 +41,12 @@ func TestFeedJSONStructure(t *testing.T) {
 	if m["fever_id"] != float64(123) { // JSON numbers are floats
 		t.Errorf("Expected fever_id 123, got %v", m["fever_id"])
 	}
-	
+
 	// Verify omitempty
 	if _, ok := m["username"]; ok {
 		t.Error("username should be omitted when empty")
 	}
-	
+
 	// Verify date format (should be RFC3339)
 	expectedDate := "2024-01-01T12:00:00Z"
 	if m["last_updated"] != expectedDate {

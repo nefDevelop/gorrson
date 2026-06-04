@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -31,7 +32,7 @@ func TestFeverAPI(t *testing.T) {
 	feverApiKey := "fever_md5_secret"
 	feverBcrypt, _ := auth.HashPassword(feverApiKey)
 
-	_ = store.UpsertUser(username, hash, feverBcrypt)
+	_ = store.UpsertUser(context.Background(), username, hash, feverBcrypt)
 	_ = store.Close()
 
 	// 1. Test Fever Auth
@@ -69,7 +70,7 @@ func TestConfigAPI(t *testing.T) {
 
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	_ = store.UpsertUser(username, hash, "")
+	_ = store.UpsertUser(context.Background(), username, hash, "")
 	_ = store.Close()
 
 	token, _ := auth.GenerateToken(username)

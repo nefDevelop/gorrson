@@ -52,7 +52,7 @@ func (w *Worker) SyncAll(ctx context.Context) {
 	defer func() { <-syncSemaphore }()
 
 	start := time.Now()
-	feeds, err := w.store.ListFeeds()
+	feeds, err := w.store.ListFeeds(ctx)
 	if err != nil {
 		slog.Error("Worker error listing feeds", slog.Any("error", err))
 		return
@@ -85,7 +85,7 @@ func (w *Worker) SyncAll(ctx context.Context) {
 	wg.Wait()
 
 	// Retention policy: Cleanup old entries after sync
-	if count, err := w.store.CleanupOldEntries(); err == nil && count > 0 {
+	if count, err := w.store.CleanupOldEntries(ctx); err == nil && count > 0 {
 		slog.Info("Cleaned up old entries", slog.Int64("count", count), slog.String("user", user))
 	}
 	slog.Info("Parallel sync cycle complete", slog.String("user", user), slog.Duration("duration", time.Since(start)))

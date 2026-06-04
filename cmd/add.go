@@ -4,9 +4,9 @@ import (
 	"context"
 	"log"
 
-	"github.com/spf13/cobra"
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/rss"
+	"github.com/spf13/cobra"
 )
 
 var addCmd = &cobra.Command{

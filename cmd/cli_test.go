@@ -34,7 +34,7 @@ func TestCLI_UserManagement(t *testing.T) {
 	}
 
 	// 4. Delete user (Note: This might be tricky if it asks for confirmation via stdin)
-	// For now, let's skip delete or mock stdin if needed. 
+	// For now, let's skip delete or mock stdin if needed.
 	// The current implementation uses fmt.Scanln(&confirm)
 }
 

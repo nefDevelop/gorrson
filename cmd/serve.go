@@ -15,10 +15,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/spf13/cobra"
 	"github.com/nef734/gorrson/internal/api"
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/rss"
+	"github.com/spf13/cobra"
 )
 
 var serveCmd = &cobra.Command{
@@ -29,7 +29,7 @@ var serveCmd = &cobra.Command{
 		logFormat, _ := cmd.Flags().GetString("log-format")
 		logLevelStr, _ := cmd.Flags().GetString("log-level")
 		silent, _ := cmd.Flags().GetBool("silent")
-		
+
 		if port == "" {
 			port = os.Getenv("GORRSON_PORT")
 			if port == "" {
@@ -45,7 +45,7 @@ var serveCmd = &cobra.Command{
 		// Setup dual logging (Stdout + File)
 		logPath := filepath.Join(dataDir, "gorrson.log")
 		logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		
+
 		var mw io.Writer = os.Stdout
 		if silent {
 			mw = io.Discard
@@ -80,7 +80,7 @@ var serveCmd = &cobra.Command{
 		} else {
 			handler = slog.NewTextHandler(mw, opts)
 		}
-		
+
 		slog.SetDefault(slog.New(handler))
 
 		// If level is ERROR or higher, discard standard log output
@@ -100,16 +100,16 @@ var serveCmd = &cobra.Command{
 			for _, file := range files {
 				if !file.IsDir() && strings.HasSuffix(file.Name(), ".db") && file.Name() != "global.db" {
 					username := strings.TrimSuffix(file.Name(), ".db")
-					
+
 					store, err := db.NewStore(dataDir, username)
 					if err != nil {
 						slog.Error("Could not load database", slog.String("user", username), slog.Any("error", err))
 						continue
 					}
-					
+
 					// Each user gets a background worker to sync their feeds independently
 					worker := rss.NewWorker(store, 15*time.Minute)
-					
+
 					// Use a small jitter for initial sync to avoid "thundering herd"
 					go func(w *rss.Worker, user string) {
 						// Wait up to 2 minutes to spread the load

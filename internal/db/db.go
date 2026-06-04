@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -29,20 +30,20 @@ func NewStore(dataDir, username string) (*Store, error) {
 		}
 	}
 	dbPath := filepath.Join(dataDir, username+".db")
-	db, err := sql.Open("sqlite", dbPath)
+	connStr := fmt.Sprintf("file:%s?_pragma=busy_timeout(10000)&_pragma=journal_mode(WAL)", dbPath)
+	db, err := sql.Open("sqlite", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("could not open database: %w", err)
 	}
 
 	s := &Store{db: db, username: username}
 
-	// Optimization: SQLite performs best with a limited number of connections in Go.
-	// WAL mode handles the concurrency at the database level, allowing multiple readers.
-	db.SetMaxOpenConns(10)
+	// Important to limit SQLite connections if busy_timeout acts up, but 1 is safest for writers.
+	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(5)
 	db.SetConnMaxLifetime(time.Hour)
 
-	if err := s.migrate(); err != nil {
+	if err := s.migrate(context.Background()); err != nil {
 		return nil, fmt.Errorf("migration failed: %w", err)
 	}
 
@@ -62,19 +63,23 @@ func (s *Store) Begin() (*sql.Tx, error) {
 	return s.db.Begin()
 }
 
+// BeginTx starts a new transaction with context.
+func (s *Store) BeginTx(ctx context.Context, opts *sql.TxOptions) (*sql.Tx, error) {
+	return s.db.BeginTx(ctx, opts)
+}
+
 // VerifySQLiteFile checks if a file is a valid SQLite database and passes a quick integrity check.
-func VerifySQLiteFile(path string) error {
+func VerifySQLiteFile(ctx context.Context, path string) error {
 	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		return err
 	}
 	defer db.Close()
 
-	// Set a short timeout for the check
-	_, _ = db.Exec("PRAGMA busy_timeout=2000")
+	_, _ = db.ExecContext(ctx, "PRAGMA busy_timeout=2000")
 
 	var result string
-	err = db.QueryRow("PRAGMA quick_check").Scan(&result)
+	err = db.QueryRowContext(ctx, "PRAGMA quick_check").Scan(&result)
 	if err != nil {
 		return fmt.Errorf("not a valid sqlite file or corrupted: %w", err)
 	}
@@ -82,9 +87,8 @@ func VerifySQLiteFile(path string) error {
 		return fmt.Errorf("sqlite integrity check failed: %s", result)
 	}
 
-	// Double check it has the expected tables
 	var name string
-	err = db.QueryRow("SELECT name FROM sqlite_master WHERE type='table' AND name='feeds'").Scan(&name)
+	err = db.QueryRowContext(ctx, "SELECT name FROM sqlite_master WHERE type='table' AND name='feeds'").Scan(&name)
 	if err != nil {
 		return fmt.Errorf("database schema looks incorrect: missing 'feeds' table")
 	}
@@ -92,7 +96,7 @@ func VerifySQLiteFile(path string) error {
 	return nil
 }
 
-func (s *Store) migrate() error {
+func (s *Store) migrate(ctx context.Context) error {
 	queries := []string{
 		`PRAGMA journal_mode=WAL;`,
 		`PRAGMA synchronous=NORMAL;`,
@@ -174,26 +178,25 @@ func (s *Store) migrate() error {
 	}
 
 	for _, q := range queries {
-		if _, err := s.db.Exec(q); err != nil {
+		if _, err := s.db.ExecContext(ctx, q); err != nil {
 			return err
 		}
 	}
 
-	// Hot-fix for existing databases
-	_, _ = s.db.Exec("ALTER TABLE entries ADD COLUMN matched_action TEXT")
-	_, _ = s.db.Exec("ALTER TABLE entries ADD COLUMN is_priority BOOLEAN DEFAULT 0")
-	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN user_agent TEXT")
-	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN username TEXT")
-	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN password TEXT")
-	_, _ = s.db.Exec("ALTER TABLE feeds ADD COLUMN fever_id INTEGER DEFAULT 0")
-	_, _ = s.db.Exec("ALTER TABLE entries ADD COLUMN fever_id INTEGER DEFAULT 0")
-	_, _ = s.db.Exec("ALTER TABLE users ADD COLUMN fever_key TEXT DEFAULT ''")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE entries ADD COLUMN matched_action TEXT")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE entries ADD COLUMN is_priority BOOLEAN DEFAULT 0")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE feeds ADD COLUMN user_agent TEXT")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE feeds ADD COLUMN username TEXT")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE feeds ADD COLUMN password TEXT")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE feeds ADD COLUMN fever_id INTEGER DEFAULT 0")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE entries ADD COLUMN fever_id INTEGER DEFAULT 0")
+	_, _ = s.db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN fever_key TEXT DEFAULT ''")
 
 	return nil
 }
 
-func (s *Store) AddFeed(f *models.Feed) error {
-	_, err := s.db.Exec(`INSERT INTO feeds (id, fever_id, title, site_url, feed_url, category, last_updated, user_agent, username, password) 
+func (s *Store) AddFeed(ctx context.Context, f *models.Feed) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO feeds (id, fever_id, title, site_url, feed_url, category, last_updated, user_agent, username, password) 
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) 
                          ON CONFLICT(feed_url) 
                          DO UPDATE SET last_updated=excluded.last_updated, user_agent=excluded.user_agent, username=excluded.username, password=excluded.password, fever_id=excluded.fever_id`,
@@ -201,20 +204,20 @@ func (s *Store) AddFeed(f *models.Feed) error {
 	return err
 }
 
-func (s *Store) AddEntry(e *models.Entry) error {
-	_, err := s.db.Exec(`INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+func (s *Store) AddEntry(ctx context.Context, e *models.Entry) error {
+	_, err := s.db.ExecContext(ctx, `INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
 		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
 
-func (s *Store) AddEntryTx(tx *sql.Tx, e *models.Entry) error {
-	_, err := tx.Exec(`INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
+func (s *Store) AddEntryTx(ctx context.Context, tx *sql.Tx, e *models.Entry) error {
+	_, err := tx.ExecContext(ctx, `INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
 		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
 
-func (s *Store) ListFeeds() ([]models.Feed, error) {
-	rows, err := s.db.Query(`
+func (s *Store) ListFeeds(ctx context.Context) ([]models.Feed, error) {
+	rows, err := s.db.QueryContext(ctx, `
 		SELECT f.id, f.fever_id, f.title, f.site_url, f.feed_url, f.category, f.last_updated, f.user_agent, f.username, f.password,
 		       (SELECT COUNT(*) FROM entries e WHERE e.feed_id = f.id AND e.is_read = 0) as unread_count
 		FROM feeds f`)
@@ -238,7 +241,7 @@ func (s *Store) ListFeeds() ([]models.Feed, error) {
 	return feeds, nil
 }
 
-func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int, category, feedID string) ([]models.Entry, error) {
+func (s *Store) ListEntries(ctx context.Context, unreadOnly bool, sortMode string, limit, offset int, category, feedID string) ([]models.Entry, error) {
 	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.is_priority, e.matched_action, f.title, f.category 
 	FROM entries e 
 	JOIN feeds f ON e.feed_id = f.id`
@@ -282,7 +285,7 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 		args = append(args, limit, offset)
 	}
 
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -305,10 +308,10 @@ func (s *Store) ListEntries(unreadOnly bool, sortMode string, limit, offset int,
 	return entries, nil
 }
 
-func (s *Store) GetEntryByID(id string) (*models.Entry, error) {
+func (s *Store) GetEntryByID(ctx context.Context, id string) (*models.Entry, error) {
 	var e models.Entry
 	var summary, content, imageURL, matchedAction, category sql.NullString
-	err := s.db.QueryRow(`
+	err := s.db.QueryRowContext(ctx, `
 		SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.is_priority, e.matched_action, f.title, f.category 
 		FROM entries e
 		JOIN feeds f ON e.feed_id = f.id
@@ -325,36 +328,35 @@ func (s *Store) GetEntryByID(id string) (*models.Entry, error) {
 	return &e, nil
 }
 
-func (s *Store) UpdateEntryContent(id, content string) error {
-	_, err := s.db.Exec("UPDATE entries SET content = ?, is_full_content = 1 WHERE id = ?", content, id)
+func (s *Store) UpdateEntryContent(ctx context.Context, id, content string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE entries SET content = ?, is_full_content = 1 WHERE id = ?", content, id)
 	return err
 }
 
-func (s *Store) MarkAsRead(entryID string) error {
-	_, err := s.db.Exec("UPDATE entries SET is_read = 1 WHERE id = ?", entryID)
+func (s *Store) MarkAsRead(ctx context.Context, entryID string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_read = 1 WHERE id = ?", entryID)
 	return err
 }
 
-func (s *Store) MarkAsReadByFeverID(feverID int) error {
-	_, err := s.db.Exec("UPDATE entries SET is_read = 1 WHERE fever_id = ?", feverID)
+func (s *Store) MarkAsReadByFeverID(ctx context.Context, feverID int) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_read = 1 WHERE fever_id = ?", feverID)
 	return err
 }
 
-func (s *Store) ToggleFavoriteByFeverID(feverID int, isFavorite bool) error {
+func (s *Store) ToggleFavoriteByFeverID(ctx context.Context, feverID int, isFavorite bool) error {
 	if isFavorite {
-		_, err := s.db.Exec("UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE fever_id = ?", feverID)
+		_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE fever_id = ?", feverID)
 		return err
 	}
-	_, err := s.db.Exec("UPDATE entries SET is_favorite = 0 WHERE fever_id = ?", feverID)
+	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 0 WHERE fever_id = ?", feverID)
 	return err
 }
 
-func (s *Store) MarkAllRead(category, feedID, search string, limit int) error {
+func (s *Store) MarkAllRead(ctx context.Context, category, feedID, search string, limit int) error {
 	var query string
 	var args []interface{}
 
 	if search != "" {
-		// For search, mark entries that match the FTS search
 		query = `UPDATE entries SET is_read = 1 WHERE id IN (
 			SELECT entries.id FROM entries 
 			JOIN entries_fts ON entries.rowid = entries_fts.rowid 
@@ -368,7 +370,6 @@ func (s *Store) MarkAllRead(category, feedID, search string, limit int) error {
 		}
 		query += ")"
 	} else {
-		// Handle category and feed_id
 		query = `UPDATE entries SET is_read = 1 WHERE id IN (
 			SELECT e.id FROM entries e
 			JOIN feeds f ON e.feed_id = f.id
@@ -389,21 +390,21 @@ func (s *Store) MarkAllRead(category, feedID, search string, limit int) error {
 		query += ")"
 	}
 
-	_, err := s.db.Exec(query, args...)
+	_, err := s.db.ExecContext(ctx, query, args...)
 	return err
 }
 
-func (s *Store) ToggleFavorite(entryID string, isFavorite bool) error {
+func (s *Store) ToggleFavorite(ctx context.Context, entryID string, isFavorite bool) error {
 	if isFavorite {
-		_, err := s.db.Exec("UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE id = ?", entryID)
+		_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE id = ?", entryID)
 		return err
 	}
-	_, err := s.db.Exec("UPDATE entries SET is_favorite = 0 WHERE id = ?", entryID)
+	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 0 WHERE id = ?", entryID)
 	return err
 }
 
-func (s *Store) CleanupOldEntries() (int64, error) {
-	res, err := s.db.Exec(`
+func (s *Store) CleanupOldEntries(ctx context.Context) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM entries 
 		WHERE published_at < date('now', '-1 year') 
 		AND is_favorite = 0 
@@ -414,7 +415,7 @@ func (s *Store) CleanupOldEntries() (int64, error) {
 	return res.RowsAffected()
 }
 
-func (s *Store) SearchEntries(searchTerm string, limit, offset int) ([]models.Entry, error) {
+func (s *Store) SearchEntries(ctx context.Context, searchTerm string, limit, offset int) ([]models.Entry, error) {
 	query := `SELECT e.id, e.fever_id, e.feed_id, e.title, e.summary, e.content, e.url, e.image_url, e.published_at, e.is_read, e.is_favorite, e.is_full_content, e.is_priority, e.matched_action, f.title, f.category 
               FROM entries e
               JOIN feeds f ON e.feed_id = f.id
@@ -430,7 +431,7 @@ func (s *Store) SearchEntries(searchTerm string, limit, offset int) ([]models.En
 		args = append(args, limit, offset)
 	}
 
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -453,10 +454,10 @@ func (s *Store) SearchEntries(searchTerm string, limit, offset int) ([]models.En
 	return entries, nil
 }
 
-func (s *Store) GetFeedByURL(url string) (*models.Feed, error) {
+func (s *Store) GetFeedByURL(ctx context.Context, url string) (*models.Feed, error) {
 	var f models.Feed
 	var ua, user, pass sql.NullString
-	err := s.db.QueryRow("SELECT id, title, site_url, feed_url, category, last_updated, user_agent, username, password FROM feeds WHERE feed_url = ?", url).
+	err := s.db.QueryRowContext(ctx, "SELECT id, title, site_url, feed_url, category, last_updated, user_agent, username, password FROM feeds WHERE feed_url = ?", url).
 		Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &ua, &user, &pass)
 	if err != nil {
 		return nil, err
@@ -467,42 +468,42 @@ func (s *Store) GetFeedByURL(url string) (*models.Feed, error) {
 	return &f, nil
 }
 
-func (s *Store) UpsertUser(username, passwordHash, feverKey string) error {
-	_, err := s.db.Exec("INSERT INTO users (username, password_hash, fever_key) VALUES (?, ?, ?) ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, fever_key=excluded.fever_key", username, passwordHash, feverKey)
+func (s *Store) UpsertUser(ctx context.Context, username, passwordHash, feverKey string) error {
+	_, err := s.db.ExecContext(ctx, "INSERT INTO users (username, password_hash, fever_key) VALUES (?, ?, ?) ON CONFLICT(username) DO UPDATE SET password_hash=excluded.password_hash, fever_key=excluded.fever_key", username, passwordHash, feverKey)
 	return err
 }
 
-func (s *Store) GetUserHash(username string) (string, error) {
+func (s *Store) GetUserHash(ctx context.Context, username string) (string, error) {
 	var hash string
-	err := s.db.QueryRow("SELECT password_hash FROM users WHERE username = ?", username).Scan(&hash)
+	err := s.db.QueryRowContext(ctx, "SELECT password_hash FROM users WHERE username = ?", username).Scan(&hash)
 	return hash, err
 }
 
-func (s *Store) GetUserFeverKey(username string) (string, error) {
+func (s *Store) GetUserFeverKey(ctx context.Context, username string) (string, error) {
 	var key string
-	err := s.db.QueryRow("SELECT fever_key FROM users WHERE username = ?", username).Scan(&key)
+	err := s.db.QueryRowContext(ctx, "SELECT fever_key FROM users WHERE username = ?", username).Scan(&key)
 	return key, err
 }
 
-func (s *Store) DeleteFeed(id string) error {
-	_, err := s.db.Exec("DELETE FROM feeds WHERE id = ?", id)
+func (s *Store) DeleteFeed(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM feeds WHERE id = ?", id)
 	return err
 }
 
-func (s *Store) UpdateFeed(id, title, category, userAgent string) error {
-	_, err := s.db.Exec("UPDATE feeds SET title = ?, category = ?, user_agent = ? WHERE id = ?", title, category, userAgent, id)
+func (s *Store) UpdateFeed(ctx context.Context, id, title, category, userAgent string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE feeds SET title = ?, category = ?, user_agent = ? WHERE id = ?", title, category, userAgent, id)
 	return err
 }
 
-func (s *Store) RenameCategory(oldName, newName string) error {
-	_, err := s.db.Exec("UPDATE feeds SET category = ? WHERE category = ?", newName, oldName)
+func (s *Store) RenameCategory(ctx context.Context, oldName, newName string) error {
+	_, err := s.db.ExecContext(ctx, "UPDATE feeds SET category = ? WHERE category = ?", newName, oldName)
 	return err
 }
 
-func (s *Store) GetFeedByID(id string) (*models.Feed, error) {
+func (s *Store) GetFeedByID(ctx context.Context, id string) (*models.Feed, error) {
 	var f models.Feed
 	var ua, user, pass sql.NullString
-	err := s.db.QueryRow("SELECT id, title, site_url, feed_url, category, last_updated, user_agent, username, password FROM feeds WHERE id = ?", id).
+	err := s.db.QueryRowContext(ctx, "SELECT id, title, site_url, feed_url, category, last_updated, user_agent, username, password FROM feeds WHERE id = ?", id).
 		Scan(&f.ID, &f.Title, &f.SiteURL, &f.FeedURL, &f.Category, &f.LastUpdated, &ua, &user, &pass)
 	if err != nil {
 		return nil, err
@@ -513,18 +514,18 @@ func (s *Store) GetFeedByID(id string) (*models.Feed, error) {
 	return &f, nil
 }
 
-func (s *Store) AddFilter(f *models.Filter) error {
+func (s *Store) AddFilter(ctx context.Context, f *models.Filter) error {
 	var feedID sql.NullString
 	if f.FeedID != "" {
 		feedID = sql.NullString{String: f.FeedID, Valid: true}
 	}
-	_, err := s.db.Exec(`INSERT INTO filters (id, feed_id, pattern, action, target, replacement) VALUES (?, ?, ?, ?, ?, ?)`,
+	_, err := s.db.ExecContext(ctx, `INSERT INTO filters (id, feed_id, pattern, action, target, replacement) VALUES (?, ?, ?, ?, ?, ?)`,
 		f.ID, feedID, f.Pattern, f.Action, f.Target, f.Replacement)
 	return err
 }
 
-func (s *Store) ListFilters() ([]models.Filter, error) {
-	rows, err := s.db.Query("SELECT id, feed_id, pattern, action, target, replacement FROM filters")
+func (s *Store) ListFilters(ctx context.Context) ([]models.Filter, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, feed_id, pattern, action, target, replacement FROM filters")
 	if err != nil {
 		return nil, err
 	}
@@ -545,8 +546,8 @@ func (s *Store) ListFilters() ([]models.Filter, error) {
 	return filters, nil
 }
 
-func (s *Store) GetFiltersForFeed(feedID string) ([]models.Filter, error) {
-	rows, err := s.db.Query("SELECT id, feed_id, pattern, action, target, replacement FROM filters WHERE feed_id IS NULL OR feed_id = '' OR feed_id = ?", feedID)
+func (s *Store) GetFiltersForFeed(ctx context.Context, feedID string) ([]models.Filter, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, feed_id, pattern, action, target, replacement FROM filters WHERE feed_id IS NULL OR feed_id = '' OR feed_id = ?", feedID)
 	if err != nil {
 		return nil, err
 	}
@@ -567,8 +568,8 @@ func (s *Store) GetFiltersForFeed(feedID string) ([]models.Filter, error) {
 	return filters, nil
 }
 
-func (s *Store) DeleteFilter(id string) error {
-	_, err := s.db.Exec("DELETE FROM filters WHERE id = ?", id)
+func (s *Store) DeleteFilter(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM filters WHERE id = ?", id)
 	return err
 }
 
@@ -579,15 +580,15 @@ type Session struct {
 	ExpiresAt    time.Time
 }
 
-func (s *Store) CreateSession(sess *Session) error {
-	_, err := s.db.Exec("INSERT INTO sessions (id, username, refresh_token, expires_at) VALUES (?, ?, ?, ?)",
+func (s *Store) CreateSession(ctx context.Context, sess *Session) error {
+	_, err := s.db.ExecContext(ctx, "INSERT INTO sessions (id, username, refresh_token, expires_at) VALUES (?, ?, ?, ?)",
 		sess.ID, sess.Username, sess.RefreshToken, sess.ExpiresAt)
 	return err
 }
 
-func (s *Store) GetSession(token string) (*Session, error) {
+func (s *Store) GetSession(ctx context.Context, token string) (*Session, error) {
 	var sess Session
-	err := s.db.QueryRow("SELECT id, username, refresh_token, expires_at FROM sessions WHERE refresh_token = ?", token).
+	err := s.db.QueryRowContext(ctx, "SELECT id, username, refresh_token, expires_at FROM sessions WHERE refresh_token = ?", token).
 		Scan(&sess.ID, &sess.Username, &sess.RefreshToken, &sess.ExpiresAt)
 	if err != nil {
 		return nil, err
@@ -595,23 +596,23 @@ func (s *Store) GetSession(token string) (*Session, error) {
 	return &sess, nil
 }
 
-func (s *Store) DeleteSession(token string) error {
-	_, err := s.db.Exec("DELETE FROM sessions WHERE refresh_token = ?", token)
+func (s *Store) DeleteSession(ctx context.Context, token string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE refresh_token = ?", token)
 	return err
 }
 
-func (s *Store) DeleteExpiredSessions() error {
-	_, err := s.db.Exec("DELETE FROM sessions WHERE expires_at < ?", time.Now())
+func (s *Store) DeleteExpiredSessions(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM sessions WHERE expires_at < ?", time.Now())
 	return err
 }
 
-func (s *Store) AddAPIKey(id, name, hash string) error {
-	_, err := s.db.Exec("INSERT INTO api_keys (id, name, key_hash) VALUES (?, ?, ?)", id, name, hash)
+func (s *Store) AddAPIKey(ctx context.Context, id, name, hash string) error {
+	_, err := s.db.ExecContext(ctx, "INSERT INTO api_keys (id, name, key_hash) VALUES (?, ?, ?)", id, name, hash)
 	return err
 }
 
-func (s *Store) ListAPIKeys() ([]map[string]interface{}, error) {
-	rows, err := s.db.Query("SELECT id, name, created_at FROM api_keys ORDER BY created_at DESC")
+func (s *Store) ListAPIKeys(ctx context.Context) ([]map[string]interface{}, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id, name, created_at FROM api_keys ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -633,29 +634,29 @@ func (s *Store) ListAPIKeys() ([]map[string]interface{}, error) {
 	return keys, nil
 }
 
-func (s *Store) DeleteAPIKey(id string) error {
-	_, err := s.db.Exec("DELETE FROM api_keys WHERE id = ?", id)
+func (s *Store) DeleteAPIKey(ctx context.Context, id string) error {
+	_, err := s.db.ExecContext(ctx, "DELETE FROM api_keys WHERE id = ?", id)
 	return err
 }
 
-func (s *Store) ValidateAPIKey(hash string) bool {
+func (s *Store) ValidateAPIKey(ctx context.Context, hash string) bool {
 	var count int
-	err := s.db.QueryRow("SELECT COUNT(*) FROM api_keys WHERE key_hash = ?", hash).Scan(&count)
+	err := s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM api_keys WHERE key_hash = ?", hash).Scan(&count)
 	return err == nil && count > 0
 }
 
-func (s *Store) GetStats() (*models.Stats, error) {
+func (s *Store) GetStats(ctx context.Context) (*models.Stats, error) {
 	var stats models.Stats
 
 	// Total Entries
-	_ = s.db.QueryRow("SELECT COUNT(*) FROM entries").Scan(&stats.TotalEntries)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM entries").Scan(&stats.TotalEntries)
 	// Unread Entries
-	_ = s.db.QueryRow("SELECT COUNT(*) FROM entries WHERE is_read = 0").Scan(&stats.UnreadEntries)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM entries WHERE is_read = 0").Scan(&stats.UnreadEntries)
 	// Total Feeds
-	_ = s.db.QueryRow("SELECT COUNT(*) FROM feeds").Scan(&stats.TotalFeeds)
+	_ = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM feeds").Scan(&stats.TotalFeeds)
 
 	// Category Stats
-	rows, err := s.db.Query("SELECT f.category, COUNT(e.id) FROM feeds f JOIN entries e ON f.id = e.feed_id GROUP BY f.category")
+	rows, err := s.db.QueryContext(ctx, "SELECT f.category, COUNT(e.id) FROM feeds f JOIN entries e ON f.id = e.feed_id GROUP BY f.category")
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -672,7 +673,7 @@ func (s *Store) GetStats() (*models.Stats, error) {
 	}
 
 	// Top 10 Feeds by volume
-	rows, err = s.db.Query("SELECT f.title, COUNT(e.id) as c FROM feeds f JOIN entries e ON f.id = e.feed_id GROUP BY f.id ORDER BY c DESC LIMIT 10")
+	rows, err = s.db.QueryContext(ctx, "SELECT f.title, COUNT(e.id) as c FROM feeds f JOIN entries e ON f.id = e.feed_id GROUP BY f.id ORDER BY c DESC LIMIT 10")
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {

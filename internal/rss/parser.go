@@ -18,6 +18,7 @@ import (
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/models"
 	"github.com/nef734/gorrson/internal/sanitizer"
+	"github.com/nef734/gorrson/internal/util"
 )
 
 type transport struct {
@@ -59,7 +60,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 	slog.Info("SyncFeed starting", "url", url, "user", store.GetUsername())
 
 	// Get feed settings if it exists
-	existing, _ := store.GetFeedByURL(url)
+	existing, _ := store.GetFeedByURL(ctx, url)
 
 	// Default to a common browser user-agent to avoid blocking.
 	ua := "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36"
@@ -109,7 +110,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 	slog.Info("Feed parsed", "title", feed.Title, "items", len(feed.Items), "url", url)
 
 	// Check if feed exists to maintain the ID
-	existing, _ = store.GetFeedByURL(url)
+	existing, _ = store.GetFeedByURL(ctx, url)
 	feedID := uuid.New().String()
 	if existing != nil {
 		feedID = existing.ID
@@ -124,13 +125,13 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		LastUpdated: time.Now(),
 	}
 
-	if err := store.AddFeed(f); err != nil {
+	if err := store.AddFeed(ctx, f); err != nil {
 		slog.Error("Failed to save feed", "err", err)
 		return fmt.Errorf("could not save feed metadata: %w", err)
 	}
 	slog.Info("Feed saved to DB", "title", feed.Title, "id", feedID)
 
-	filters, _ := store.GetFiltersForFeed(feedID)
+	filters, _ := store.GetFiltersForFeed(ctx, feedID)
 
 	type compiledFilter struct {
 		f  models.Filter
@@ -263,7 +264,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 
 		if imageURL == "" {
-			imageURL = extractFirstImageFromHTML(content)
+			imageURL = util.ExtractFirstImageFromHTML(content)
 		}
 
 		if (isBluesky || isMastodon) && imageURL == "" && item.Link != "" {
@@ -289,7 +290,7 @@ func (p *Parser) SyncFeed(ctx context.Context, url string, store *db.Store) erro
 		}
 		entry.FeverID = generateFeverID(entry.ID)
 
-		if err := store.AddEntryTx(tx, entry); err != nil {
+		if err := store.AddEntryTx(ctx, tx, entry); err != nil {
 			continue
 		}
 		saved++
@@ -320,20 +321,6 @@ func normalizeURL(rawURL string) string {
 	}
 	u.RawQuery = q.Encode()
 	return u.String()
-}
-
-func extractFirstImageFromHTML(html string) string {
-	if html == "" {
-		return ""
-	}
-	re := regexp.MustCompile(`(?i)<img[^>]+src=["']([^"']+\.(jpg|jpeg|png|webp|gif|svg)[^"']*)["']`)
-	matches := re.FindAllStringSubmatch(html, -1)
-	for _, match := range matches {
-		if len(match) > 1 {
-			return match[1]
-		}
-	}
-	return ""
 }
 
 func fetchOGImage(ctx context.Context, pageURL string) string {

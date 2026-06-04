@@ -1,13 +1,14 @@
 package cmd
 
 import (
+	"context"
 	"log"
 	"regexp"
 
 	"github.com/google/uuid"
-	"github.com/spf13/cobra"
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/models"
+	"github.com/spf13/cobra"
 )
 
 var filterCmd = &cobra.Command{
@@ -49,7 +50,7 @@ var filterAddCmd = &cobra.Command{
 			Replacement: replacement,
 		}
 
-		if err := store.AddFilter(f); err != nil {
+		if err := store.AddFilter(context.Background(), f); err != nil {
 			log.Fatal(err)
 		}
 
@@ -68,7 +69,7 @@ var filterListCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		filters, err := store.ListFilters()
+		filters, err := store.ListFilters(context.Background())
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -102,7 +103,7 @@ var filterRemoveCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		if err := store.DeleteFilter(id); err != nil {
+		if err := store.DeleteFilter(context.Background(), id); err != nil {
 			log.Fatal(err)
 		}
 		cmd.Printf("Filter %s removed.\n", id)

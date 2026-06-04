@@ -1,14 +1,15 @@
 package cmd
 
 import (
+	"context"
 	"crypto/md5"
 	"fmt"
 	"log"
 
-	"github.com/spf13/cobra"
 	"github.com/nef734/gorrson/internal/auth"
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/sanitizer"
+	"github.com/spf13/cobra"
 )
 
 var registerCmd = &cobra.Command{
@@ -44,7 +45,7 @@ var registerCmd = &cobra.Command{
 		}
 		defer store.Close()
 
-		if err := store.UpsertUser(user, hash, feverBcrypt); err != nil {
+		if err := store.UpsertUser(context.Background(), user, hash, feverBcrypt); err != nil {
 			log.Fatal(err)
 		}
 

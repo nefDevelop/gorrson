@@ -23,7 +23,7 @@ func TestSyncFeed(t *testing.T) {
 
 	parser := NewParser()
 	url := "https://news.ycombinator.com/rss"
-	
+
 	// Set a timeout for the network call
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -34,12 +34,12 @@ func TestSyncFeed(t *testing.T) {
 		return
 	}
 
-	feeds, err := store.ListFeeds()
+	feeds, err := store.ListFeeds(context.Background())
 	if err != nil || len(feeds) == 0 {
 		t.Errorf("Expected at least one feed in DB, got: %d", len(feeds))
 	}
 
-	entries, err := store.ListEntries(false, "newest", 10, 0, "", "")
+	entries, err := store.ListEntries(context.Background(), false, "newest", 10, 0, "", "")
 	if err != nil || len(entries) == 0 {
 		t.Errorf("Expected at least one entry in DB, got: %d", len(entries))
 	} else {
@@ -59,13 +59,13 @@ func TestFiltering(t *testing.T) {
 	defer store.Close()
 
 	// 1. Add Filters
-	store.AddFilter(&models.Filter{
+	store.AddFilter(context.Background(), &models.Filter{
 		ID:      "1",
 		Pattern: "SPAM",
 		Action:  "BLOCK",
 		Target:  "title",
 	})
-	store.AddFilter(&models.Filter{
+	store.AddFilter(context.Background(), &models.Filter{
 		ID:          "2",
 		Pattern:     "Go",
 		Action:      "REPLACE",
@@ -75,7 +75,7 @@ func TestFiltering(t *testing.T) {
 
 	// Since we can't easily mock gofeed's network calls here without more setup,
 	// we'll at least verify the DB and Filter structure.
-	filters, _ := store.ListFilters()
+	filters, _ := store.ListFilters(context.Background())
 	if len(filters) != 2 {
 		t.Errorf("Expected 2 filters, got %d", len(filters))
 	}
