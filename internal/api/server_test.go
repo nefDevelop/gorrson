@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -26,7 +27,7 @@ func TestAPIServer(t *testing.T) {
 	// 0. Manual setup of user in DB
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	store.UpsertUser(username, hash, "")
+	store.UpsertUser(context.Background(), username, hash, "")
 	store.Close()
 
 	// 1. Test Login
@@ -287,11 +288,11 @@ func TestRenameCategoryAPI(t *testing.T) {
 
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	store.UpsertUser(username, hash, "")
+	store.UpsertUser(context.Background(), username, hash, "")
 
 	// Pre-seed a feed with category
 	feedID := "feed-1"
-	store.AddFeed(&models.Feed{
+	store.AddFeed(context.Background(), &models.Feed{
 		ID:       feedID,
 		Title:    "Test Feed",
 		FeedURL:  "https://test.com/rss",
@@ -322,7 +323,7 @@ func TestRenameCategoryAPI(t *testing.T) {
 	// Verify in DB
 	store, _ = db.NewStore(dataDir, username)
 	defer store.Close()
-	feed, _ := store.GetFeedByID(feedID)
+	feed, _ := store.GetFeedByID(context.Background(), feedID)
 	if feed.Category != "NewCat" {
 		t.Errorf("Expected category NewCat, got %s", feed.Category)
 	}

@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -17,12 +18,11 @@ func BenchmarkSearch(b *testing.B) {
 	store, _ := NewStore(dataDir, "bench_user")
 	defer func() { _ = store.Close() }()
 
-	// Seed with 1000 items
 	feedID := uuid.New().String()
-	_ = store.AddFeed(&models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
+	_ = store.AddFeed(context.Background(), &models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
 
 	for i := 0; i < 1000; i++ {
-		_ = store.AddEntry(&models.Entry{
+		_ = store.AddEntry(context.Background(), &models.Entry{
 			ID:      uuid.New().String(),
 			FeedID:  feedID,
 			Title:   fmt.Sprintf("Item %d with keyword gorrson", i),
@@ -33,7 +33,7 @@ func BenchmarkSearch(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = store.SearchEntries("gorrson", 50, 0)
+		_, _ = store.SearchEntries(context.Background(), "gorrson", 50, 0)
 	}
 }
 
@@ -46,10 +46,10 @@ func BenchmarkListNews(b *testing.B) {
 	defer func() { _ = store.Close() }()
 
 	feedID := uuid.New().String()
-	_ = store.AddFeed(&models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
+	_ = store.AddFeed(context.Background(), &models.Feed{ID: feedID, Title: "Bench Feed", FeedURL: "http://bench.com/rss"})
 
 	for i := 0; i < 5000; i++ {
-		_ = store.AddEntry(&models.Entry{
+		_ = store.AddEntry(context.Background(), &models.Entry{
 			ID:      uuid.New().String(),
 			FeedID:  feedID,
 			Title:   fmt.Sprintf("Item %d", i),
@@ -60,6 +60,6 @@ func BenchmarkListNews(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = store.ListEntries(true, "newest", 50, 0, "", "")
+		_, _ = store.ListEntries(context.Background(), true, "newest", 50, 0, "", "")
 	}
 }

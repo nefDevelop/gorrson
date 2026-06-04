@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 import (
@@ -136,7 +138,7 @@ func report(results chan Result, totalDuration time.Duration) {
 	fmt.Printf("Throughput:     %.2f req/sec\n", float64(len(allDurations))/totalDuration.Seconds())
 
 	printStats("Overall", allDurations)
-	
+
 	keys := make([]string, 0, len(byType))
 	for k := range byType {
 		keys = append(keys, k)

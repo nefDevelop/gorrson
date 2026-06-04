@@ -2,6 +2,8 @@ package rss
 
 import (
 	"testing"
+
+	"github.com/nef734/gorrson/internal/util"
 )
 
 func TestNormalizeURL(t *testing.T) {
@@ -60,9 +62,9 @@ func TestExtractFirstImageFromHTML(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := extractFirstImageFromHTML(tt.input)
+			got := util.ExtractFirstImageFromHTML(tt.input)
 			if got != tt.expected {
-				t.Errorf("extractFirstImageFromHTML() = %q; want %q", got, tt.expected)
+				t.Errorf("util.ExtractFirstImageFromHTML() = %q; want %q", got, tt.expected)
 			}
 		})
 	}

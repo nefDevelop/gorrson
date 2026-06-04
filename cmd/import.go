@@ -5,10 +5,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/spf13/cobra"
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/opml"
 	"github.com/nef734/gorrson/internal/rss"
+	"github.com/spf13/cobra"
 )
 
 var importCmd = &cobra.Command{

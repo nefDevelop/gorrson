@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -34,7 +35,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = store.UpsertUser(username, hash, "")
+	err = store.UpsertUser(context.Background(), username, hash, "")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,7 +108,7 @@ func main() {
 			FeedURL:  s.URL,
 			Category: s.Category,
 		}
-		if err := store.AddFeed(f); err != nil {
+		if err := store.AddFeed(context.Background(), f); err != nil {
 			fmt.Printf("  [Error] %s: %v\n", s.Title, err)
 		} else {
 			fmt.Printf("  [OK] %s (%s)\n", s.Title, s.Category)

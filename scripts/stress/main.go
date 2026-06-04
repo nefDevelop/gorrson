@@ -1,3 +1,5 @@
+//go:build ignore
+
 package main
 
 import (
@@ -55,21 +57,21 @@ func main() {
 			for j := 0; j < iterations; j++ {
 				req, _ := http.NewRequest("GET", url+"/news?limit=5", nil)
 				req.Header.Set("Authorization", "Bearer "+token)
-				
+
 				res, err := client.Do(req)
 				if err != nil {
 					continue
 				}
 				io.Copy(io.Discard, res.Body)
 				res.Body.Close()
-				
+
 				if res.StatusCode == http.StatusOK {
 					mu.Lock()
 					successCount++
 					mu.Unlock()
 				}
-				
-				if (id == 0 && j%10 == 0) {
+
+				if id == 0 && j%10 == 0 {
 					fmt.Printf("   Worker 0: %d/%d completed...\n", j, iterations)
 				}
 			}
@@ -79,7 +81,7 @@ func main() {
 	wg.Wait()
 	duration := time.Since(start)
 	total := workerCount * iterations
-	
+
 	fmt.Printf("\n🏁 Load Test Complete!\n")
 	fmt.Printf("⏱️  Duration: %v\n", duration)
 	fmt.Printf("✅ Success: %d/%d (%.1f%%)\n", successCount, total, float64(successCount)/float64(total)*100)

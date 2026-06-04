@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http/httptest"
@@ -69,7 +70,7 @@ func TestStress_ConcurrentLoginAndList(t *testing.T) {
 
 	store, _ := db.NewStore(dataDir, username)
 	hash, _ := auth.HashPassword(password)
-	store.UpsertUser(username, hash, "")
+	store.UpsertUser(context.Background(), username, hash, "")
 	store.Close()
 
 	// Pre-generate token to avoid redundant hashing overhead in listing test
@@ -136,7 +137,7 @@ func TestStress_DiskSearch(t *testing.T) {
 
 	// Seed 1000 entries
 	for i := 0; i < 1000; i++ {
-		store.AddEntry(&models.Entry{
+		store.AddEntry(context.Background(), &models.Entry{
 			ID:          fmt.Sprintf("e%d", i),
 			FeedID:      "f1",
 			Title:       "Title " + fmt.Sprint(i),

@@ -1,11 +1,12 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 
-	"github.com/spf13/cobra"
 	"github.com/nef734/gorrson/internal/db"
+	"github.com/spf13/cobra"
 )
 
 var listCmd = &cobra.Command{
@@ -22,7 +23,7 @@ var listCmd = &cobra.Command{
 		defer store.Close()
 
 		// In CLI, we default to 50 latest entries
-		entries, err := store.ListEntries(unread, "newest", 50, 0, "", "")
+		entries, err := store.ListEntries(context.Background(), unread, "newest", 50, 0, "", "")
 		if err != nil {
 			log.Fatal(fmt.Errorf("failed to list entries: %w", err))
 		}
