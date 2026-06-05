@@ -78,6 +78,24 @@
   /** @type {(isGlobal?: boolean) => void} */
   export let onMarkAllRead;
 
+  let longPressTimer;
+  let isPressing = false;
+  const LONG_PRESS_DURATION = 3000;
+
+  function startPress() {
+    isPressing = true;
+    longPressTimer = setTimeout(() => {
+      onMarkAllRead(true); // Global mark all read
+      isPressing = false;
+      showMarkMenu = false;
+    }, LONG_PRESS_DURATION);
+  }
+
+  function cancelPress() {
+    clearTimeout(longPressTimer);
+    isPressing = false;
+  }
+
   /** @type {boolean} */
   export let scrollRead = false;
 
@@ -381,9 +399,20 @@
                 <CheckCheck size={16} />
                 <span>Mark Loaded</span>
               </button>
-              <button class="menu-item" on:click={() => { onMarkAllRead(true); showMarkMenu = false; }}>
-                <CheckCheck size={16} style="color: var(--md-primary)" />
-                <span style="color: var(--md-primary); font-weight: 600;">Mark ALL in System</span>
+              <button 
+                class="menu-item mark-all-secure-btn" 
+                class:is-pressing={isPressing}
+                on:mousedown={startPress}
+                on:mouseup={cancelPress}
+                on:mouseleave={cancelPress}
+                on:touchstart|passive={startPress}
+                on:touchend|passive={cancelPress}
+              >
+                <div class="progress-bg"></div>
+                <div class="secure-content">
+                  <CheckCheck size={16} style="color: var(--md-primary)" />
+                  <span style="color: var(--md-primary); font-weight: 600;">Hold 3s to Mark ALL</span>
+                </div>
               </button>
             </div>
           </div>
@@ -648,6 +677,38 @@
 
   .split-button .split-trigger {
     width: 28px;
+  }
+
+  .mark-all-secure-btn {
+    position: relative;
+    overflow: hidden;
+    padding: 0 !important;
+  }
+  .mark-all-secure-btn .secure-content {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    position: relative;
+    z-index: 2;
+    width: 100%;
+    pointer-events: none;
+  }
+  .mark-all-secure-btn .progress-bg {
+    position: absolute;
+    left: 0;
+    top: 0;
+    height: 100%;
+    width: 0%;
+    background: color-mix(in srgb, var(--md-primary) 15%, transparent);
+    z-index: 1;
+    pointer-events: none;
+  }
+  .mark-all-secure-btn.is-pressing .progress-bg {
+    animation: fill-bg 3s linear forwards;
+  }
+  @keyframes fill-bg {
+    to { width: 100%; }
   }
 
   .filter-menu.right-aligned {

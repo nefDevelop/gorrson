@@ -25,8 +25,7 @@
   .toast-container {
     position: fixed;
     bottom: 40px;
-    left: 50%;
-    transform: translateX(-50%);
+    right: 40px;
     z-index: 9999;
     display: flex;
     flex-direction: column-reverse;
@@ -38,9 +37,9 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 6px 16px;
+    padding: 12px 24px;
     min-height: 48px;
-    border-radius: var(--radius-m);
+    border-radius: var(--radius-full, 24px);
     background: var(--md-surface-variant);
     border: 1px solid var(--md-outline);
     box-shadow: 0 4px 12px rgba(0,0,0,0.25);
@@ -98,6 +97,7 @@
   @media (max-width: 600px) {
     .toast-container {
       width: 100%;
+      right: 0;
       padding: 0 16px;
       box-sizing: border-box;
     }
