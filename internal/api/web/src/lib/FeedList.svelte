@@ -78,12 +78,15 @@
 
   let longPressTimer;
   let isPressing = false;
+  let longPressTriggered = false;
   const LONG_PRESS_DURATION = 2000;
 
   function startPress() {
     isPressing = true;
+    longPressTriggered = false;
     longPressTimer = setTimeout(() => {
       onMarkAllRead(true); // Global mark all read
+      longPressTriggered = true;
       cancelPress();
     }, LONG_PRESS_DURATION);
   }
@@ -94,11 +97,10 @@
   }
 
   function handleMarkClick() {
-    // Solo disparamos el click normal si no se ha completado el long press
-    if (isPressing) {
+    if (isPressing && !longPressTriggered) {
       onMarkAllRead(false); // Normal mark all read (loaded only)
-      cancelPress();
     }
+    cancelPress();
   }
 
   /** @type {boolean} */
