@@ -338,12 +338,20 @@
   /** @param {string|number} id */
   async function handleMarkAsRead(id) {
     if (articles.find(a => a.id === id)?.is_read) return;
-    await markAsRead(id);
+    
+    // Update local state immediately for instant feedback
     articles = articles.map(a => a.id === id ? {...a, is_read: true} : a);
-
-    // If we're in unread only mode and the current list becomes too short, fetch more
-    if (unreadOnly && filteredArticles.length < 5 && !allLoaded) {
-      loadData(true);
+    
+    try {
+      await markAsRead(id);
+      // If we're in unread only mode and the current list becomes too short, fetch more
+      if (unreadOnly && filteredArticles.length < 5 && !allLoaded) {
+        loadData(true);
+      }
+    } catch (e) {
+      // Revert if API fails
+      articles = articles.map(a => a.id === id ? {...a, is_read: false} : a);
+      toastError('Failed to mark as read');
     }
   }
 
@@ -359,25 +367,34 @@
   }
 
   async function handleMarkAllRead() {
+    const unreadCount = articles.filter(a => !a.is_read).length;
+    if (unreadCount === 0) return;
+
+    // 1. Update local state immediately so they disappear if unreadOnly is active
+    const previousArticles = [...articles];
+    articles = articles.map(a => ({...a, is_read: true}));
+
     try {
       const params = {
         category: activeCategory,
         feed_id: activeSource,
         search: searchQuery,
-        limit: articles.length // Only mark what's loaded in the UI
+        limit: previousArticles.length 
       };
-      const unreadCount = articles.filter(a => !a.is_read).length;
+      
       await markAllRead(params);
-
-      articles = articles.map(a => ({...a, is_read: true}));
       toastSuccess(`Marked ${unreadCount} items as read`);
 
-      // If in unreadOnly mode, we should fetch fresh unread articles since current ones are gone
+      // 2. Wait a bit before reloading to ensure the DB has settled
       if (unreadOnly) {
-        loadData();
+        setTimeout(() => {
+          loadData();
+        }, 300);
       }
     } catch (e) {
-      toastError('Failed to mark as read');
+      // Revert local state on error
+      articles = previousArticles;
+      toastError('Failed to mark all as read');
     }
   }
   /** @param {string|number} id */
