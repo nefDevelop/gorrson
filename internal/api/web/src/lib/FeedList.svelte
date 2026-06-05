@@ -17,7 +17,8 @@
     AlignJustify,
     BookOpen,
     LayoutTemplate,
-    Image as ImageIcon
+    Image as ImageIcon,
+    ChevronDown
   } from "lucide-svelte";
   import { t } from "./i18n.js";
   import { fade, slide } from "svelte/transition";
@@ -72,36 +73,10 @@
   export let searchQuery = "";
   let showFilters = false;
   let showViewMenu = false;
+  let showMarkMenu = false;
 
   /** @type {(isGlobal?: boolean) => void} */
   export let onMarkAllRead;
-
-  let longPressTimer;
-  let isPressing = false;
-  let longPressTriggered = false;
-  const LONG_PRESS_DURATION = 2000;
-
-  function startPress() {
-    isPressing = true;
-    longPressTriggered = false;
-    longPressTimer = setTimeout(() => {
-      onMarkAllRead(true); // Global mark all read
-      longPressTriggered = true;
-      cancelPress();
-    }, LONG_PRESS_DURATION);
-  }
-
-  function cancelPress() {
-    clearTimeout(longPressTimer);
-    isPressing = false;
-  }
-
-  function handleMarkClick() {
-    if (isPressing && !longPressTriggered) {
-      onMarkAllRead(false); // Normal mark all read (loaded only)
-    }
-    cancelPress();
-  }
 
   /** @type {boolean} */
   export let scrollRead = false;
@@ -381,19 +356,39 @@
           </div>
         {/if}
       </div>
-      <button 
-        class="action-btn mark-all-btn" 
-        class:is-pressing={isPressing}
-        on:mousedown={startPress}
-        on:mouseup={handleMarkClick}
-        on:mouseleave={cancelPress}
-        on:touchstart|passive={startPress}
-        on:touchend|passive={handleMarkClick}
-        title="Click: Mark loaded as read | Hold 2s: Mark ALL in system as read"
-      >
-        <div class="progress-ring"></div>
-        <CheckCheck size={18} />
-      </button>
+      <div class="filter-wrapper split-button-wrapper">
+        <div class="split-button">
+          <button 
+            class="action-btn split-main" 
+            on:click={() => onMarkAllRead(false)}
+            title="Mark loaded as read"
+          >
+            <CheckCheck size={18} />
+          </button>
+          <button 
+            class="action-btn split-trigger {showMarkMenu ? 'active' : ''}" 
+            on:click={() => {showMarkMenu = !showMarkMenu; showFilters = false; showViewMenu = false;}}
+            title="More options"
+          >
+            <ChevronDown size={14} />
+          </button>
+        </div>
+        {#if showMarkMenu}
+          <div class="filter-menu right-aligned" in:fly={{ y: 10, duration: 200 }} out:fade={{ duration: 100 }}>
+            <div class="menu-section">
+              <span class="section-title">Mark as read</span>
+              <button class="menu-item" on:click={() => { onMarkAllRead(false); showMarkMenu = false; }}>
+                <CheckCheck size={16} />
+                <span>Mark Loaded</span>
+              </button>
+              <button class="menu-item" on:click={() => { onMarkAllRead(true); showMarkMenu = false; }}>
+                <CheckCheck size={16} style="color: var(--md-primary)" />
+                <span style="color: var(--md-primary); font-weight: 600;">Mark ALL in System</span>
+              </button>
+            </div>
+          </div>
+        {/if}
+      </div>
     </div>
   </header>
 
@@ -631,46 +626,33 @@
     white-space: nowrap;
   }
 
-  /* Long press Mark All button */
-  .mark-all-btn {
+  /* Split Mark All button */
+  .split-button-wrapper {
     position: relative;
-    overflow: hidden;
+    display: inline-flex;
   }
 
-  .progress-ring {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    border: 2px solid transparent;
-    border-radius: 50%;
-    box-sizing: border-box;
-    pointer-events: none;
-    z-index: 1;
+  .split-button {
+    display: flex;
+    background: var(--md-surface);
+    border-radius: var(--radius-full);
+    border: 1px solid var(--md-outline);
+    padding: 2px;
+    align-items: center;
   }
 
-  .mark-all-btn.is-pressing .progress-ring {
-    border-color: var(--md-primary);
-    animation: fill-border 2s linear forwards;
+  .split-button .action-btn {
+    width: 36px;
+    height: 36px;
   }
 
-  @keyframes fill-border {
-    0% {
-      clip-path: polygon(50% 50%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%);
-    }
-    25% {
-      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%);
-    }
-    50% {
-      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 100% 100%, 100% 100%);
-    }
-    75% {
-      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 100%);
-    }
-    100% {
-      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%);
-    }
+  .split-button .split-trigger {
+    width: 28px;
+  }
+
+  .filter-menu.right-aligned {
+    right: 0;
+    left: auto;
   }
 
   .card-wrapper {
