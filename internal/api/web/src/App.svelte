@@ -366,35 +366,39 @@
     handleMarkAsRead(id);
   }
 
-  async function handleMarkAllRead() {
+  async function handleMarkAllRead(isGlobal = false) {
     const unreadCount = articles.filter(a => !a.is_read).length;
-    if (unreadCount === 0) return;
+    if (!isGlobal && unreadCount === 0) return;
 
-    // 1. Update local state immediately so they disappear if unreadOnly is active
+    // 1. Update local state immediately
     const previousArticles = [...articles];
-    articles = articles.map(a => ({...a, is_read: true}));
+    if (isGlobal) {
+      articles = [];
+    } else {
+      articles = articles.map(a => ({...a, is_read: true}));
+    }
 
     try {
-      const params = {
-        category: activeCategory,
-        feed_id: activeSource,
-        search: searchQuery,
-        limit: previousArticles.length 
-      };
+      let params = {};
+      if (!isGlobal) {
+        params = {
+          category: activeCategory,
+          feed_id: activeSource,
+          search: searchQuery,
+          limit: previousArticles.length 
+        };
+      }
       
       await markAllRead(params);
-      toastSuccess(`Marked ${unreadCount} items as read`);
+      toastSuccess(isGlobal ? 'All system news marked as read' : `Marked ${unreadCount} items as read`);
 
-      // 2. Wait a bit before reloading to ensure the DB has settled
-      if (unreadOnly) {
-        setTimeout(() => {
-          loadData();
-        }, 300);
-      }
+      // 2. Reload data after a small delay
+      setTimeout(() => {
+        loadData();
+      }, 300);
     } catch (e) {
-      // Revert local state on error
       articles = previousArticles;
-      toastError('Failed to mark all as read');
+      toastError('Failed to mark as read');
     }
   }
   /** @param {string|number} id */

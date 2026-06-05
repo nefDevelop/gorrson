@@ -73,8 +73,33 @@
   let showFilters = false;
   let showViewMenu = false;
 
-  /** @type {() => void} */
+  /** @type {(isGlobal?: boolean) => void} */
   export let onMarkAllRead;
+
+  let longPressTimer;
+  let isPressing = false;
+  const LONG_PRESS_DURATION = 2000;
+
+  function startPress() {
+    isPressing = true;
+    longPressTimer = setTimeout(() => {
+      onMarkAllRead(true); // Global mark all read
+      cancelPress();
+    }, LONG_PRESS_DURATION);
+  }
+
+  function cancelPress() {
+    clearTimeout(longPressTimer);
+    isPressing = false;
+  }
+
+  function handleMarkClick() {
+    // Solo disparamos el click normal si no se ha completado el long press
+    if (isPressing) {
+      onMarkAllRead(false); // Normal mark all read (loaded only)
+      cancelPress();
+    }
+  }
 
   /** @type {boolean} */
   export let scrollRead = false;
@@ -354,7 +379,17 @@
           </div>
         {/if}
       </div>
-      <button class="action-btn" on:click={onMarkAllRead} title="Mark all as read">
+      <button 
+        class="action-btn mark-all-btn" 
+        class:is-pressing={isPressing}
+        on:mousedown={startPress}
+        on:mouseup={handleMarkClick}
+        on:mouseleave={cancelPress}
+        on:touchstart|passive={startPress}
+        on:touchend|passive={handleMarkClick}
+        title="Click: Mark loaded as read | Hold 2s: Mark ALL in system as read"
+      >
+        <div class="progress-ring"></div>
         <CheckCheck size={18} />
       </button>
     </div>
@@ -592,6 +627,48 @@
     text-transform: uppercase;
     letter-spacing: 1px;
     white-space: nowrap;
+  }
+
+  /* Long press Mark All button */
+  .mark-all-btn {
+    position: relative;
+    overflow: hidden;
+  }
+
+  .progress-ring {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    border: 2px solid transparent;
+    border-radius: 50%;
+    box-sizing: border-box;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .mark-all-btn.is-pressing .progress-ring {
+    border-color: var(--md-primary);
+    animation: fill-border 2s linear forwards;
+  }
+
+  @keyframes fill-border {
+    0% {
+      clip-path: polygon(50% 50%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%);
+    }
+    25% {
+      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 0%, 100% 0%, 100% 0%);
+    }
+    50% {
+      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 100% 100%, 100% 100%);
+    }
+    75% {
+      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 100%);
+    }
+    100% {
+      clip-path: polygon(50% 50%, 50% 0%, 100% 0%, 100% 100%, 0% 100%, 0% 0%);
+    }
   }
 
   .card-wrapper {
