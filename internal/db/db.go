@@ -357,9 +357,9 @@ func (s *Store) MarkAllRead(ctx context.Context, category, feedID, search string
 	var args []interface{}
 
 	if search != "" {
-		query = `UPDATE entries SET is_read = 1 WHERE id IN (
-			SELECT entries.id FROM entries 
-			JOIN entries_fts ON entries.rowid = entries_fts.rowid 
+		query = `UPDATE entries SET is_read = 1 WHERE is_read = 0 AND id IN (
+			SELECT entries.id FROM entries
+			JOIN entries_fts ON entries.rowid = entries_fts.rowid
 			WHERE entries_fts MATCH ?
 			ORDER BY entries.published_at DESC`
 		if limit > 0 {
@@ -370,10 +370,10 @@ func (s *Store) MarkAllRead(ctx context.Context, category, feedID, search string
 		}
 		query += ")"
 	} else {
-		query = `UPDATE entries SET is_read = 1 WHERE id IN (
+		query = `UPDATE entries SET is_read = 1 WHERE is_read = 0 AND id IN (
 			SELECT e.id FROM entries e
 			JOIN feeds f ON e.feed_id = f.id
-			WHERE 1=1`
+			WHERE e.is_read = 0`
 		if category != "" {
 			query += " AND f.category COLLATE NOCASE = ?"
 			args = append(args, category)
@@ -393,7 +393,6 @@ func (s *Store) MarkAllRead(ctx context.Context, category, feedID, search string
 	_, err := s.db.ExecContext(ctx, query, args...)
 	return err
 }
-
 func (s *Store) ToggleFavorite(ctx context.Context, entryID string, isFavorite bool) error {
 	if isFavorite {
 		_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE id = ?", entryID)
