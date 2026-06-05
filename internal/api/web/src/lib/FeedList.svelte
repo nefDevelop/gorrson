@@ -591,6 +591,7 @@
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 1px;
+    white-space: nowrap;
   }
 
   .card-wrapper {
@@ -892,7 +893,9 @@
     .articles-container {
       overflow-y: visible;
       height: auto;
-      display: block; /* Stack cards on mobile if needed, or keep grid if it works */
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
       padding-top: 12px;
     }
     .header-bar {

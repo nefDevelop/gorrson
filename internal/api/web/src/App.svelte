@@ -303,20 +303,25 @@
 
   // Pre-filter search logic (client side)
   $: filteredArticles = (() => {
-    if (!searchQuery || searchQuery.trim().length === 0) return articles;
-    
+    let list = articles;
+    if (unreadOnly) {
+      list = list.filter(a => !a.is_read);
+    }
+
+    if (!searchQuery || searchQuery.trim().length === 0) return list;
+
     const tokens = searchQuery.toLowerCase()
       .split(/\s+/)
       .filter(word => word.length > 2 && !STOP_WORDS.has(word));
-    
+
     if (tokens.length === 0 && searchQuery.trim().length > 0) {
       // If we have query but all are stop words, just do a literal match of the whole query
-      return articles.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase()));
+      return list.filter(a => a.title.toLowerCase().includes(searchQuery.toLowerCase()));
     }
-    
-    if (tokens.length === 0) return articles;
 
-    return articles.filter(article => {
+    if (tokens.length === 0) return list;
+
+    return list.filter(article => {
       const searchContent = `${article.title} ${article.summary || ''} ${article.content || ''}`.toLowerCase();
       return tokens.every(token => searchContent.includes(token));
     });
@@ -335,6 +340,11 @@
     if (articles.find(a => a.id === id)?.is_read) return;
     await markAsRead(id);
     articles = articles.map(a => a.id === id ? {...a, is_read: true} : a);
+
+    // If we're in unread only mode and the current list becomes too short, fetch more
+    if (unreadOnly && filteredArticles.length < 5 && !allLoaded) {
+      loadData(true);
+    }
   }
 
   /** @param {string|number} id */
@@ -358,14 +368,18 @@
       };
       const unreadCount = articles.filter(a => !a.is_read).length;
       await markAllRead(params);
-      
+
       articles = articles.map(a => ({...a, is_read: true}));
       toastSuccess(`Marked ${unreadCount} items as read`);
+
+      // If in unreadOnly mode, we should fetch fresh unread articles since current ones are gone
+      if (unreadOnly) {
+        loadData();
+      }
     } catch (e) {
       toastError('Failed to mark as read');
     }
   }
-
   /** @param {string|number} id */
   async function handleToggleFavorite(id) {
     const article = articles.find(a => a.id === id);
