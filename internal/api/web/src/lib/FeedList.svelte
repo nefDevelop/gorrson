@@ -159,18 +159,18 @@
     };
   });
 
-  $: renderedArticles = buildLayout(articles, cardStyle, readerMode, selectedId);
+  $: renderedArticles = buildLayout(articles, cardStyle, readerMode, hasSelection);
 
   /**
    * @param {Array<any>} arts
    * @param {string} style
    * @param {string} mode
-   * @param {number|string|null|undefined} selId
+   * @param {boolean} hasSel
    */
-  function buildLayout(arts, style, mode, selId) {
+  function buildLayout(arts, style, mode, hasSel) {
     if (!arts || arts.length === 0) return [];
     
-    if (selId && mode === 'side-by-side') return arts.map(a => ({ ...a, _role: 'bento-full' }));
+    if (hasSel && mode === 'side-by-side') return arts.map(a => ({ ...a, _role: 'bento-full' }));
     if (style === 'compact' || style === 'minimal') return arts.map(a => ({ ...a, _role: 'bento-full' }));
     if (style === 'default' || style === 'image') return arts.map((a, i) => ({ ...a, _role: i === 0 ? 'bento-hero' : 'bento-standard' }));
     

@@ -8,6 +8,7 @@
 
   export let onLogout = () => {};
   export let onRefresh = () => {};
+  export let onFeedsChanged = () => {};
   export let feeds = [];
   export let username = '';
   export let scrollRead = false;
@@ -53,6 +54,7 @@
       feeds = feeds.filter(f => f.id !== idToDelete);
       feedToDelete = null;
       success(`Feed "${title}" deleted successfully`);
+      onFeedsChanged();
       onRefresh();
     } catch (e) {
       console.error(e);

@@ -51,6 +51,7 @@
   let articles = [];
   /** @type {Array<any>} */
   let feeds = [];
+  let feedsLoaded = false;
   let loading = true;
   /** @type {string | null} */
   let error = null;
@@ -131,7 +132,7 @@
       
       const [newsData, feedsData] = await Promise.all([
         fetchNews(params),
-        fetchFeeds()
+        feedsLoaded ? Promise.resolve(feeds) : fetchFeeds()
       ]);
       
       const newArticles = (newsData || []).map(a => ({
@@ -157,7 +158,10 @@
       }
       
       offset += newArticles.length;
-      feeds = feedsData || [];
+      if (!feedsLoaded) {
+        feeds = feedsData || [];
+        feedsLoaded = true;
+      }
       
       // Auto-selection only for full desktop
       if (articles.length > 0 && !selectedId && !append && !isMobile && !isSidebarMini && readerMode === 'side-by-side') {
@@ -297,7 +301,11 @@
   }
   */
 
-  $: if (isAuthenticated && (unreadOnly !== undefined || sortMode)) {
+  let prevUnreadOnly;
+  let prevSortMode;
+  $: if (isAuthenticated && (unreadOnly !== prevUnreadOnly || sortMode !== prevSortMode)) {
+    prevUnreadOnly = unreadOnly;
+    prevSortMode = sortMode;
     loadData();
   }
 
@@ -372,11 +380,7 @@
 
     // 1. Update local state immediately
     const previousArticles = [...articles];
-    if (isGlobal) {
-      articles = [];
-    } else {
-      articles = articles.map(a => ({...a, is_read: true}));
-    }
+    articles = articles.map(a => ({...a, is_read: true}));
 
     try {
       let params = {};
@@ -466,7 +470,8 @@
   /** @param {string} feedTitle */
   function handleAddFeedSave(feedTitle) {
     showAddFeed = false;
-    toastSuccess(`Feed "${feedTitle || 'nuevo feed'}" añadido correctamente ✓`);
+    feedsLoaded = false;
+    toastSuccess(`Feed "${feedTitle || 'nuevo feed'}" añadado correctamente ✓`);
     loadData();
   }
 
@@ -550,6 +555,8 @@
               {#if selectedId}
                 <PostViewer 
                   article={selectedArticle} 
+                  {articles}
+                  onSelect={handleSelect}
                   onBack={() => {
                     if (historyPushed) {
                       window.history.back(); // Esto dispara el popstate de arriba
@@ -575,6 +582,7 @@
             username={localStorage.getItem('username')} 
             onLogout={handleLogout} 
             onRefresh={loadData}
+            onFeedsChanged={() => { feedsLoaded = false; }}
             bind:scrollRead
             bind:unreadOnly
             bind:cardStyle

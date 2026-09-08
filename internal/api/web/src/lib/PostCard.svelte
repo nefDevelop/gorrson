@@ -1,5 +1,5 @@
 <script>
-  import { stripHtml, extractFirstImage, proxyImage } from './utils.js';
+  import { stripHtml, extractFirstImage, proxyImage, readingTime } from './utils.js';
   import { Star, Share2, Image as ImageIcon, ExternalLink } from 'lucide-svelte';
   import { fetchFullContent, markAsRead } from './api.js';
   /** @type {{id: string, title: string, source: string, time: string, category: string, is_read?: boolean, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean, matched_action?: string, image_url?: string}} */
@@ -32,6 +32,7 @@
   $: summary = stripHtml(fetchedContent || article.content || article.summary || "");
   $: imageUrl = article.image_url || extractFirstImage(fetchedContent || article.content);
   $: showThumbnail = (viewMode !== 'minimal') && imageUrl;
+  $: readTime = readingTime(fetchedContent || article.content || article.summary);
 
   let loadingFull = false;
   let attemptedFullLoad = false;
@@ -66,9 +67,8 @@
         article = { ...article, is_read: true };
         markAsRead(article.id).catch(console.error);
       }
-    } else {
-      onClick(article.id);
     }
+    onClick(article.id);
   }
 </script>
 
@@ -103,6 +103,10 @@
       <div class="footer-row">
         <div class="meta">
           <span class="source-tag">{article.source}</span>
+          {#if readTime}
+            <span class="dot">•</span>
+            <span class="read-time">{readTime}</span>
+          {/if}
           {#if isAggregator}
             <span class="aggregator-badge" title="Opens in new tab"><ExternalLink size={12} /></span>
           {/if}
@@ -439,6 +443,7 @@
   .meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
   .dot { opacity: 0.3; font-size: 12px; }
   .time-mini { font-size: 11px; opacity: 0.6; white-space: nowrap; }
+  .read-time { font-size: 10px; opacity: 0.5; white-space: nowrap; }
 
   .source-tag {
     font-size: 10px;

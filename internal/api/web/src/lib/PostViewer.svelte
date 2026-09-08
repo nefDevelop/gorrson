@@ -1,9 +1,9 @@
 <script>
   import { fade, fly } from 'svelte/transition';
   import { cubicOut } from 'svelte/easing';
-  import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal, Maximize2, Minimize2 } from 'lucide-svelte';
+  import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-svelte';
   import { t } from './i18n.js';
-  import { proxyImage } from './utils.js';
+  import { proxyImage, readingTime } from './utils.js';
   import { fetchFullContent } from './api.js';
   import { success as toastSuccess } from './toast.js';
   import { onMount } from 'svelte';
@@ -15,6 +15,9 @@
   export let onToggleFullscreen = () => {};
   export let showDesktopBack = false;
   export let onToggleFavorite = (id) => {};
+  /** @type {Array<any>} */
+  export let articles = [];
+  export let onSelect = (id) => {};
 
   let exportServices = [];
   function loadServices() {
@@ -28,7 +31,11 @@
       }
     };
     window.addEventListener('click', handleOutsideClick);
-    return () => window.removeEventListener('click', handleOutsideClick);
+    window.addEventListener('keydown', handleKeydown);
+    return () => {
+      window.removeEventListener('click', handleOutsideClick);
+      window.removeEventListener('keydown', handleKeydown);
+    };
   });
 
   // Re-load services if localStorage changes (e.g. from Settings tab)
@@ -37,6 +44,30 @@
   }
 
   let showExportMenu = false;
+
+  // Next/prev navigation
+  $: currentIndex = articles.findIndex(a => a.id === article?.id);
+  $: hasPrev = currentIndex > 0;
+  $: hasNext = currentIndex < articles.length - 1;
+
+  function goNext() {
+    if (hasNext) onSelect(articles[currentIndex + 1].id);
+  }
+  function goPrev() {
+    if (hasPrev) onSelect(articles[currentIndex - 1].id);
+  }
+
+  function handleKeydown(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'j' || e.key === 'J') goNext();
+    if (e.key === 'k' || e.key === 'K') goPrev();
+  }
+
+  // Scroll position persistence
+  function saveScrollPosition() {
+    if (!container || !article) return;
+    localStorage.setItem(`scroll-${article.id}`, String(container.scrollTop));
+  }
 
   let progress = 0;
   /** @type {HTMLElement | undefined} */
@@ -47,6 +78,7 @@
     const { scrollTop, scrollHeight, clientHeight } = container;
     const total = scrollHeight - clientHeight;
     progress = total > 0 ? (scrollTop / total) * 100 : 0;
+    saveScrollPosition();
   }
 
   /** @type {string | null} */
@@ -59,7 +91,13 @@
     lastHandledId = article.id;
     progress = 0;
     fullContent = null;
-    if (container) container.scrollTop = 0;
+    // Restore scroll position or start at top
+    requestAnimationFrame(() => {
+      if (container) {
+        const saved = localStorage.getItem(`scroll-${article.id}`);
+        container.scrollTop = saved ? parseInt(saved, 10) : 0;
+      }
+    });
     if (!article.is_full_content) {
       loadFullContent();
     } else {
@@ -109,6 +147,7 @@
     try {
       const text = await fetchFullContent(article.id);
       fullContent = text;
+      article.is_full_content = true;
     } catch (e) {
       const err = /** @type {Error} */ (e);
       // Silenciamos el error por límite de concurrencia (503). El visualizador usará el resumen corto como respaldo.
@@ -160,6 +199,7 @@
   class="post-viewer scroll-area" 
   bind:this={container} 
   on:scroll={handleScroll}
+  role="document"
   transition:fly={{ x: 100, duration: 400, easing: cubicOut }}
 >
   <!-- Header removed per user request -->
@@ -229,7 +269,15 @@
           </div>
           
           <div class="meta-bottom">
-            <span class="info time">{article.time}</span>
+            <span class="info time" title={article.published_at ? new Date(article.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) : ''}>
+              {article.time}
+              {#if article.published_at}
+                <span class="abs-date"> · {new Date(article.published_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</span>
+              {/if}
+            </span>
+            {#if readTime}
+              <span class="info read-time-badge">{readTime} read</span>
+            {/if}
           </div>
         </div>
 
@@ -245,6 +293,17 @@
         <div class="body-text prose">
           {@html cleanedContent || '<p>No content available.</p>'}
         </div>
+
+        {#if hasNext || hasPrev}
+          <div class="article-nav">
+            <button class="nav-btn" disabled={!hasPrev} on:click={goPrev}>
+              <ChevronUp size={16} /> Previous
+            </button>
+            <button class="nav-btn" disabled={!hasNext} on:click={goNext}>
+              Next <ChevronDown size={16} />
+            </button>
+          </div>
+        {/if}
       </div>
     {/key}
   {:else}
@@ -546,5 +605,45 @@
     color: var(--md-on-surface-variant);
     font: var(--m3-body-large);
     opacity: 0.5;
+  }
+
+  .abs-date { opacity: 0.6; font-size: 12px; }
+  .read-time-badge {
+    margin-left: auto;
+    font-size: 11px;
+    opacity: 0.5;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .article-nav {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 40px;
+    padding-top: 24px;
+    border-top: 1px solid var(--md-outline);
+  }
+  .nav-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: var(--md-surface-variant);
+    border: 1px solid var(--md-outline);
+    border-radius: var(--radius-full);
+    padding: 10px 20px;
+    font: var(--m3-label-large);
+    color: var(--md-on-surface);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .nav-btn:hover:not(:disabled) {
+    background: var(--md-primary-container);
+    border-color: var(--md-primary);
+    color: var(--md-primary);
+  }
+  .nav-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
   }
 </style>

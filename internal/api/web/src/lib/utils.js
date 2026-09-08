@@ -54,6 +54,18 @@ export function proxyImage(url) {
 }
 
 /**
+ * @param {string | null | undefined} html
+ * @returns {string}
+ */
+export function readingTime(html) {
+  const text = stripHtml(html || '');
+  if (!text) return '';
+  const words = text.split(/\s+/).length;
+  const mins = Math.ceil(words / 200);
+  return mins < 1 ? '<1 min' : `${mins} min`;
+}
+
+/**
  * @param {string} html
  */
 export function extractFirstImage(html) {
