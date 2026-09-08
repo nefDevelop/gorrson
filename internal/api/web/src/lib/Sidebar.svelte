@@ -88,9 +88,17 @@
     showUserMenu = !showUserMenu;
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
     showUserMenu = false;
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/logout', {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+    } catch (_) {}
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     window.location.reload();
   };
 </script>

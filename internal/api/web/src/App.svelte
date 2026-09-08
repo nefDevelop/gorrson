@@ -446,8 +446,16 @@
     loadData();
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    try {
+      const token = localStorage.getItem('token');
+      await fetch('/logout', {
+        method: 'POST',
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+      });
+    } catch (_) {}
     localStorage.removeItem('token');
+    localStorage.removeItem('refresh_token');
     isAuthenticated = false;
   }
 
