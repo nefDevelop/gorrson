@@ -1,5 +1,5 @@
 <script>
-  import { stripHtml, extractFirstImage } from './utils.js';
+  import { stripHtml, extractFirstImage, proxyImage } from './utils.js';
   import { Star, Share2, Image as ImageIcon, ExternalLink } from 'lucide-svelte';
   import { fetchFullContent, markAsRead } from './api.js';
   /** @type {{id: string, title: string, source: string, time: string, category: string, is_read?: boolean, content?: string, summary?: string, selected?: boolean, is_favorite?: boolean, matched_action?: string, image_url?: string}} */
@@ -143,7 +143,7 @@
 
     {#if showThumbnail}
       <div class="image-side">
-        <img src={imageUrl} alt="Article thumbnail" loading="lazy" />
+        <img src={proxyImage(imageUrl)} alt="Article thumbnail" loading="lazy" />
         {#if bentoSize === 'mag-hero'}
           <div class="hero-badge">Newest</div>
         {/if}

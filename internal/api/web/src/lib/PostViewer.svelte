@@ -3,6 +3,7 @@
   import { cubicOut } from 'svelte/easing';
   import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal, Maximize2, Minimize2 } from 'lucide-svelte';
   import { t } from './i18n.js';
+  import { proxyImage } from './utils.js';
   import { fetchFullContent } from './api.js';
   import { success as toastSuccess } from './toast.js';
   import { onMount } from 'svelte';
@@ -144,6 +145,12 @@
         html = html.replace(fuzzyHeroRegex, '');
       }
     }
+
+    // 3. Proxy all remaining images through /proxy for caching and SSRF protection
+    html = html.replace(/(<img[^>]+src=["'])([^"']+)(["'][^>]*>)/gi, (_, pre, url, post) => {
+      if (url.startsWith('data:') || url.startsWith('/proxy?')) return _;
+      return pre + proxyImage(url) + post;
+    });
     
     return html;
   })();
@@ -167,7 +174,7 @@
       >
         {#if article.image_url}
           <div class="image-container">
-            <img src={article.image_url} alt={article.title} on:error={handleImageError} />
+            <img src={proxyImage(article.image_url)} alt={article.title} on:error={handleImageError} />
           </div>
         {/if}
         

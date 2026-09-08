@@ -45,6 +45,15 @@ export function stripHtml(html) {
 }
 
 /**
+ * @param {string | null | undefined} url
+ * @returns {string}
+ */
+export function proxyImage(url) {
+  if (!url) return '';
+  return `/proxy?url=${encodeURIComponent(url)}`;
+}
+
+/**
  * @param {string} html
  */
 export function extractFirstImage(html) {
