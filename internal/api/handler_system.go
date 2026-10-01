@@ -187,8 +187,8 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 					"author":          "",
 					"html":            e.Content,
 					"url":             e.URL,
-					"is_saved":        0,
-					"is_read":         0,
+					"is_saved":        boolToInt(e.IsFavorite),
+					"is_read":         boolToInt(e.IsRead),
 					"created_on_time": e.PublishedAt.Unix(),
 				})
 			}

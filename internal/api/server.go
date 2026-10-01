@@ -268,6 +268,16 @@ func uuidToInt(id string) int {
 	return int(h.Sum32())
 }
 
+// boolToInt converts a bool to 0 or 1 for Fever API compatibility.
+// Fever espera numeros, no booleanos JSON: is_read e is_saved tienen que
+// viajar como 0/1 o el cliente no los interpreta.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 var proxySemaphore = make(chan struct{}, 10)
 
 func resolveURL(base *url.URL, rel string) string {
