@@ -369,18 +369,71 @@ func (s *Store) MarkAsRead(ctx context.Context, entryID string) error {
 	return err
 }
 
+// MarkAsReadByFeverID marca como leida la entrada con ese fever_id.
+//
+// Se descarta feverID <= 0 a proposito. generateFeverID convierte el UUID con
+// un hash FNV, asi que en operacion normal nunca vale 0, pero si un cliente
+// de la Fever API manda un id vacio o no numerico, Atoi devuelve 0 y la
+// consulta "WHERE fever_id = 0" sin guarda marcaria como leidas TODAS las
+// entradas que comparten ese valor, de golpe y sin avisar.
 func (s *Store) MarkAsReadByFeverID(ctx context.Context, feverID int) error {
+	if feverID <= 0 {
+		return nil
+	}
 	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_read = 1 WHERE fever_id = ?", feverID)
 	return err
 }
 
+// ToggleFavoriteByFeverID marca o desmarca la entrada con ese fever_id.
+//
+// Misma guarda que MarkAsReadByFeverID, y por el mismo motivo: sin ella, un
+// id invalido enviado por un cliente marcaria como favoritas todas las
+// entradas con fever_id = 0.
 func (s *Store) ToggleFavoriteByFeverID(ctx context.Context, feverID int, isFavorite bool) error {
+	if feverID <= 0 {
+		return nil
+	}
 	if isFavorite {
 		_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE fever_id = ?", feverID)
 		return err
 	}
 	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 0 WHERE fever_id = ?", feverID)
 	return err
+}
+
+// UnreadFeverIDs devuelve el fever_id de todas las entradas sin leer, en una
+// sola consulta que solo trae esa columna.
+//
+// La Fever API espera la lista COMPLETA de ids sin leer. Antes el handler
+// reutilizaba ListEntries con un limite de 500, que arrastra ademas titulo y
+// contenido de cada entrada: si habia mas de 500 sin leer, el cliente se
+// quedaba sin saber del resto y sus contadores salian mal. Aqui no hay tope,
+// y al no seleccionar el contenido, el coste de memoria es el de los ids.
+func (s *Store) UnreadFeverIDs(ctx context.Context) ([]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT fever_id FROM entries WHERE is_read = 0 ORDER BY published_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// TotalEntries devuelve cuantas entradas hay en total, para el campo
+// total_items de la Fever API (api_version >= 2).
+func (s *Store) TotalEntries(ctx context.Context) (int, error) {
+	var total int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM entries`).Scan(&total)
+	return total, err
 }
 
 func (s *Store) MarkAllRead(ctx context.Context, category, feedID, search string, limit int) error {

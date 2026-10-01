@@ -261,6 +261,13 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 	})
 }
 
+// feverItemPageItems es cuantas entradas devuelve la Fever API en una pagina
+// de ?items. El protocolo propone 50 e invita a paginar con since_id, pero
+// gorrson no puede usar since_id (los ids no son monotonicos, ver
+// handleFeverAPI), asi que se devuelve una ventana amplia de una vez: 500
+// entradas cubren de sobra la ventana de sincronizacion de cualquier cliente.
+const feverItemPageItems = 500
+
 // uuidToInt converts a UUID string to a 32-bit integer for Fever API compatibility
 func uuidToInt(id string) int {
 	h := fnv.New32a()

@@ -92,8 +92,9 @@ func TestFeverItemsReportaEstadoReal(t *testing.T) {
 	}
 
 	var resp struct {
-		Auth  float64 `json:"auth"`
-		Items []struct {
+		Auth       float64      `json:"auth"`
+		TotalItems json.Number  `json:"total_items"`
+		Items      []struct {
 			Title   string      `json:"title"`
 			IsSaved json.Number `json:"is_saved"`
 			IsRead  json.Number `json:"is_read"`
@@ -111,6 +112,11 @@ func TestFeverItemsReportaEstadoReal(t *testing.T) {
 	}
 	if len(resp.Items) != 3 {
 		t.Fatalf("se esperaban 3 items, llegaron %d", len(resp.Items))
+	}
+	// total_items (api_version >= 2) permite al cliente detectar que la pagina
+	// esta truncada, cosa que antes no podia saber.
+	if resp.TotalItems.String() != "3" {
+		t.Errorf("total_items = %q, se esperaba \"3\"", resp.TotalItems.String())
 	}
 
 	esperado := map[string][2]string{

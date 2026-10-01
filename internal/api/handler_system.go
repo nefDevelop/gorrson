@@ -166,19 +166,42 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if r.URL.Query().Has("items") || r.URL.Query().Has("unread_item_ids") {
-		unreadOnly := r.URL.Query().Has("unread_item_ids")
-		entries, _ := userStore.ListEntries(r.Context(), unreadOnly, "desc", 500, 0, "", "")
-
 		if r.URL.Query().Has("unread_item_ids") {
-			var ids []string
-			for _, e := range entries {
-				ids = append(ids, strconv.Itoa(e.FeverID))
+			// Query propia y sin limite: la Fever API espera la lista completa
+			// de ids sin leer, y truncar aqui hacia que el cliente perdiera
+			// el recuento. Antes se reutilizaba ListEntries con tope 500.
+			ids, _ := userStore.UnreadFeverIDs(r.Context())
+			parts := make([]string, 0, len(ids))
+			for _, id := range ids {
+				parts = append(parts, strconv.Itoa(id))
 			}
-			resp["unread_item_ids"] = strings.Join(ids, ",")
+			resp["unread_item_ids"] = strings.Join(parts, ",")
 		}
 
 		if r.URL.Query().Has("items") {
-			var items []map[string]interface{}
+			// Pagina de items, ordenada de mas reciente a mas antigua. Aqui si
+			// hay tope, a proposito: son entradas completas con su HTML, y
+			// volcarlas todas de golpe es lo que hace heavyweight a un
+			// servidor. feverItemPageItems deja margen de sobra para la
+			// ventana de sincronizacion de cualquier cliente.
+			//
+			// NO se implementan since_id, max_id ni with_ids, aunque el
+			// protocolo los define. Requieren que los ids crezcan de forma
+			// monotona y aqui no lo hacen: generateFeverID (internal/rss)
+			// deriva el id con un hash FNV del UUID, asi que es un numero
+			// disperso. Un cliente que pidiera desde su id mas alto se
+			// saltaria para siempre las entradas cuyo hash quedara por debajo,
+			// y perderia articulos en silencio. Truncar la pagina es visible;
+			// perder articulos no.
+			entries, _ := userStore.ListEntries(r.Context(), false, "desc", feverItemPageItems, 0, "", "")
+
+			// total_items (api_version >= 2) permite al cliente saber si la
+			// pagina esta truncada.
+			if total, err := userStore.TotalEntries(r.Context()); err == nil {
+				resp["total_items"] = total
+			}
+
+			items := make([]map[string]interface{}, 0, len(entries))
 			for _, e := range entries {
 				items = append(items, map[string]interface{}{
 					"id":              e.FeverID,

@@ -655,6 +655,14 @@ paths:
     get:
       summary: Fever-compatible API endpoint
       tags: [System]
+      description: >
+        Implementación parcial del protocolo Fever, pensada para clientes RSS.
+        Añade `items` para la página de entradas (más reciente primero, con
+        `total_items` para saber si viene truncada), `unread_item_ids` para la
+        lista completa de ids sin leer, `feeds` y `groups`.
+        No se implementan `since_id`, `max_id` ni `with_ids`: requieren ids
+        crecientes y aquí el fever_id es un hash del UUID, no una secuencia.
+        Con ellos el cliente se saltaría entradas en silencio.
       parameters:
         - name: api_key
           in: query
@@ -662,12 +670,61 @@ paths:
           schema:
             type: string
           description: MD5 hash of 'username:password'.
+        - name: items
+          in: query
+          schema:
+            type: string
+          description: Devuelve `items` (página de 500, más recientes primero) y `total_items`.
+        - name: unread_item_ids
+          in: query
+          schema:
+            type: string
+          description: Devuelve `unread_item_ids` con la lista completa, sin truncar.
+        - name: feeds
+          in: query
+          schema:
+            type: string
+          description: Devuelve `feeds`.
+        - name: groups
+          in: query
+          schema:
+            type: string
+          description: Devuelve `groups` y `feeds_groups`.
       responses:
         '200':
           description: Fever response
     post:
       summary: Fever-compatible API endpoint
       tags: [System]
+      description: >
+        Marca entradas o feeds como leídos o favoritos con
+        `mark=item&as=read|saved|unread|unsaved&id=<fever_id>`.
+        Un `id` ausente o no numérico se ignora en lugar de aplicarse a
+        varias entradas por error.
+      parameters:
+        - name: api_key
+          in: query
+          required: true
+          schema:
+            type: string
+          description: MD5 hash of 'username:password'.
+        - name: mark
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [item, feed]
+        - name: as
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [read, unread, saved, unsaved]
+        - name: id
+          in: query
+          schema:
+            type: integer
+          description: fever_id de la entrada a marcar. Se descarta si es 0 o negativo.
       responses:
         '200':
           description: Fever response
