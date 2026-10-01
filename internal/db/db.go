@@ -192,6 +192,17 @@ func (s *Store) migrate(ctx context.Context) error {
 	_, _ = s.db.ExecContext(ctx, "ALTER TABLE entries ADD COLUMN fever_id INTEGER DEFAULT 0")
 	_, _ = s.db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN fever_key TEXT DEFAULT ''")
 
+	// Normaliza published_at de las filas escritas antes de que existiera
+	// formatSQLiteTime. Hasta entonces el driver guardaba el String() del
+	// time.Time, que lleva el sufijo " +0000 UTC"; date() no lo reconoce y
+	// devolvia NULL, con lo que la poda no borraba nada.
+	//
+	// substr(1, 19) deja "YYYY-MM-DD HH:MM:SS", que SQLite si entiende. El
+	// filtro por longitud evita tocar filas que ya estan en el formato bueno,
+	// asi que esto es idempotente y se puede repetir sin riesgo.
+	_, _ = s.db.ExecContext(ctx,
+		`UPDATE entries SET published_at = substr(published_at, 1, 19) WHERE length(published_at) > 19`)
+
 	return nil
 }
 
@@ -204,15 +215,35 @@ func (s *Store) AddFeed(ctx context.Context, f *models.Feed) error {
 	return err
 }
 
+// sqliteTimeFormat es el formato con el que se guarda published_at.
+//
+// Si se pasa un time.Time tal cual al driver, modernc lo serializa con su
+// String() y queda como "2026-10-01 08:45:22 +0000 UTC". Ese formato lleva un
+// sufijo que la funcion date() de SQLite no reconoce: date() devuelve NULL, y
+// por tanto cualquier recorte por fecha (CleanupOldEntries) no borra nada sin
+// avisar. Guardando los 19 caracteres, date() la entiende y las consultas
+// por fecha funcionan.
+const sqliteTimeFormat = "2006-01-02 15:04:05"
+
+// retentionMonths es cuantos meses se conservan las entradas antes de podarlas.
+// Con 6, la tabla se estabiliza alrededor de medio gigabyte en vez de crecer 30
+// MB al mes sin techo.
+const retentionMonths = 6
+
+// formatSQLiteTime convierte a UTC y formatea para SQLite.
+func formatSQLiteTime(t time.Time) string {
+	return t.UTC().Format(sqliteTimeFormat)
+}
+
 func (s *Store) AddEntry(ctx context.Context, e *models.Entry) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
+		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, formatSQLiteTime(e.PublishedAt), e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
 
 func (s *Store) AddEntryTx(ctx context.Context, tx *sql.Tx, e *models.Entry) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
+		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, formatSQLiteTime(e.PublishedAt), e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
 
@@ -402,12 +433,21 @@ func (s *Store) ToggleFavorite(ctx context.Context, entryID string, isFavorite b
 	return err
 }
 
+// CleanupOldEntries borra las entradas mas antiguas que retentionMonths.
+//
+// Usa date(published_at) y no published_at a secas: la comparacion a secas es
+// lexicografica, y solo acierta por casualidad porque los 10 primeros
+// caracteres coinciden con la fecha ISO. Con date() la comparacion es de
+// fechas de verdad, y no depende de como se escriba ese campo.
+//
+// Los favoritos nunca se borran, ni siquiera si fueron marcados en el pasado:
+// por eso las dos condiciones (is_favorite y was_ever_favorite).
 func (s *Store) CleanupOldEntries(ctx context.Context) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM entries 
-		WHERE published_at < date('now', '-1 year') 
+		WHERE date(published_at) < date('now', '-' || ? || ' months') 
 		AND is_favorite = 0 
-		AND was_ever_favorite = 0`)
+		AND was_ever_favorite = 0`, retentionMonths)
 	if err != nil {
 		return 0, err
 	}
