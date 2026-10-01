@@ -8,6 +8,10 @@ data/*.db-journal
 data/*.db-shm
 data/*.db-wal
 
+# Cache de imagenes. El servidor la regenera sola al sincronizar los feeds, asi
+# que subirla solo infla el repo: son ficheros con nombre hash, uno por imagen.
+data/cache/
+
 # Test data and temporary files
 test_data/
 test_rss_data/
