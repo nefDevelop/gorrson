@@ -29,3 +29,6 @@ node_modules/
 dist/
 .env
 .svelte-kit/
+
+# Binarios de test generados por `go test -c`
+*.test
