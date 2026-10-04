@@ -3,7 +3,7 @@
   import { cubicOut } from 'svelte/easing';
   import { Link, Star, ExternalLink, ArrowLeft, Share2, Send, Copy, MoreHorizontal, Maximize2, Minimize2, ChevronUp, ChevronDown } from 'lucide-svelte';
   import { t } from './i18n.js';
-  import { proxyImage, readingTime } from './utils.js';
+  import { proxyImage, proxySrcset, readingTime } from './utils.js';
   import { fetchFullContent } from './api.js';
   import { success as toastSuccess } from './toast.js';
   import { onMount } from 'svelte';
@@ -195,7 +195,14 @@
       if (url.startsWith('data:') || url.startsWith('/proxy?')) return _;
       return pre + proxyImage(url) + post;
     });
-    
+
+    // 4. El srcset no pasa por el paso anterior (el saneador solo valida src/href):
+    // sin proxyarlo las variantes de resolución cargarían directas del origen y
+    // una URL con esquema no permitido llegaría viva al navegador.
+    html = html.replace(/(\ssrcset=["'])([^"']+)(["'])/gi, (_, pre, value, post) =>
+      pre + proxySrcset(value) + post
+    );
+
     return html;
   })();
 </script>

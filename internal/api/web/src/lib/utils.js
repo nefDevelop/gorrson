@@ -54,6 +54,34 @@ export function proxyImage(url) {
 }
 
 /**
+ * Reescribe un atributo srcset para que cada candidato pase por /proxy.
+ *
+ * El saneador del servidor solo valida el esquema de src y href, así que el
+ * srcset llega intacto: sin este paso las variantes de resolución cargan
+ * directamente del origen (se saltan la caché y la protección SSRF) y una URL
+ * con un esquema no permitido (p. ej. file:) llegaría viva al navegador.
+ *
+ * @param {string | null | undefined} value
+ * @returns {string}
+ */
+export function proxySrcset(value) {
+  return (value || "")
+    .split(",")
+    .map((candidate) => {
+      const trimmed = candidate.trim();
+      const parts = trimmed.split(/\s+/);
+      const url = parts[0];
+      if (!trimmed || url.startsWith("data:") || url.startsWith("/proxy?")) {
+        return trimmed;
+      }
+      parts[0] = proxyImage(url);
+      return parts.join(" ");
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+/**
  * @param {string | null | undefined} html
  * @returns {string}
  */
