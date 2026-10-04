@@ -274,9 +274,11 @@
               <button class="action-btn {article.is_favorite ? 'active' : ''}" on:click={handleFavorite} title={$t('favorites')}>
                 <Star size={18} fill={article.is_favorite ? 'currentColor' : 'none'} />
               </button>
-              <a class="action-btn" href={article.url} target="_blank" rel="noopener" title="Open original">
-                <ExternalLink size={18} />
-              </a>
+              {#if article.url}
+                <a class="action-btn" href={article.url} target="_blank" rel="noopener" title="Open original">
+                  <ExternalLink size={18} />
+                </a>
+              {/if}
             </div>
           </div>
           
