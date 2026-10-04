@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	stdhtml "html"
 	"io"
 	"log/slog"
 	"net/http"
@@ -24,6 +25,7 @@ import (
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/models"
 	"github.com/nef734/gorrson/internal/rss"
+	"github.com/nef734/gorrson/internal/sanitizer"
 	"golang.org/x/net/html"
 )
 
@@ -60,6 +62,9 @@ func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
+	// Límite de cuerpo: /api/fever era la única ruta sin MaxBytesReader.
+	r.Body = http.MaxBytesReader(w, r.Body, 10<<20)
+
 	// 1. Get API Key
 	apiKey := r.FormValue("api_key")
 	if apiKey == "" {
@@ -68,37 +73,55 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 		apiKey = r.Form.Get("api_key")
 	}
 
-	// 2. We need a username to open the DB.
-	// 2. We need a username to open the DB.
-	// Fever doesn't send the username directly, it's hashed in the api_key.
-	// Since Gorrson is designed for one user per DB file, we'll look at the data directory
+	// Fever no envía el usuario: viaja hasheado dentro del api_key (md5 de
+	// usuario:contraseña). Para saber a qué base de datos pertenece hay que
+	// verificar la clave contra cada usuario, y cada verificación es un argon2id
+	// de ~62 ms y ~67 MB. Con 20 usuarios, una sola petición No autenticada cuesta
+	// 1,3 GB de RAM. Por eso esta ruta tiene su propio límite, más ajustado que
+	// el de /login.
+	if !s.feverLimiter.permitir(clientIP(r), s.feverLimiter.porIP) {
+		slog.Warn("Fever API: rate limited", "ip", clientIP(r))
+		w.Header().Set("Content-Type", "application/json")
+		// auth:0 y no un error HTTP: es lo que un cliente Fever espera cuando la
+		// credencial no vale. El 429 sí lo respetan, y evita el bucle de reintentos.
+		w.WriteHeader(http.StatusTooManyRequests)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"api_version": 3, "auth": 0})
+		return
+	}
+
+	// 2. Buscar la base de datos del usuario. OpenExistingStore en vez de
+	// NewStore: no crea ficheros inexistentes ni ejecuta las 26 sentencias de
+	// migración por usuario y por petición.
 	files, _ := os.ReadDir(s.dataDir)
 	var userStore *db.Store
 
 	for _, f := range files {
-		if filepath.Ext(f.Name()) == ".db" && f.Name() != "global.db" {
-			username := strings.TrimSuffix(f.Name(), ".db")
-			store, err := db.NewStore(s.dataDir, username)
-			if err != nil {
-				continue
-			}
-			feverKey, err := store.GetUserFeverKey(r.Context(), username)
-			if err != nil || feverKey == "" {
-				store.Close()
-				continue
-			}
-
-			// Validate MD5 apiKey against bcrypt feverKey
-			if auth.CheckPasswordHash(apiKey, feverKey) {
-				userStore = store
-				break
-			}
-			store.Close()
+		if filepath.Ext(f.Name()) != ".db" || f.Name() == "global.db" {
+			continue
 		}
+		username := strings.TrimSuffix(f.Name(), ".db")
+		store, err := db.OpenExistingStore(s.dataDir, username)
+		if err != nil {
+			continue
+		}
+		feverKey, err := store.GetUserFeverKey(r.Context(), username)
+		if err != nil || feverKey == "" {
+			store.Close()
+			continue
+		}
+
+		// Validate MD5 apiKey against the stored argon2 hash of it.
+		if auth.CheckPasswordHash(apiKey, feverKey) {
+			userStore = store
+			break
+		}
+		store.Close()
 	}
 
 	if userStore == nil {
-		slog.Warn("Fever API: Unauthorized access attempt", "api_key", apiKey)
+		// La clave NO se registra: es una credencial equivalente a la contraseña
+		// (viaja en claro sobre HTTP) y antes acababa en gorrson.log.
+		slog.Warn("Fever API: unauthorized access attempt", "ip", clientIP(r))
 		// Return auth:0 instead of HTTP error to be Fever-compliant
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]interface{}{
@@ -256,24 +279,18 @@ func (s *Server) handleImageProxy(w http.ResponseWriter, r *http.Request) {
 
 	// 2. Check if cached
 	if _, err := os.Stat(cachePath); err == nil {
-		// Serve from cache
-		// We'll peek at the file to get the content-type, or just use a generic one
-		// Since browser is smart, serving as octet-stream might work,
-		// but let's try to be accurate.
-		f, _ := os.Open(cachePath)
-		defer f.Close()
-
-		// Set some cache headers for the client browser
-		w.Header().Set("Cache-Control", "public, max-age=31536000") // 1 year
-		http.ServeContent(w, r, "image", time.Time{}, f)
+		s.serveCachedImage(w, r, cachePath)
 		return
 	}
 
 	// 3. Not cached, download it using SecureClient
 	sc := rss.NewSecureClient("")
-	body, err := sc.Fetch(r.Context(), imageURL)
+	body, respHeader, err := sc.FetchResponse(r.Context(), imageURL)
 	if err != nil {
-		http.Error(w, "Failed to fetch image: "+err.Error(), http.StatusBadGateway)
+		// El detalle va al log, no al cliente: revela la topología interna y la
+		// resolución DNS (oráculo de SSRF).
+		slog.Error("Proxy de imágenes: fetch fallido", "url", imageURL, "error", err)
+		http.Error(w, "Failed to fetch image", http.StatusBadGateway)
 		return
 	}
 	defer body.Close()
@@ -295,16 +312,131 @@ func (s *Server) handleImageProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpFile.Close()
 
+	// Antes de confirmar en la caché hay que decidir el Content-Type y comprobar que
+	// lo descargado es una imagen. Si no, envenenamos la caché con HTML del atacante
+	// y lo servimos después desde el origen de la app.
+	//
+	// La cabecera del origen solo se acepta si es image/*; ver resolveImageType.
+	declarado := respHeader.Get("Content-Type")
+	ct, ok := resolveImageType(declarado, tmpPath)
+	if !ok {
+		os.Remove(tmpPath)
+		slog.Warn("Proxy de imágenes: la respuesta no es una imagen, descartada",
+			"url", imageURL, "declarado", declarado)
+		http.Error(w, "Remote resource is not an image", http.StatusUnsupportedMediaType)
+		return
+	}
+
 	if err := os.Rename(tmpPath, cachePath); err != nil {
 		http.Error(w, "Could not commit cache file", http.StatusInternalServerError)
 		return
 	}
+	writeTypeFile(cachePath, ct)
 
 	// 5. Serve it
-	f, _ := os.Open(cachePath)
+	s.serveCachedImage(w, r, cachePath)
+}
+
+// serveCachedImage sirve una imagen desde la caché.
+//
+// El Content-Type se fija EXPLÍCITAMENTE y se añade X-Content-Type-Options:
+// nosniff. Antes se usaba ServeContent con el nombre "image" (sin extensión), que
+// hace DetectContentType sobre los primeros 512 bytes: un atacante que apuntara a
+// una URL con HTML obtenía text/html desde el origen de la app, y como la CSP
+// global permite 'unsafe-inline' el <script> se ejecutaba. Reproducido.
+//
+// nosniff es lo que neutraliza de verdad un cuerpo HTML: si se sirve como
+// image/png con nosniff, el navegador no lo interpreta como documento. Por eso el
+// Content-Type se decide aquí y no se deja que el navegador lo detecte.
+func (s *Server) serveCachedImage(w http.ResponseWriter, r *http.Request, path string) {
+	ct, ok := resolveImageType(readTypeFile(path), path)
+	if !ok {
+		// Entrada envenenada de una versión anterior (o de un descuido): se borra
+		// y se trata como fallo, sin devolver el contenido.
+		os.Remove(path)
+		os.Remove(typeFilePath(path))
+		slog.Warn("Proxy de imágenes: entrada de caché que no es una imagen, eliminada", "path", path)
+		http.Error(w, "Cached resource is not an image", http.StatusUnsupportedMediaType)
+		return
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		http.Error(w, "Could not open cached image", http.StatusInternalServerError)
+		return
+	}
 	defer f.Close()
-	w.Header().Set("Cache-Control", "public, max-age=31536000")
-	http.ServeContent(w, r, "image", time.Time{}, f)
+
+	w.Header().Set("Content-Type", ct)
+	// Si a pesar de todo se sirviera algo que el navegador pudiera interpretar
+	// como documento, esta CSP lo neutraliza: sin scripts, sin estilos, sin
+	// iframes. No afecta a <img src>, que solo necesita que se pueda pintar.
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Cache-Control", "public, max-age=31536000") // 1 year
+	// ServeContent con size evita recalcularlo y respeta el Content-Type que
+	// acabamos de fijar.
+	http.ServeContent(w, r, "imagen", time.Time{}, f)
+}
+
+// resolveImageType decide el Content-Type con el que se sirve un fichero.
+//
+// Se prefiere lo que dicen los BYTES (sniff), y si no se reconoce se recurre a lo
+// que declaraba el origen. Existe ese segundo camino porque
+// http.DetectContentType no reconoce SVG ni AVIF, que son miniaturas perfectly
+// normales en un lector de RSS: con el sniff alone se rechazarían.
+//
+// Lo que NO se hace es confiar en la declaración sin más: se exige que sea
+// image/*, y en cualquier caso la respuesta lleva Content-Type explícito +
+// nosniff, de modo que un cuerpo HTML servido como image/png es inerte para el
+// navegador.
+func resolveImageType(declarado, path string) (string, bool) {
+	if ct, ok := sniffImage(path); ok {
+		return ct, true
+	}
+	declarado = strings.ToLower(strings.TrimSpace(declarado))
+	if strings.HasPrefix(declarado, "image/") {
+		return declarado, true
+	}
+	return declarado, false
+}
+
+// sniffImage lee los primeros bytes de un fichero y devuelve su Content-Type si
+// DetectContentType los reconoce como imagen.
+func sniffImage(path string) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+
+	buf := make([]byte, 512)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return "", false
+	}
+	ct := http.DetectContentType(buf[:n])
+	if !strings.HasPrefix(ct, "image/") {
+		return ct, false
+	}
+	return ct, true
+}
+
+// La caché guarda el Content-Type resuelto en un fichero aparte, porque
+// http.DetectContentType no reconoce SVG ni AVIF y en la segunda visita ya no se
+// dispone de la cabecera original del origen.
+func typeFilePath(cachePath string) string { return cachePath + ".type" }
+
+func writeTypeFile(cachePath, ct string) {
+	_ = os.WriteFile(typeFilePath(cachePath), []byte(ct), 0o600)
+}
+
+func readTypeFile(cachePath string) string {
+	blob, err := os.ReadFile(typeFilePath(cachePath))
+	if err != nil {
+		return ""
+	}
+	return string(blob)
 }
 
 func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
@@ -342,12 +474,19 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 	body, err := sc.Fetch(r.Context(), targetURL)
 	if err != nil {
 		slog.Error("Failed to fetch proxy page", "url", targetURL, "error", err)
-		w.Header().Set("Content-Type", "text/html")
+		// El mensaje de error de url/url.Parse incluye la URL CRUDA, sin escapar. Con
+		// la respuesta en text/html, eso es XSS reflejada: basta con
+		// /proxy/page?url=http://a/%zz%22%3E%3Cimg%20src%3Dx%20onerror%3Dalert(1)%3E,
+		// que falla al construir la petición, antes de tocar la red.
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
 		w.WriteHeader(http.StatusBadGateway)
 		fmt.Fprintf(w, "<body style='font-family:sans-serif;padding:40px;text-align:center;background:#fff5f5;color:#c53030'>")
 		fmt.Fprintf(w, "<h2>Proxy Error</h2>")
 		fmt.Fprintf(w, "<p>Could not load the page. Check your internet connection or if the site blocks Gorrson.</p>")
-		fmt.Fprintf(w, "<pre style='background:#fff;padding:10px;border-radius:8px;display:inline-block'>%s</pre>", err.Error())
+		fmt.Fprintf(w, "<pre style='background:#fff;padding:10px;border-radius:8px;display:inline-block'>%s</pre>",
+			stdhtml.EscapeString(err.Error()))
 		fmt.Fprintf(w, "</body>")
 		return
 	}
@@ -365,14 +504,18 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 	var rewrite func(*html.Node)
 	rewrite = func(n *html.Node) {
 		if n.Type == html.ElementNode {
-			// Disable scripts by changing type
+			// Los scripts del documento se marcan como texto plano. OJO: hay que
+			// SUSTITUIR el atributo type, no añadir otro. Con append(), un
+			// <script type="module"> de la página queda con dos atributos type y
+			// el navegador gana el primero, que es el original: el script se
+			// ejecuta. Con setTypeAtLeast queda siempre un único type=text/plain.
 			if n.Data == "script" {
 				for i, attr := range n.Attr {
 					if attr.Key == "src" {
 						n.Attr[i].Val = "#disabled-by-gorrson"
 					}
 				}
-				n.Attr = append(n.Attr, html.Attribute{Key: "type", Val: "text/plain"})
+				setSingleType(n, "text/plain")
 			}
 
 			// Disable iframes to avoid frame busting
@@ -410,6 +553,20 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rewrite(doc)
+
+	// El documento remoto pasa por la política estricta ANTES de que inyectemos
+	// base, viewport y nuestro script de selección.
+	//
+	// El orden importa: al revés, el saneador se llevaría por delante el script
+	// propio y el modo lector dejaría de funcionar. Con este orden, todo lo que
+	// llega del tercero (scripts, onerror, onload, iframe, href="javascript:")
+	// desaparece, y lo único que sobrevive es lo que gorrson añade después.
+	doc, err = sanitizeRemoteDoc(doc)
+	if err != nil {
+		slog.Error("Failed to sanitize proxied document", "url", targetURL, "error", err)
+		http.Error(w, "Render error", http.StatusInternalServerError)
+		return
+	}
 
 	// Inject selection script
 	// Add <base> and <viewport> tags to head
@@ -514,6 +671,36 @@ func (s *Server) handlePageProxy(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("Proxy rendered doc complete", "url", targetURL, "size", buf.Len())
 	w.Write(buf.Bytes())
+}
+
+// setSingleType deja el elemento con un ÚNICO atributo type=val.
+//
+// Añadirlo con append() en vez de sustituirlo deja el elemento con dos atributos
+// type, y según el HTML el navegador gana el primero: un <script
+// type="module"> de la página se seguía ejecutando.
+func setSingleType(n *html.Node, val string) {
+	for i := range n.Attr {
+		if n.Attr[i].Key == "type" {
+			n.Attr[i].Val = val
+			return
+		}
+	}
+	n.Attr = append(n.Attr, html.Attribute{Key: "type", Val: val})
+}
+
+// sanitizeRemoteDoc pasa el documento ya reescrito por la política estricta de
+// sanitizer.CleanForProxy y lo vuelve a parsear.
+//
+// Se serializa y reparsea (en vez de recorrer el árbol a mano) para apoyarse en
+// bluemonday, que ya está en el proyecto y es lo que protege el resto del pipeline
+// de ingesta. El coste es un render + un parse más, sobre documentos que ya se
+// descargan por red.
+func sanitizeRemoteDoc(doc *html.Node) (*html.Node, error) {
+	var buf bytes.Buffer
+	if err := html.Render(&buf, doc); err != nil {
+		return nil, err
+	}
+	return html.Parse(strings.NewReader(sanitizer.CleanForProxy(buf.String())))
 }
 
 func (s *Server) handleSaveRecipe(w http.ResponseWriter, r *http.Request) {
@@ -851,7 +1038,18 @@ func (s *Server) handleImportBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// El store cacheado de este usuario sigue abierto sobre el INODE ANTIGUO: ya
+	// no tiene nombre, pero el descriptor sigue siendo válido y SQLite sigue
+	// escribiendo y leyendo ahí. Sin esto, después de restaurar un backup el
+	// usuario sigue viendo sus datos antiguos y todo lo que escriba a partir de
+	// ahí se pierde en un fichero sin nombre. Refrescar la página no arregla nada,
+	// porque la caché está en el servidor, no en el cliente.
+	s.evictStore(username)
+
 	slog.Info("Backup restored successfully", "user", username, "ip", r.RemoteAddr)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "Database restored and verified. Page refresh recommended."})
+	json.NewEncoder(w).Encode(map[string]string{
+		"message": "Database restored and verified. The cached connection was dropped, " +
+			"so the next request already uses the restored data.",
+	})
 }

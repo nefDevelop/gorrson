@@ -77,9 +77,20 @@ func isPrivateIP(ip net.IP) bool {
 
 // Fetch returns an io.ReadCloser with a limited reader to prevent OOM.
 func (sc *SecureClient) Fetch(ctx context.Context, url string) (io.ReadCloser, error) {
+	body, _, err := sc.FetchResponse(ctx, url)
+	return body, err
+}
+
+// FetchResponse es Fetch pero devuelve además las cabeceras de la respuesta.
+//
+// Necesario para el proxy de imágenes: http.DetectContentType no reconoce SVG ni
+// AVIF, que son miniaturas normales en un lector de RSS, así que el Content-Type
+// declarado por el origen es la única forma de servirlas sin rechazarlas. El
+// límite de tamaño y la validación de IP privada son los mismos que en Fetch.
+func (sc *SecureClient) FetchResponse(ctx context.Context, url string) (io.ReadCloser, http.Header, error) {
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	req.Header.Set("User-Agent", sc.ua)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8")
@@ -94,19 +105,19 @@ func (sc *SecureClient) Fetch(ctx context.Context, url string) (io.ReadCloser, e
 
 	resp, err := sc.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if resp.StatusCode != http.StatusOK {
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("bad status: %s", resp.Status)
+		return nil, nil, fmt.Errorf("bad status: %s", resp.Status)
 	}
 
 	// Wrap the body in a LimitReader
 	return &limitedReadCloser{
 		R: io.LimitReader(resp.Body, MaxResponseSize),
 		C: resp.Body,
-	}, nil
+	}, resp.Header, nil
 }
 
 type limitedReadCloser struct {
