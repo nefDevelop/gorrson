@@ -165,6 +165,11 @@
     if (parent) parent.style.display = 'none';
   }
 
+  // Tiempo de lectura del contenido que se va a mostrar (full content si ya
+  // está cargado, si no el resumen del feed). Sin esta declaración el uso en
+  // la plantilla lanzaba "readTime is not defined" al montar el visor.
+  $: readTime = readingTime(fullContent || article?.content || article?.summary);
+
   $: cleanedContent = (() => {
     if (!article) return '';
     let html = (fullContent || article.content || article.summary || '');
