@@ -317,7 +317,11 @@ func (s *Server) securityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "SAMEORIGIN")
 		w.Header().Set("X-XSS-Protection", "1; mode=block")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
-		w.Header().Set("Content-Security-Policy", "default-src 'self' https://unpkg.com; frame-ancestors 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com; script-src-elem 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http: https:; connect-src 'self' https://unpkg.com;")
+		// frame-src explícito: sin él los iframes caen en default-src ('self') y
+		// los embeds de las noticias (YouTube, Vimeo, Steam...) quedaban bloqueados
+		// al abrir el lector. El src de los iframes ya viene saneado por el servidor
+		// y solo se admiten URLs https.
+		w.Header().Set("Content-Security-Policy", "default-src 'self' https://unpkg.com; frame-ancestors 'self'; frame-src https:; script-src 'self' 'unsafe-inline' https://unpkg.com; script-src-elem 'self' 'unsafe-inline' https://unpkg.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: http: https:; connect-src 'self' https://unpkg.com;")
 		next.ServeHTTP(w, r)
 	})
 }
