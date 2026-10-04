@@ -52,6 +52,23 @@ type Server struct {
 	feverLimiter *loginLimiter
 }
 
+// feverItemPageItems es cuantas entradas devuelve la Fever API en una pagina
+// de ?items. El protocolo propone 50 e invita a paginar con since_id, pero
+// gorrson no puede usar since_id (los ids no son monotonicos, ver
+// handleFeverAPI), asi que se devuelve una ventana amplia de una vez: 500
+// entradas cubren de sobra la ventana de sincronizacion de cualquier cliente.
+const feverItemPageItems = 500
+
+// boolToInt converts a bool to 0 or 1 for Fever API compatibility.
+// Fever espera numeros, no booleanos JSON: is_read e is_saved tienen que
+// viajar como 0/1 o el cliente no los interpreta.
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func NewServer(dataDir string, silent bool) *Server {
 	s := &Server{
 		router:  chi.NewRouter(),
@@ -65,7 +82,7 @@ func NewServer(dataDir string, silent bool) *Server {
 		// atacante no puede gastar memoria del servidor a voluntad.
 		loginLimiter: newLoginLimiter(10, 15*time.Minute),
 		// Más ajustado: cada petición de /api/fever puede costar N × 67 MB.
-		// 20 intentos por hora reaching son 400 argon2 en el peor caso.
+		// 20 intentos por hora son 400 argon2 en el peor caso.
 		feverLimiter: newLoginLimiter(20, time.Hour),
 	}
 	s.routes()

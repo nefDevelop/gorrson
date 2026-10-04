@@ -235,6 +235,17 @@ func (s *Store) migrate(ctx context.Context) error {
 	_, _ = s.db.ExecContext(ctx, "ALTER TABLE entries ADD COLUMN fever_id INTEGER DEFAULT 0")
 	_, _ = s.db.ExecContext(ctx, "ALTER TABLE users ADD COLUMN fever_key TEXT DEFAULT ''")
 
+	// Normaliza published_at de las filas escritas antes de que existiera
+	// formatSQLiteTime. Hasta entonces el driver guardaba el String() del
+	// time.Time, que lleva el sufijo " +0000 UTC"; date() no lo reconoce y
+	// devolvia NULL, con lo que la poda no borraba nada.
+	//
+	// substr(1, 19) deja "YYYY-MM-DD HH:MM:SS", que SQLite si entiende. El
+	// filtro por longitud evita tocar filas que ya estan en el formato bueno,
+	// asi que esto es idempotente y se puede repetir sin riesgo.
+	_, _ = s.db.ExecContext(ctx,
+		`UPDATE entries SET published_at = substr(published_at, 1, 19) WHERE length(published_at) > 19`)
+
 	return nil
 }
 
@@ -247,15 +258,35 @@ func (s *Store) AddFeed(ctx context.Context, f *models.Feed) error {
 	return err
 }
 
+// sqliteTimeFormat es el formato con el que se guarda published_at.
+//
+// Si se pasa un time.Time tal cual al driver, modernc lo serializa con su
+// String() y queda como "2026-10-01 08:45:22 +0000 UTC". Ese formato lleva un
+// sufijo que la funcion date() de SQLite no reconoce: date() devuelve NULL, y
+// por tanto cualquier recorte por fecha (CleanupOldEntries) no borra nada sin
+// avisar. Guardando los 19 caracteres, date() la entiende y las consultas
+// por fecha funcionan.
+const sqliteTimeFormat = "2006-01-02 15:04:05"
+
+// retentionMonths es cuantos meses se conservan las entradas antes de podarlas.
+// Con 6, la tabla se estabiliza alrededor de medio gigabyte en vez de crecer 30
+// MB al mes sin techo.
+const retentionMonths = 6
+
+// formatSQLiteTime convierte a UTC y formatea para SQLite.
+func formatSQLiteTime(t time.Time) string {
+	return t.UTC().Format(sqliteTimeFormat)
+}
+
 func (s *Store) AddEntry(ctx context.Context, e *models.Entry) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
+		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, formatSQLiteTime(e.PublishedAt), e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
 
 func (s *Store) AddEntryTx(ctx context.Context, tx *sql.Tx, e *models.Entry) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO entries (id, fever_id, feed_id, title, summary, content, url, image_url, published_at, is_read, is_favorite, is_full_content, is_priority, matched_action) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(url) DO NOTHING`,
-		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, e.PublishedAt, e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
+		e.ID, e.FeverID, e.FeedID, e.Title, e.Summary, e.Content, e.URL, e.ImageURL, formatSQLiteTime(e.PublishedAt), e.IsRead, e.IsFavorite, e.IsFullContent, e.IsPriority, e.MatchedAction)
 	return err
 }
 
@@ -381,18 +412,71 @@ func (s *Store) MarkAsRead(ctx context.Context, entryID string) error {
 	return err
 }
 
+// MarkAsReadByFeverID marca como leida la entrada con ese fever_id.
+//
+// Se descarta feverID <= 0 a proposito. generateFeverID convierte el UUID con
+// un hash FNV, asi que en operacion normal nunca vale 0, pero si un cliente
+// de la Fever API manda un id vacio o no numerico, Atoi devuelve 0 y la
+// consulta "WHERE fever_id = 0" sin guarda marcaria como leidas TODAS las
+// entradas que comparten ese valor, de golpe y sin avisar.
 func (s *Store) MarkAsReadByFeverID(ctx context.Context, feverID int) error {
+	if feverID <= 0 {
+		return nil
+	}
 	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_read = 1 WHERE fever_id = ?", feverID)
 	return err
 }
 
+// ToggleFavoriteByFeverID marca o desmarca la entrada con ese fever_id.
+//
+// Misma guarda que MarkAsReadByFeverID, y por el mismo motivo: sin ella, un
+// id invalido enviado por un cliente marcaria como favoritas todas las
+// entradas con fever_id = 0.
 func (s *Store) ToggleFavoriteByFeverID(ctx context.Context, feverID int, isFavorite bool) error {
+	if feverID <= 0 {
+		return nil
+	}
 	if isFavorite {
 		_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 1, was_ever_favorite = 1 WHERE fever_id = ?", feverID)
 		return err
 	}
 	_, err := s.db.ExecContext(ctx, "UPDATE entries SET is_favorite = 0 WHERE fever_id = ?", feverID)
 	return err
+}
+
+// UnreadFeverIDs devuelve el fever_id de todas las entradas sin leer, en una
+// sola consulta que solo trae esa columna.
+//
+// La Fever API espera la lista COMPLETA de ids sin leer. Antes el handler
+// reutilizaba ListEntries con un limite de 500, que arrastra ademas titulo y
+// contenido de cada entrada: si habia mas de 500 sin leer, el cliente se
+// quedaba sin saber del resto y sus contadores salian mal. Aqui no hay tope,
+// y al no seleccionar el contenido, el coste de memoria es el de los ids.
+func (s *Store) UnreadFeverIDs(ctx context.Context) ([]int, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT fever_id FROM entries WHERE is_read = 0 ORDER BY published_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var ids []int
+	for rows.Next() {
+		var id int
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// TotalEntries devuelve cuantas entradas hay en total, para el campo
+// total_items de la Fever API (api_version >= 2).
+func (s *Store) TotalEntries(ctx context.Context) (int, error) {
+	var total int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM entries`).Scan(&total)
+	return total, err
 }
 
 func (s *Store) MarkAllRead(ctx context.Context, category, feedID, search string, limit int) error {
@@ -445,12 +529,21 @@ func (s *Store) ToggleFavorite(ctx context.Context, entryID string, isFavorite b
 	return err
 }
 
+// CleanupOldEntries borra las entradas mas antiguas que retentionMonths.
+//
+// Usa date(published_at) y no published_at a secas: la comparacion a secas es
+// lexicografica, y solo acierta por casualidad porque los 10 primeros
+// caracteres coinciden con la fecha ISO. Con date() la comparacion es de
+// fechas de verdad, y no depende de como se escriba ese campo.
+//
+// Los favoritos nunca se borran, ni siquiera si fueron marcados en el pasado:
+// por eso las dos condiciones (is_favorite y was_ever_favorite).
 func (s *Store) CleanupOldEntries(ctx context.Context) (int64, error) {
 	res, err := s.db.ExecContext(ctx, `
 		DELETE FROM entries 
-		WHERE published_at < date('now', '-1 year') 
+		WHERE date(published_at) < date('now', '-' || ? || ' months') 
 		AND is_favorite = 0 
-		AND was_ever_favorite = 0`)
+		AND was_ever_favorite = 0`, retentionMonths)
 	if err != nil {
 		return 0, err
 	}

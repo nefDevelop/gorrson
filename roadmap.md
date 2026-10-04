@@ -1,12 +1,16 @@
 # Gorrson Roadmap & Memory Management
 
 ## Current Optimizations (Implemented)
+<<<<<<< HEAD
 - **Índices de listado (2026-10-03)**: cinco índices nuevos para que `ListEntries` y `ListFeeds` dejen de recorrer la tabla entera. `ORDER BY e.is_priority DESC, e.published_at DESC` no podía usar `idx_entries_published (published_at DESC)` porque `is_priority` encabeza el orden, así que cada petición hacía `SCAN entries` + `USE TEMP B-TREE FOR ORDER BY`: leer 1M de filas y ordenarlas en memoria para devolver 50. Con los índices, `/news` pasa de 2 a 1.991 req/s con 1M de entradas y **deja de degradarse con el tamaño** (antes caía 127 → 14 → 2 req/s de 10k a 1M). `/feeds` mejora 153× al cubrir el conteo de no leídos. Coste: escrituras −21 %, disco +37 %. Los planes de ejecución están fijados por `TestQueryPlansUseIndexes` para que un `ORDER BY` futuro no rompa la cobertura en silencio. Detalle y mediciones en [`bench.md`](bench.md).
+=======
+>>>>>>> origin/main
 - **Scraping Concurrency Limit**: Global semaphore restricts high-memory HTML parsing to a maximum of 5 simultaneous tasks.
 - **Sync Concurrency Limit**: Global semaphore restricts concurrent user database synchronization to a maximum of 10 users.
 - **Initial Sync Jitter**: Random delay (0-120s) added to background workers at startup to prevent resource spikes (Thundering Herd effect).
 - **DOM Sharing & Streaming**: Refactored `ScrapeFullContent` to use `io.Pipe` for streaming to Readability and unified DOM tree processing with `goquery` and `htmlquery` without redundant string conversions.
 
+<<<<<<< HEAD
 ## Planned Database Tuning
 
 Detalle y mediciones en [`docs/AUDIT.md`](docs/AUDIT.md).
@@ -65,6 +69,8 @@ ingesta), validar el término de FTS5, y el endurecimiento miscellaneous de
 `docs/AUDIT.md` §V12 (logs, `limit` sin techo, errores tragados, cookie sin
 `Secure`).
 
+=======
+>>>>>>> origin/main
 ## Planned Memory Tuning (Punto 5)
 Si tras las optimizaciones actuales el consumo de RAM sigue siendo elevado en picos de carga:
 
