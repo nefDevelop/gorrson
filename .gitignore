@@ -7,10 +7,20 @@ data/*.db
 data/*.db-journal
 data/*.db-shm
 data/*.db-wal
+# El dataset de rendimiento vive en data/perf/ (dos niveles, así que data/*.db no
+# lo cubre) y llega a 1,1 GiB con SEED_N=1000000: nunca debe acabar en un commit.
+data/perf/
+
+# Artefactos de benchmark comparativos (el baseline SÍ se commitea)
+bench/current.txt
+bench/current.stat
 
 # Test data and temporary files
 test_data/
 test_rss_data/
+# cmd/root_test.go: TestCLI_Flow crea ./test_cli_data y no lo borra si el proceso
+# muere por os.Exit (pasa cuando un feed externo responde 4xx/5xx).
+cmd/test_cli_data/
 coverage.out
 
 # Go related

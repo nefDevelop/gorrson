@@ -1,0 +1,32 @@
+PASS
+ok  	github.com/nef734/gorrson/internal/api	0.006s
+PASS
+ok  	github.com/nef734/gorrson/internal/auth	0.003s
+goos: linux
+goarch: amd64
+pkg: github.com/nef734/gorrson/internal/db
+cpu: AMD Ryzen 5 5600X 6-Core Processor             
+BenchmarkSearch-12      	     109	   2274274 ns/op	   75769 B/op	    1737 allocs/op
+BenchmarkSearch-12      	     106	   2141766 ns/op	   75825 B/op	    1737 allocs/op
+BenchmarkSearch-12      	     105	   2006397 ns/op	   75773 B/op	    1737 allocs/op
+BenchmarkSearch-12      	     115	   2005052 ns/op	   75764 B/op	    1737 allocs/op
+BenchmarkSearch-12      	     116	   2004481 ns/op	   75763 B/op	    1737 allocs/op
+BenchmarkSearch-12      	     112	   2106825 ns/op	   75766 B/op	    1737 allocs/op
+BenchmarkListNews-12    	     931	    262309 ns/op	   68115 B/op	    1587 allocs/op
+BenchmarkListNews-12    	     885	    262269 ns/op	   68116 B/op	    1587 allocs/op
+BenchmarkListNews-12    	     787	    271993 ns/op	   68117 B/op	    1587 allocs/op
+BenchmarkListNews-12    	     890	    260199 ns/op	   68116 B/op	    1587 allocs/op
+BenchmarkListNews-12    	     897	    260713 ns/op	   68115 B/op	    1587 allocs/op
+BenchmarkListNews-12    	     694	    338356 ns/op	   68119 B/op	    1587 allocs/op
+PASS
+ok  	github.com/nef734/gorrson/internal/db	48.651s
+PASS
+ok  	github.com/nef734/gorrson/internal/models	0.003s
+PASS
+ok  	github.com/nef734/gorrson/internal/opml	0.002s
+PASS
+ok  	github.com/nef734/gorrson/internal/rss	0.006s
+PASS
+ok  	github.com/nef734/gorrson/internal/sanitizer	0.004s
+PASS
+ok  	github.com/nef734/gorrson/internal/util	0.002s
