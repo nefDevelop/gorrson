@@ -2,6 +2,8 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -32,17 +34,40 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store, err := s.getStore(req.Username)
-	if err != nil {
-		http.Error(w, "Could not open user database", http.StatusNotFound)
+	// El límite se comprueba ANTES de tocar nada. Cada intento cuesta un argon2id
+	// (~62 ms, ~67 MB), así que acotar aquí es lo que evita el amplificador de
+	// memoria: /login es público y no hace falta credencial para invocarlo.
+	if ok, motivo := s.permitirLogin(r, req.Username); !ok {
+		slog.Warn("Login rate limited", "path", r.URL.Path, "ip", clientIP(r))
+		http.Error(w, motivo, http.StatusTooManyRequests)
 		return
 	}
+
+	// Abrir SIN crear ni migrar: autenticar contra un usuario inexistente no
+	// puede escribir en disco (~50 KB por intento) ni dejar un *sql.DB cacheado
+	// para siempre.
+	store, err := db.OpenExistingStore(s.dataDir, req.Username)
+	if err != nil {
+		if errors.Is(err, db.ErrUserNotFound) {
+			// Mismo mensaje que una contraseña incorrecta: no se revela qué
+			// usuarios están registrados.
+			http.Error(w, "Invalid credentials", http.StatusUnauthorized)
+			return
+		}
+		http.Error(w, "Could not open user database", http.StatusInternalServerError)
+		return
+	}
+	defer store.Close()
 
 	hash, err := store.GetUserHash(r.Context(), req.Username)
 	if err != nil || !auth.CheckPasswordHash(req.Password, hash) {
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
 		return
 	}
+
+	// Autenticación correcta: el contador se libera para que un usuario legítimo
+	// que se equivocó unas veces no quede bloqueado hasta que expire la ventana.
+	s.loginLiberado(r, req.Username)
 
 	accessToken, _ := auth.GenerateToken(req.Username)
 	refreshToken, _ := auth.GenerateRefreshToken()
@@ -78,11 +103,13 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store, err := s.getStore(req.Username)
+	// Igual que en login: no crear la base de datos de un usuario que aún no existe.
+	store, err := db.OpenExistingStore(s.dataDir, req.Username)
 	if err != nil {
-		http.Error(w, "Server error", http.StatusInternalServerError)
+		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
 	}
+	defer store.Close()
 
 	session, err := store.GetSession(r.Context(), req.RefreshToken)
 	if err != nil || session.ExpiresAt.Before(time.Now()) {
@@ -113,9 +140,10 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	store, err := s.getStore(req.Username)
-	if err == nil {
+	// Idem: no crear bases de datos en un logout.
+	if store, err := db.OpenExistingStore(s.dataDir, req.Username); err == nil {
 		_ = store.DeleteSession(r.Context(), req.RefreshToken)
+		_ = store.Close()
 	}
 
 	http.SetCookie(w, &http.Cookie{

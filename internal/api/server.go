@@ -40,6 +40,16 @@ type Server struct {
 	silent  bool
 	stores  map[string]*db.Store
 	mu      sync.RWMutex
+
+	// loginLimiter acota los intentos de autenticación: un argon2id son ~62 ms y
+	// ~67 MB de RAM, así que 100 logins concurrentes desde una IP son 6,7 GB.
+	// /login es público, así que es un amplificador de memoria sin autenticar.
+	loginLimiter *loginLimiter
+
+	// feverLimiter acota /api/fever, que es más cara que /login: no recibe el
+	// usuario, así que tiene que verificar la clave contra TODAS las bases de
+	// datos del directorio, con un argon2id (~62 ms, ~67 MB) por usuario.
+	feverLimiter *loginLimiter
 }
 
 func NewServer(dataDir string, silent bool) *Server {
@@ -49,6 +59,14 @@ func NewServer(dataDir string, silent bool) *Server {
 		parser:  rss.NewParser(),
 		silent:  silent,
 		stores:  make(map[string]*db.Store),
+		// 10 intentos por ventana de 15 min, contados por IP y por usuario.
+		// Un usuario legítimo que se equivoca 10 veces seguidas tiene que esperar,
+		// lo cual es lo que hacen los limitadores habituales; a cambio un
+		// atacante no puede gastar memoria del servidor a voluntad.
+		loginLimiter: newLoginLimiter(10, 15*time.Minute),
+		// Más ajustado: cada petición de /api/fever puede costar N × 67 MB.
+		// 20 intentos por hora reaching son 400 argon2 en el peor caso.
+		feverLimiter: newLoginLimiter(20, time.Hour),
 	}
 	s.routes()
 
@@ -80,6 +98,27 @@ func (s *Server) getStore(username string) (*db.Store, error) {
 	}
 	s.stores[username] = store
 	return store, nil
+}
+
+// evictStore cierra y saca de la caché el store de un usuario.
+//
+// Necesario cuando el fichero de la base de datos se sustituye por fuera
+// (importar un backup): el *sql.DB cacheado sigue abierto sobre el inode antiguo,
+// que ya no tiene nombre pero sigue siendo válido, así que las lecturas
+// devuelven los datos viejos y las escrituras se pierden. La próxima llamada a
+// getStore lo vuelve a abrir contra el fichero nuevo.
+func (s *Server) evictStore(username string) {
+	s.mu.Lock()
+	store, ok := s.stores[username]
+	if ok {
+		delete(s.stores, username)
+	}
+	s.mu.Unlock()
+
+	if ok {
+		_ = store.Close()
+		slog.Info("Store cache evicted", "user", username)
+	}
 }
 
 func (s *Server) routes() {
@@ -219,13 +258,18 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 					u := parts[0]
 					rawKey := parts[1]
 
-					store, serr := s.getStore(u)
+					// Abrir SIN crear: con getStore, una cabecera
+					// X-API-Key con cualquier nombre de usuario escribía una base
+					// de datos nueva (~50 KB) sin haber autenticado nada, y
+					// además la dejaba cacheada para siempre.
+					store, serr := db.OpenExistingStore(s.dataDir, u)
 					if serr == nil {
 						hash := sha256.Sum256([]byte(rawKey))
 						hashHex := hex.EncodeToString(hash[:])
 						if store.ValidateAPIKey(r.Context(), hashHex) {
 							username = u
 						}
+						_ = store.Close()
 					}
 				}
 			}
@@ -270,13 +314,26 @@ func uuidToInt(id string) int {
 
 var proxySemaphore = make(chan struct{}, 10)
 
+// resolveURL pasa una URL del documento remoto a absoluta.
+//
+// data: y javascript: se descartan por diseño. javascript: es ejecución de código
+// en el origen de gorrson: el script de selección del modo lector llama a
+// preventDefault() en los enlaces, pero eso solo cubre el clic izquierdo — clic
+// central, "abrir en pestaña nueva" o el menú contextual lo esquivan sin
+// problema.
 func resolveURL(base *url.URL, rel string) string {
-	if strings.HasPrefix(rel, "data:") || strings.HasPrefix(rel, "javascript:") {
+	lowered := strings.ToLower(strings.TrimSpace(rel))
+	if strings.HasPrefix(lowered, "javascript:") || strings.HasPrefix(lowered, "vbscript:") ||
+		strings.HasPrefix(lowered, "data:text/html") {
+		return "#"
+	}
+	if strings.HasPrefix(lowered, "data:") {
+		// data: solo se admite para imágenes en línea; el resto se descarta.
 		return rel
 	}
 	u, err := url.Parse(rel)
 	if err != nil {
-		return rel
+		return "#"
 	}
 	return base.ResolveReference(u).String()
 }

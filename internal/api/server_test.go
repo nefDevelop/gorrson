@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/nef734/gorrson/internal/auth"
@@ -270,11 +271,20 @@ func TestImageProxy(t *testing.T) {
 		t.Errorf("Proxy data mismatch: got %s", rr.Body.String())
 	}
 
-	// Verify it was cached by checking the directory
+	// Verify it was cached by checking the directory.
+	// Se ignoran los ficheros .type: el Content-Type resuelto se guarda aparte
+	// porque http.DetectContentType no reconoce SVG ni AVIF, y en la segunda visita
+	// ya no está la cabecera del origen.
 	cacheDir := filepath.Join(dataDir, "cache", "images")
 	files, _ := os.ReadDir(cacheDir)
-	if len(files) != 1 {
-		t.Errorf("Expected 1 file in cache, got %d", len(files))
+	imagenes := 0
+	for _, f := range files {
+		if !strings.HasSuffix(f.Name(), ".type") {
+			imagenes++
+		}
+	}
+	if imagenes != 1 {
+		t.Errorf("Expected 1 image in cache, got %d (ficheros totales: %d)", imagenes, len(files))
 	}
 }
 func TestRenameCategoryAPI(t *testing.T) {

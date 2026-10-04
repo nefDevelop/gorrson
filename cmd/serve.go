@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/nef734/gorrson/internal/api"
+	"github.com/nef734/gorrson/internal/auth"
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/rss"
 	"github.com/spf13/cobra"
@@ -40,6 +41,16 @@ var serveCmd = &cobra.Command{
 		// Ensure data directory exists
 		if _, err := os.Stat(dataDir); os.IsNotExist(err) {
 			os.MkdirAll(dataDir, 0755)
+		}
+
+		// Secreto JWT: se valida ANTES de abrir ningún socket y antes de tocar
+		// ninguna base de datos. Un despliegue con el valor por defecto del
+		// Dockerfile, o sin secreto, arrancaría con la autenticación rota
+		// (cualquiera puede firmar un token como cualquier usuario). Preferimos
+		// no arrancar.
+		if err := auth.InitSecret(); err != nil {
+			fmt.Fprintf(os.Stderr, "ERROR de seguridad: %v\n", err)
+			os.Exit(1)
 		}
 
 		// Setup dual logging (Stdout + File)
@@ -125,9 +136,20 @@ var serveCmd = &cobra.Command{
 
 		server := api.NewServer(dataDir, silent)
 		addr := ":" + port
+		// Timeouts del servidor. Sin ellos, unos pocos sockets con cabeceras a
+		// goteo (Slowloris) ocupan handlers indefinidamente.
+		//
+		// WriteTimeout es holgado porque /proxy y /proxy/page descargan páginas
+		// remotas con un cliente que ya tiene su propio timeout de 30 s, y los
+		// handlers usan r.Context(): si el cliente aborta, la conexión se libera.
 		srv := &http.Server{
-			Addr:    addr,
-			Handler: server.GetRouter(),
+			Addr:              addr,
+			Handler:           server.GetRouter(),
+			ReadHeaderTimeout: 10 * time.Second,
+			ReadTimeout:       60 * time.Second,
+			WriteTimeout:      120 * time.Second,
+			IdleTimeout:       120 * time.Second,
+			MaxHeaderBytes:    1 << 20,
 		}
 
 		// Channel to listen for signals
