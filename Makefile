@@ -1,4 +1,4 @@
-.PHONY: all build-ui build-go build clean run install test bench bench-file \
+.PHONY: all build-ui build-go build clean run demo install test bench bench-file \
 	bench-extensive bench-baseline stress load-test test-load perf perf-seed \
 	perf-report perf-baseline perf-gate perf-clean help
 
@@ -18,6 +18,15 @@ PERF_DURATION?=10s
 PERF_WARMUP?=3s
 PERF_PROFILES?=health,news,feeds,search,search1,write
 
+# Demo para capturas: usuario + subset curado de 8 feeds con imagen,
+# sincronizados de verdad (con sus fotos) + filtros de ejemplo, en un
+# directorio aparte del de desarrollo y del de rendimiento.
+DEMO_DIR?=./data/demo
+DEMO_PORT?=7077
+DEMO_USER?=demo
+DEMO_PASS?=DemoPass123!
+DEMO_SECRET?=gorrson-demo-jwt-secret-at-least-32-chars
+
 # Default target: Show help
 help:
 	@echo "Gorrson Management:"
@@ -27,6 +36,7 @@ help:
 	@echo "  make dev-ui     - Start Svelte/Vite dev server"
 	@echo "  make dev-go     - Start Go backend in dev mode"
 	@echo "  make dev        - Start frontend & backend in parallel dev mode"
+	@echo "  make demo       - Sync real demo feeds (images+filters) and serve for screenshots"
 	@echo "  make bench           - Run basic performance benchmarks"
 	@echo "  make bench-extensive - Run exhaustive multi-CPU benchmarks"
 	@echo "  make stress          - Run internal concurrency stress tests"
@@ -125,6 +135,21 @@ reset-db:
 	@echo "Resetting and seeding database for user 'user'..."
 	@mkdir -p $(DATA_DIR)
 	go run scripts/seed/main.go
+
+# Demo para capturas: siembra usuario y feeds en $(DEMO_DIR), añade filtros de
+# ejemplo, los sincroniza de verdad (entradas reales con sus imágenes) y
+# levanta el servidor. No toca $(DATA_DIR) ni $(PERF_DIR). La UI va embebida,
+# así que necesita el frontend construido (build-ui) antes de compilar el
+# binario. Requiere internet.
+demo: build
+	@echo "Sincronizando demo en $(DEMO_DIR) (feeds reales + filtros, puede tardar ~1 min)..."
+	@mkdir -p $(DEMO_DIR)
+	go run ./scripts/seed -data-dir $(DEMO_DIR) -user $(DEMO_USER) -pass $(DEMO_PASS) -sync -demo-feeds -filters
+	@echo ""
+	@echo "  gorrson demo en http://localhost:$(DEMO_PORT)"
+	@echo "  Usuario: $(DEMO_USER) / $(DEMO_PASS)"
+	@echo ""
+	GORRSON_JWT_SECRET="$(DEMO_SECRET)" ./$(BINARY_NAME) serve --port $(DEMO_PORT) --data-dir $(DEMO_DIR)
 
 db-recreate: clean reset-db
 

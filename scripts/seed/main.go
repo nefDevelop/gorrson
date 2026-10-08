@@ -4,6 +4,8 @@
 //
 //	go run ./scripts/seed                      # usuario + feeds (comportamiento original)
 //	go run ./scripts/seed -n 100000            # además 100.000 entradas con índice FTS5
+//	go run ./scripts/seed -sync -demo-feeds    # demo: entradas reales con imágenes (subset curado)
+//	go run ./scripts/seed -sync -demo-feeds -filters  # demo: además filtros de ejemplo
 //
 // Los valores por defecto reproducen el seed original (solo usuario + feeds) para
 // no alterar `make db-recreate`. El escalado de entradas es lo que usa
@@ -18,22 +20,27 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nef734/gorrson/internal/auth"
 	"github.com/nef734/gorrson/internal/db"
 	"github.com/nef734/gorrson/internal/models"
+	"github.com/nef734/gorrson/internal/rss"
 
 	_ "modernc.org/sqlite"
 )
 
 var (
-	flagDataDir = flag.String("data-dir", "./data", "Directorio de bases de datos por usuario")
-	flagUser    = flag.String("user", "user", "Usuario a crear")
-	flagPass    = flag.String("pass", "user", "Contraseña del usuario")
-	flagEntries = flag.Int("n", 0, "Número de entradas a generar (0 = solo feeds, como el seed original)")
-	flagBatch   = flag.Int("batch", 2000, "Filas por transacción durante el sembrado masivo")
+	flagDataDir   = flag.String("data-dir", "./data", "Directorio de bases de datos por usuario")
+	flagUser      = flag.String("user", "user", "Usuario a crear")
+	flagPass      = flag.String("pass", "user", "Contraseña del usuario")
+	flagEntries   = flag.Int("n", 0, "Número de entradas a generar (0 = solo feeds, como el seed original)")
+	flagBatch     = flag.Int("batch", 2000, "Filas por transacción durante el sembrado masivo")
+	flagSync      = flag.Bool("sync", false, "Descarga entradas reales de los feeds por red (con sus imágenes) en vez de generar sintéticas")
+	flagDemoFeeds = flag.Bool("demo-feeds", false, "Usa el subset curado de feeds con imagen para el demo en vez de los 42 completos")
+	flagFilters   = flag.Bool("filters", false, "Siembra filtros de ejemplo (deben ir antes del sync: SyncFeed los aplica al descargar)")
 )
 
 func main() {
@@ -66,9 +73,13 @@ func main() {
 	}
 	fmt.Printf("User '%s' created\n", username)
 
-	// 4. Seed Feeds
-	fmt.Printf("Seeding %d feeds...\n", len(feedSeeds))
-	for _, s := range feedSeeds {
+	// 4. Seed Feeds (subset curado si se pide demo-feeds)
+	seeds := feedSeeds
+	if *flagDemoFeeds {
+		seeds = demoFeedSeeds
+	}
+	fmt.Printf("Seeding %d feeds...\n", len(seeds))
+	for _, s := range seeds {
 		f := &models.Feed{
 			ID:       uuid.New().String(),
 			Title:    s.Title,
@@ -90,8 +101,31 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	if len(feedRows) != len(feedSeeds) {
-		log.Fatalf("se esperaban %d feeds y hay %d", len(feedSeeds), len(feedRows))
+	if len(feedRows) != len(seeds) {
+		log.Fatalf("se esperaban %d feeds y hay %d", len(seeds), len(feedRows))
+	}
+
+	// 5. Filtros de ejemplo (antes del sync: SyncFeed los aplica al descargar)
+	if *flagFilters {
+		fmt.Printf("Seeding %d demo filters...\n", len(demoFilters))
+		seedDemoFilters(context.Background(), store, feedRows)
+	}
+
+	// 6. Sync real (opción A del demo): descarga las entradas de verdad para
+	// que traigan image_url y contenido con <img>. Los fallos de red no son
+	// fatales: el demo arranca con lo que se haya podido descargar.
+	if *flagSync {
+		parser := rss.NewParser()
+		for i, s := range seeds {
+			feedCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			err := parser.SyncFeed(feedCtx, s.URL, store)
+			cancel()
+			if err != nil {
+				fmt.Printf("  [%d/%d FAIL] %s: %v\n", i+1, len(seeds), s.Title, err)
+			} else {
+				fmt.Printf("  [%d/%d OK] %s\n", i+1, len(seeds), s.Title)
+			}
+		}
 	}
 
 	// El Store se cierra antes del sembrado masivo: se abre un handle propio para
@@ -101,7 +135,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// 5. Seed Entries (sólo si se piden)
+	// 7. Seed Entries sintéticas (sólo si se piden con -n)
 	if *flagEntries > 0 {
 		t0 := time.Now()
 		n, err := seedEntries(dbPath, feedRows, *flagEntries, *flagBatch)
@@ -244,6 +278,81 @@ var filler = []string{
 	"Ejemplo práctico con fragmentos de código que no afectan al índice.",
 	"Nota al pie sobre los límites del sistema.",
 	"Referencia bibliográfica externa.",
+}
+
+// Filtros de ejemplo para el demo: mezcla global + por feed y las tres
+// acciones visibles en la UI (BLOCK, IMPORTANT, REPLACE). Se siembran ANTES
+// del sync porque SyncFeed los aplica al descargar. Los patrones van sin
+// prefijo (?i): el parser ya compila insensible a mayúsculas.
+var demoFilters = []struct {
+	FeedURL     string // "" = global
+	Pattern     string
+	Action      string
+	Target      string
+	Replacement string
+}{
+	{"", `\bsponsored\b|\bnative advertising\b`, "BLOCK", "both", ""},
+	{"", `\bbreaking\b|\bexclusive\b`, "IMPORTANT", "title", ""},
+	{"https://www.theverge.com/rss/index.xml", `\bdeal\b|\bcoupon\b|\bpromo code\b|\bBlack Friday\b`, "BLOCK", "title", ""},
+	{"https://www.xataka.com/feedburner.xml", `\biphone\b`, "REPLACE", "both", "iPhone"},
+}
+
+// seedDemoFilters siembra los filtros de ejemplo. Los de un feed concreto se
+// resuelven por FeedURL y se omiten si ese feed no está sembrado, así -filters
+// sirve tanto con el subset curado como con los 42 completos.
+func seedDemoFilters(ctx context.Context, store *db.Store, feeds []models.Feed) {
+	byURL := make(map[string]string, len(feeds))
+	for _, f := range feeds {
+		byURL[f.FeedURL] = f.ID
+	}
+	for _, d := range demoFilters {
+		feedID := ""
+		scope := "global"
+		if d.FeedURL != "" {
+			id, ok := byURL[d.FeedURL]
+			if !ok {
+				fmt.Printf("  [FILTRO omitido] %s: feed no sembrado\n", d.FeedURL)
+				continue
+			}
+			feedID = id
+			scope = d.FeedURL
+		}
+		if _, err := regexp.Compile(d.Pattern); err != nil {
+			fmt.Printf("  [FILTRO inválido] %s: %v\n", d.Pattern, err)
+			continue
+		}
+		f := &models.Filter{
+			ID:          uuid.New().String(),
+			FeedID:      feedID,
+			Pattern:     d.Pattern,
+			Action:      d.Action,
+			Target:      d.Target,
+			Replacement: d.Replacement,
+		}
+		if err := store.AddFilter(ctx, f); err != nil {
+			fmt.Printf("  [FILTRO error] %s: %v\n", d.Pattern, err)
+		} else {
+			fmt.Printf("  [FILTRO OK] %s %s (%s)\n", d.Action, d.Pattern, scope)
+		}
+	}
+}
+
+// Subset curado para `make demo`: pocos feeds, todos con imagen (enclosure o
+// media:content) y sin agregadores (Hacker News, Google News... no traen
+// imagen). Sincronizar 8 es rápido (<1 min) y las capturas salen con fotos.
+var demoFeedSeeds = []struct {
+	Title    string
+	URL      string
+	Category string
+}{
+	{"The Verge", "https://www.theverge.com/rss/index.xml", "Tech"},
+	{"Ars Technica", "https://feeds.arstechnica.com/arstechnica/index", "Tech"},
+	{"Engadget", "https://www.engadget.com/rss.xml", "Tech"},
+	{"BBC News", "https://feeds.bbci.co.uk/news/rss.xml", "News"},
+	{"The Guardian World", "https://www.theguardian.com/world/rss", "News"},
+	{"Xataka", "https://www.xataka.com/feedburner.xml", "Tech"},
+	{"Genbeta", "https://www.genbeta.com/feedburner.xml", "Tech"},
+	{"AnaitGames", "https://www.anaitgames.com/rss", "Gaming"},
 }
 
 // Corpus de feeds reales: 40 fuentes variadas (tecnología, news, gaming,
