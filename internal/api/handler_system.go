@@ -232,6 +232,11 @@ func (s *Server) handleFeverAPI(w http.ResponseWriter, r *http.Request) {
 				})
 			}
 			resp["items"] = items
+			// total_items (api_version >= 2): el total permite al cliente
+			// detectar que la página está truncada.
+			if total, err := userStore.TotalEntries(r.Context()); err == nil {
+				resp["total_items"] = total
+			}
 		}
 	}
 
@@ -1002,6 +1007,13 @@ func (s *Server) handleExportBackup(w http.ResponseWriter, r *http.Request) {
 	if _, err := os.Stat(dbPath); err != nil {
 		http.Error(w, "Database file not found", http.StatusNotFound)
 		return
+	}
+
+	// Vaciar el WAL al fichero antes de servirlo: sin esto el .db
+	// descargado puede perder las escrituras más recientes.
+	if store, err := db.OpenExistingStore(s.dataDir, username); err == nil {
+		_ = store.Checkpoint(r.Context())
+		_ = store.Close()
 	}
 
 	slog.Info("Backup exported", "user", username, "ip", r.RemoteAddr)

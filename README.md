@@ -2,7 +2,7 @@
   <img src="docs/assets/gorrson-banner.png" alt="Banner">
 </p>
 
-# ![FileBernic](internal/api/web/public/icons.svg) gorrson: High-Performance RSS CLI & API Engine
+# ![Gorrson](internal/api/web/public/icons.svg) gorrson: High-Performance RSS CLI & API Engine
 
 **gorrson** is a modern, high-performance RSS engine written in Go. It provides a robust, private, and multi-user solution for news aggregation that runs anywhere—from small servers to high-end workstations.
 
@@ -90,7 +90,7 @@ every command below works with either one.
 | `GORRSON_JWT_SECRET`  | — (required in Docker)           | JWT signing secret, minimum 32 characters. `docker compose` fails closed if it is not defined in `.env`; the server refuses known public values and secrets shorter than 32 chars. If left unset outside Docker, a random per-run secret is generated (sessions do not survive restarts). Generate with `openssl rand -base64 32`.                   |
 | `GORRSON_PORT`        | `7077`                           | HTTP listen port read by `serve` (`--port` overrides it). The Docker image and compose pin it to `7077`.                                                                                                                                                                                                                                            |
 | `GORRSON_PORT_HOST`   | `7077`                           | Host port published by docker-compose (`$GORRSON_PORT_HOST:7077`). Inside the container the port is always `7077`.                                                                                                                                                                                                                                   |
-| `GORRSON_DATA_DIR`    | `/app/data` (Docker)             | Data directory declared in the image/compose. The server itself resolves the directory through `serve --data-dir` (default `./data`, which lands on `/app/data` in the container because the working directory is `/app`).                                                                                                                            |
+| `GORRSON_DATA_DIR`    | `/app/data` (Docker)             | Default for `serve --data-dir` (flag wins). Points at the `./data:/app/data` volume in Docker.                                                                                                                                                                          |
 | `GOGC`, `GOMEMLIMIT`  | `50`, `20MiB` (Docker)           | Go runtime memory knobs baked into the image for low-RAM hosts.                                                                                                                                                                                                                                                                                    |
 
 Relevant flags: `--data-dir/-d` (persistent, all commands), and for `serve`:

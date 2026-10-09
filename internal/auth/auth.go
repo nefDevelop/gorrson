@@ -39,6 +39,7 @@ const minSecretLength = 32
 var forbiddenSecrets = []string{
 	"gorrson-vibrant-rss-secret", // literal que hubo en este repo
 	"change-me-in-production",    // Dockerfile
+	"cambia-este-secreto-largo-y-aleatorio-de-mas-de-32-caracteres", // placeholder de .env.example
 	"changeme",
 	"secret",
 	"password",

@@ -26,5 +26,9 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "d", "./data", "Directory to store databases")
+	defaultDataDir := os.Getenv("GORRSON_DATA_DIR")
+	if defaultDataDir == "" {
+		defaultDataDir = "./data"
+	}
+	rootCmd.PersistentFlags().StringVarP(&dataDir, "data-dir", "d", defaultDataDir, "Directory to store databases")
 }

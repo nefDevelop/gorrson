@@ -471,6 +471,13 @@ func (s *Store) UnreadFeverIDs(ctx context.Context) ([]int, error) {
 	return ids, rows.Err()
 }
 
+// Checkpoint vuelca el WAL al fichero principal para que las copias
+// (p. ej. /backup/export) no pierdan escrituras recientes.
+func (s *Store) Checkpoint(ctx context.Context) error {
+	_, err := s.db.ExecContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)")
+	return err
+}
+
 // TotalEntries devuelve cuantas entradas hay en total, para el campo
 // total_items de la Fever API (api_version >= 2).
 func (s *Store) TotalEntries(ctx context.Context) (int, error) {
