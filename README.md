@@ -35,6 +35,8 @@ _Performance remains extremely stable and linear across different CPU configurat
 1.  **Deploy**:
 
     ```bash
+    cp .env.example .env
+    # Rellena GORRSON_JWT_SECRET en .env (openssl rand -base64 32)
     docker compose up -d
     ```
 

@@ -35,16 +35,18 @@ FROM alpine:latest
 WORKDIR /app
 
 # Install certificates for HTTPS (needed to fetch RSS feeds)
-RUN apk --no-cache add ca-certificates tzdata
+RUN apk --no-cache add ca-certificates tzdata tini \
+ && addgroup -S gorrson && adduser -S gorrson -G gorrson -u 1000 \
+ && mkdir -p /app/data && chown -R gorrson:gorrson /app/data
 
 # Copy binary and docs from builder
 COPY --from=builder /app/gorrson .
 COPY --from=builder /app/docs ./docs
+RUN chown gorrson:gorrson /app/gorrson
 
-# Default environment variables
+# Default environment variables (sin secreto: va por .env, obligatorio)
 ENV GORRSON_PORT=7077
 ENV GORRSON_DATA_DIR=/app/data
-ENV GORRSON_JWT_SECRET=change-me-in-production
 # Memory optimization for low-RAM environments
 ENV GOGC=50
 ENV GOMEMLIMIT=20MiB
@@ -52,5 +54,8 @@ ENV GOMEMLIMIT=20MiB
 # Expose the configured port
 EXPOSE 7077
 
+USER gorrson
+
 # Run the server
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["./gorrson", "serve"]

@@ -1,6 +1,7 @@
 # Binary files
 rss-cli
 rss-cli.exe
+/seed
 
 # Database files (user data belongs to the user, not the repo)
 data/*.db
@@ -17,7 +18,9 @@ bench/current.stat
 
 # Cache de imagenes. El servidor la regenera sola al sincronizar los feeds, asi
 # que subirla solo infla el repo: son ficheros con nombre hash, uno por imagen.
+# Cubre también la caché de la demo (make demo usa data/demo/).
 data/cache/
+data/demo/
 
 # Test data and temporary files
 test_data/

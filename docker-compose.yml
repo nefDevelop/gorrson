@@ -2,17 +2,31 @@ services:
   gorrson:
     build: .
     container_name: gorrson-server
-    restart: always
+    restart: unless-stopped
+    env_file:
+      - .env
     ports:
-      - "7077:7077"
+      - "${GORRSON_PORT_HOST:-7077}:7077"
     environment:
       - GORRSON_PORT=7077
       - GORRSON_DATA_DIR=/app/data
-      - GORRSON_JWT_SECRET=${GORRSON_JWT_SECRET}
+      # Obligatorio (fail-closed): compose aborta si está vacío. Sin secreto
+      # válido la app aborta o genera uno aleatorio que invalida sesiones.
+      - GORRSON_JWT_SECRET=${GORRSON_JWT_SECRET:?Define GORRSON_JWT_SECRET en .env (>=32 caracteres)}
     volumes:
       - ./data:/app/data
     healthcheck:
-      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:7077/docs" ]
+      test: [ "CMD", "wget", "--spider", "-q", "http://localhost:7077/health" ]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
+    logging:
+      driver: "local"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
