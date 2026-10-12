@@ -22,11 +22,11 @@ Measured on AMD Ryzen 5 5600X with `-benchtime=5s`:
 
 | Operation            | CPU Cores | Latency (ns/op) | Throughput     |
 | :------------------- | :-------- | :-------------- | :------------- |
-| **Full-Text Search** | 1 CPU     | 4,526,220       | ~221 ops/sec   |
-| **List News (Feed)** | 1 CPU     | 186,619         | ~5,358 ops/sec |
-| **List News (Feed)** | 4 CPU     | 190,217         | ~5,257 ops/sec |
+| **Full-Text Search** | 1 CPU     | 1,810,901       | ~552 ops/sec   |
+| **List News (Feed)** | 1 CPU     | 239,807         | ~4,170 ops/sec |
+| **List News (Feed)** | 4 CPU     | 240,490         | ~4,158 ops/sec |
 
-_Performance remains extremely stable and linear across different CPU configurations._
+_Performance remains stable across different CPU configurations (SQLite single-writer: no multi-core speedup expected)._
 
 ## Quick Start
 
